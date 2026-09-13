@@ -2348,3 +2348,29 @@ function showUnreadCriticalNotifications() {
 }
 // AUTO GENERATE AKUN SANTRI & ORTU
 if (typeof saveData === 'function') { const originalSave = saveData; saveData = function(data) { originalSave(data); let users = JSON.parse(localStorage.getItem('boardingpro_users')) || []; if (data && data.nis) { users.push({ username: data.nis, password: data.nis, name: data.nama || 'Santri', role: 'santri' }); users.push({ username: 'ortu_' + data.nis, password: data.noHpOrtu || data.nis, name: 'Wali dari ' + (data.nama || 'Santri'), role: 'wali' }); localStorage.setItem('boardingpro_users', JSON.stringify(users)); } }; }
+
+// --- FIREBASE REALTIME INITIALIZATION ---
+const firebaseConfig = {
+  apiKey: "PASTE_API_KEY_KAMU",
+  authDomain: "PASTE_AUTH_DOMAIN_KAMU",
+  databaseURL: "PASTE_DATABASE_URL_KAMU",
+  projectId: "PASTE_PROJECT_ID_KAMU",
+  storageBucket: "PASTE_STORAGE_BUCKET_KAMU",
+  messagingSenderId: "PASTE_SENDER_ID_KAMU",
+  appId: "PASTE_APP_ID_KAMU"
+};
+
+if (!firebase.apps.length) { 
+  firebase.initializeApp(firebaseConfig); 
+}
+const db = firebase.database();
+
+// Sinkronisasi data santri secara real-time antar HP/Laptop
+db.ref('boardingpro_santri').on('value', (snapshot) => {
+  const data = snapshot.val();
+  if (data) {
+    const list = Array.isArray(data) ? data : Object.values(data);
+    localStorage.setItem('boardingpro_santri', JSON.stringify(list));
+    if (typeof renderDashboard === 'function') { renderDashboard(); }
+  }
+});
