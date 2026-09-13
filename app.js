@@ -2374,3 +2374,29 @@ db.ref('boardingpro_santri').on('value', (snapshot) => {
     if (typeof renderDashboard === 'function') { renderDashboard(); }
   }
 });
+// --- FIREBASE REALTIME INITIALIZATION ---
+const firebaseConfig = {
+ apiKey: "AIzaSyBdihFIGtHf_tnyEMxL2PrryotpA6hCgVw",
+  authDomain: "boardingpro-web.firebaseapp.com",
+  databaseURL: "https://boardingpro-web-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "boardingpro-web",
+  storageBucket: "boardingpro-web.firebasestorage.app",
+  messagingSenderId: "218729877835",
+  appId: "1:218729877835:web:9222e0ed4899dd9a6c18ce",
+  measurementId: "G-HBK0P1JB3M"
+};
+
+if (!firebase.apps.length) { 
+  firebase.initializeApp(firebaseConfig); 
+}
+const db = firebase.database();
+
+// Sinkronisasi data santri secara real-time antar HP/Laptop
+db.ref('boardingpro_santri').on('value', (snapshot) => {
+  const data = snapshot.val();
+  if (data) {
+    const list = Array.isArray(data) ? data : Object.values(data);
+    localStorage.setItem('boardingpro_santri', JSON.stringify(list));
+    if (typeof renderDashboard === 'function') { renderDashboard(); }
+  }
+});
