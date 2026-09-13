@@ -2400,3 +2400,6 @@ db.ref('boardingpro_santri').on('value', (snapshot) => {
     if (typeof renderDashboard === 'function') { renderDashboard(); }
   }
 });
+
+// FUNCTION AUTO SYNC TO FIREBASE
+function syncToCloud(path, key, data) { if (typeof db !== 'undefined') { db.ref(path + '/' + key).set(data); } }
