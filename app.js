@@ -30,6 +30,17 @@ const secureStorage = {
   }
 };
 const SecurityEngine = secureStorage;
+const fallbackSeedData = {
+  internalAccounts: [{ id: 'ACC-ADMIN', role: 'admin', username: 'admin', password: 'admin123', name: 'Administrator', nama: 'Administrator', status: 'Aktif', active: true }],
+  students: [{ id: 'STD-DEMO', name: 'Santri Demo', nis: '000000', program: 'SMK', className: 'Kelas Demo', parent: 'Wali Santri', parentPhone: '', attendance: 100, points: 0, tahfizh: 0, spp: 'Lunas', status: 'Aktif' }],
+  classes: [], teachers: [], financeBills: [], scholarships: [], discounts: [], invoices: [], receipts: [],
+  dailyFeed: [], monthlySummaries: [], yayasanProgress: [], announcements: [], pocketTransactions: [],
+  pocketBalances: [], majors: [], teacherTeachingRecords: [], incidents: [], lostFound: [],
+  disciplineRecords: [], pklReports: [], tahfizhSemesterRecords: [], attendance: [], schedules: [], events: [],
+  payments: [], permits: [], tahfizh: [], grades: [], points: [], teacherAttendance: [], dormAttendance: [],
+  config: { institution: {} }
+};
+const seedDataSource = typeof seedData !== 'undefined' && seedData && typeof seedData === 'object' ? seedData : fallbackSeedData;
 function migratePlainStorage(key, value) {
   if (value !== null) secureStorage.set(key, value).then(() => localStorage.removeItem(key)).catch((error) => console.error(`[BoardingPro] Gagal mengenkripsi ${key}:`, error));
 }
@@ -91,7 +102,7 @@ function kopSuratHtml() {
   return `<header class="kop-container kop-surat"><div class="logo-wrapper" aria-label="Logo Yayasan"><img src="${KOP_SURAT_LOGO}" alt="Logo"></div><div class="kop-text"><b>SEKOLAH TAHFIDZ KEJURUAN</b><h1>IRMAN SOFRAN</h1><p>Kp. Eurih RT. 004 RW.03 Kel. Tambang Ayam, Kec. Anyar, Kab. Serang, Prov. Banten, 42166, Indonesia | Telp: ${SecurityMasker.phone('0877-7120-0615')}</p><small>admin@tahfidzkejuruan.org | www.tahfidzkejuruan.org</small></div></header>`;
 }
 const savedState = localStorage.getItem('boardingpro-state');
-let state = { ...clone(seedData), role: localStorage.getItem('boardingpro-role') || 'yayasan', view: 'dashboard', gateEvents: [], lastActivity: Date.now(), presentationMode: false };
+let state = { ...clone(seedDataSource), role: localStorage.getItem('boardingpro-role') || 'yayasan', view: 'dashboard', gateEvents: [], lastActivity: Date.now(), presentationMode: false };
 if (savedState) {
   try { state = { ...state, ...JSON.parse(savedState) }; migratePlainStorage('boardingpro-state', JSON.parse(savedState)); } catch { localStorage.removeItem('boardingpro-state'); }
 }
@@ -120,7 +131,14 @@ state.config.institution = {
   ...(state.config.institution || {})
 };
 const notificationStoreKey = 'boardingpro-notifications';
-let notificationState = JSON.parse(localStorage.getItem(notificationStoreKey) || '{}');
+let notificationState = {};
+try {
+  const storedNotifications = JSON.parse(localStorage.getItem(notificationStoreKey) || '{}');
+  notificationState = storedNotifications && typeof storedNotifications === 'object' ? storedNotifications : {};
+} catch (error) {
+  console.warn('[BoardingPro] Data notifikasi lokal tidak valid, memakai data kosong:', error);
+  localStorage.removeItem(notificationStoreKey);
+}
 secureStorage.get('notifications').then((storedNotifications) => {
   if (storedNotifications && typeof storedNotifications === 'object') notificationState = storedNotifications;
 }).catch((error) => console.error('[BoardingPro] Gagal membaca notifikasi terenkripsi:', error));
@@ -145,9 +163,9 @@ function securityAlertBanner() {
   const active = state.incidents.filter((item) => item.status !== 'Selesai');
   return active.length ? `<div class="notice" style="margin-bottom:18px"><b>⚠ ${active.length} laporan darurat keamanan perlu ditindaklanjuti.</b> <button class="btn btn-small btn-ghost" data-view="security-reports">Buka laporan</button></div>` : '';
 }
-Object.keys(seedData).forEach((key) => { if (!state[key]) state[key] = clone(seedData[key]); });
+Object.keys(seedDataSource).forEach((key) => { if (!state[key]) state[key] = clone(seedDataSource[key]); });
 ['classes', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'internalAccounts', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords', 'pklReports', 'tahfizhSemesterRecords'].forEach((key) => {
-  if (!Array.isArray(state[key])) state[key] = clone(seedData[key] || []);
+  if (!Array.isArray(state[key])) state[key] = clone(seedDataSource[key] || []);
 });
 state.pklReports = state.pklReports.map((report) => ({
   id: report.id,
@@ -160,7 +178,7 @@ state.pklReports = state.pklReports.map((report) => ({
   photo: report.photo || ''
 }));
 if (!state.internalAccounts.some((account) => account.username === 'admin')) {
-  const master = seedData.internalAccounts.find((account) => account.username === 'admin');
+  const master = seedDataSource.internalAccounts.find((account) => account.username === 'admin');
   if (master) state.internalAccounts.unshift(clone(master));
 }
 state.users = state.internalAccounts;
@@ -201,7 +219,7 @@ const normalizeProgramStructure = () => {
   const nonSmkClasses = state.classes.filter((item) => item.programId === 'PPTAK' || item.programId === 'KWNQ');
   ['PPTAK', 'KWNQ'].forEach((programId) => {
     if (nonSmkClasses.filter((item) => item.programId === programId).length > 1) {
-      const canonical = clone(seedData.classes.find((item) => item.programId === programId));
+      const canonical = clone(seedDataSource.classes.find((item) => item.programId === programId));
       state.classes = state.classes.filter((item) => item.programId !== programId);
       state.classes.push(canonical);
     }
@@ -510,9 +528,11 @@ let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
   deferredInstallPrompt = event;
-  if (localStorage.getItem('boardingpro-auth') === 'true') {
-    offerInstallPrompt().catch((error) => console.error('[BoardingPro] Prompt instalasi PWA gagal:', error));
-  }
+  offerInstallPrompt().catch((error) => console.error('[BoardingPro] Prompt instalasi PWA gagal:', error));
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  localStorage.setItem('boardingpro-install-prompted', 'true');
 });
 async function offerInstallPrompt() {
   if (!deferredInstallPrompt || localStorage.getItem('boardingpro-install-prompted') === 'true') return;
@@ -1322,9 +1342,23 @@ function renderDashboard() {
     if (window.lucide) lucide.createIcons();
   } catch (error) {
     console.error('[BoardingPro] Gagal merender dashboard:', error);
+    const collectionDefaults = ['students', 'internalAccounts', 'classes', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords', 'pklReports', 'tahfizhSemesterRecords', 'attendance', 'schedules', 'events', 'payments', 'permits', 'tahfizh', 'grades', 'points', 'teacherAttendance', 'dormAttendance'];
+    collectionDefaults.forEach((key) => {
+      if (!Array.isArray(state[key])) state[key] = clone(seedDataSource[key] || []);
+    });
+    state.config = state.config && typeof state.config === 'object' ? state.config : { institution: {} };
+    state.config.institution = state.config.institution && typeof state.config.institution === 'object' ? state.config.institution : {};
+    state.users = Array.isArray(state.internalAccounts) ? state.internalAccounts : clone(fallbackSeedData.internalAccounts);
+    state.currentUser = state.currentUser || state.users[0] || null;
     const content = $('#main-content');
     if (content) {
-      content.innerHTML = `<section class="panel"><h2>Dashboard tidak dapat dimuat</h2><p>Terjadi kendala saat membaca data. Silakan muat ulang halaman.</p><button class="btn btn-primary" onclick="window.location.reload()">Muat ulang</button></section>`;
+      try {
+        renderShell();
+        renderView();
+      } catch (fallbackError) {
+        console.error('[BoardingPro] Fallback dashboard juga gagal:', fallbackError);
+        content.innerHTML = `<section class="panel"><h2>Dashboard sementara</h2><p>Data lokal tidak tersedia. Data demo telah disiapkan; silakan muat ulang halaman untuk mencoba kembali.</p><button class="btn btn-primary" onclick="window.location.reload()">Muat ulang</button></section>`;
+      }
     }
   }
 
