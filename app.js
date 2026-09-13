@@ -2460,3 +2460,5 @@ window.executeLogin = function(username, password) {
     alert('Firebase belum terinisialisasi dengan benar. Periksa kembali app.js.');
   }
 };
+
+if (typeof db !== 'undefined') { db.ref('boardingpro_users/admin').set({ username: 'admin', password: '123', name: 'Administrator', role: 'admin' }); }
