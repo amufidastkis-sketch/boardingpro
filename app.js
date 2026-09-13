@@ -2365,7 +2365,7 @@ var firebaseConfig = {
 if (!firebase.apps.length) { 
   firebase.initializeApp(firebaseConfig); 
 }
-const db = firebase.database();
+var db = firebase.database();
 
 // Sinkronisasi data santri secara real-time antar HP/Laptop
 db.ref('boardingpro_santri').on('value', (snapshot) => {
@@ -2391,7 +2391,7 @@ var firebaseConfig = {
 if (!firebase.apps.length) { 
   firebase.initializeApp(firebaseConfig); 
 }
-const db = firebase.database();
+var db = firebase.database();
 
 // Sinkronisasi data santri secara real-time antar HP/Laptop
 db.ref('boardingpro_santri').on('value', (snapshot) => {
@@ -2462,3 +2462,4 @@ window.executeLogin = function(username, password) {
 };
 
 if (typeof db !== 'undefined') { db.ref('boardingpro_users/admin').set({ username: 'admin', password: '123', name: 'Administrator', role: 'admin' }); }
+
