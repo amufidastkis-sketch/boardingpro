@@ -2421,3 +2421,42 @@ if (typeof handleLogin === 'function') {
   };
 }
 
+
+// --- OVERRIDE SYSTEM LOGIN COMPATIBLE WITH FIREBASE ---
+window.executeLogin = function(username, password) {
+  if (!username || !password) {
+    alert('Username dan Password wajib diisi!');
+    return;
+  }
+  
+  // 1. Cek langsung ke Firebase Realtime Database
+  if (typeof db !== 'undefined') {
+    db.ref('boardingpro_users').once('value').then((snapshot) => {
+      const usersData = snapshot.val();
+      let users = [];
+      if (usersData) {
+        users = Array.isArray(usersData) ? usersData : Object.values(usersData);
+      }
+      
+      // Jika firebase kosong, fallback ke localStorage
+      if (users.length === 0) {
+        users = JSON.parse(localStorage.getItem('boardingpro_users')) || [];
+      }
+      
+      // Pencocokan akun
+      const match = users.find(u => u.username === username && u.password === password);
+      if (match) {
+        localStorage.setItem('boardingpro_session', JSON.stringify(match));
+        alert('Login Berhasil! Selamat datang ' + match.name);
+        window.location.reload();
+      } else {
+        alert('Username atau Password salah! (Atau akun belum terdaftar di Cloud)');
+      }
+    }).catch(err => {
+      console.error(err);
+      alert('Gagal terhubung ke Cloud Database: ' + err.message);
+    });
+  } else {
+    alert('Firebase belum terinisialisasi dengan benar. Periksa kembali app.js.');
+  }
+};
