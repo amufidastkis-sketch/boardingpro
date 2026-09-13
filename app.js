@@ -395,7 +395,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character
 let inactivityTimer = null;
 const INACTIVITY_LIMIT = 15 * 60 * 1000;
 const firebaseState = { database: null, syncing: false, ready: false };
-const firebaseConfig = window.BOARDINGPRO_FIREBASE_CONFIG || null;
+var firebaseConfig = window.BOARDINGPRO_FIREBASE_CONFIG || null;
 window.appData = window.appData || {};
 window.appData.state = state;
 window.appData.currentSantri = currentStudent();
@@ -2352,7 +2352,7 @@ function showUnreadCriticalNotifications() {
 if (typeof saveData === 'function') { const originalSave = saveData; saveData = function(data) { originalSave(data); let users = JSON.parse(localStorage.getItem('boardingpro_users')) || []; if (data && data.nis) { users.push({ username: data.nis, password: data.nis, name: data.nama || 'Santri', role: 'santri' }); users.push({ username: 'ortu_' + data.nis, password: data.noHpOrtu || data.nis, name: 'Wali dari ' + (data.nama || 'Santri'), role: 'wali' }); localStorage.setItem('boardingpro_users', JSON.stringify(users)); } }; }
 
 // --- FIREBASE REALTIME INITIALIZATION ---
-const firebaseConfig = {
+var firebaseConfig = {
   apiKey: "PASTE_API_KEY_KAMU",
   authDomain: "PASTE_AUTH_DOMAIN_KAMU",
   databaseURL: "PASTE_DATABASE_URL_KAMU",
@@ -2377,7 +2377,7 @@ db.ref('boardingpro_santri').on('value', (snapshot) => {
   }
 });
 // --- FIREBASE REALTIME INITIALIZATION ---
-const firebaseConfig = {
+var firebaseConfig = {
  apiKey: "AIzaSyBdihFIGtHf_tnyEMxL2PrryotpA6hCgVw",
   authDomain: "boardingpro-web.firebaseapp.com",
   databaseURL: "https://boardingpro-web-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -2420,3 +2420,4 @@ if (typeof handleLogin === 'function') {
     oldLogin(e);
   };
 }
+
