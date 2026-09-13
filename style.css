@@ -1,0 +1,2 @@
+
+/* AUTO FIX PDF */ @media print { .printable-document { width:100%!important; max-width:794px!important; margin:0 auto!important; } .modal-header,.modal-footer,.d-print-none { display:none!important; } }
