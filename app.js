@@ -191,6 +191,16 @@ if (!state.internalAccounts.some((account) => account.username === 'admin')) {
   if (master) state.internalAccounts.unshift(clone(master));
 }
 state.users = state.internalAccounts;
+try {
+  const savedUsers = JSON.parse(localStorage.getItem('boardingpro_users') || '[]');
+  if (Array.isArray(savedUsers) && savedUsers.length) {
+    state.internalAccounts = savedUsers;
+    state.users = state.internalAccounts;
+  }
+} catch (error) {
+  console.warn('[BoardingPro] Data akun lokal tidak valid, memakai state akun saat ini:', error);
+  localStorage.removeItem('boardingpro_users');
+}
 state.currentUser = state.internalAccounts.find((account) => account.username === state.username) || null;
 const ROLE_STORAGE_KEY = 'boardingpro-master-roles';
 const DEFAULT_MASTER_ROLES = ["Admin Ma'had", 'Guru / Ustadz Tahfizh', 'Musyrif / Pembina Asrama', 'Admin Kesantrian', 'Kepala Sekolah', 'Staf Keuangan'];
@@ -249,17 +259,19 @@ const money = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const qrSignatureUrl = (payload) => `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(JSON.stringify(payload))}`;
 const documentActionRoles = ['orang_tua', 'parent', 'kepala_sekolah', 'kepsek', 'admin_mahad', 'mahad', 'maahad', 'admin', 'yayasan', 'pengurus_yayasan', 'guru', 'guru_tahfizh'];
 const canUseDocumentActions = () => documentActionRoles.includes(String(effectiveRole() || '').toLowerCase());
+const canManageUserAccounts = () => currentRoleIsAdmin() || ['guru', 'guru_tahfizh'].includes(effectiveRole());
 const documentLayoutStyles = `
   html,body{margin:0;background:#fff;color:#333;font-family:Arial,Helvetica,sans-serif}
   .document-container{width:794px!important;min-height:1123px!important;padding:40px!important;margin:0 auto!important;background:#fff!important;color:#333!important;box-shadow:none!important;display:block!important;visibility:visible!important}
-  .kop-container,.kop-surat{display:flex;align-items:center;justify-content:center;width:100%;gap:18px;border-bottom:5px double #333!important;padding:0 0 14px!important;margin:0 0 22px!important;text-align:center}
-  .kop-text{flex:1;min-width:0;color:#333}.kop-text p,.kop-text small{color:#333!important}
+  .kop-container,.kop-surat{display:grid;grid-template-columns:110px minmax(0,1fr);align-items:center;width:100%;gap:18px;border-bottom:5px double #333!important;padding:0 0 14px!important;margin:0 0 22px!important;text-align:left}
+  .kop-container .logo-wrapper,.kop-surat .logo-wrapper{width:110px;height:110px}
+  .kop-text{min-width:0;color:#333;text-align:left}.kop-text b,.kop-text h1,.kop-text p,.kop-text small{text-align:left}.kop-text p,.kop-text small{color:#333!important}
   .document-container table{width:100%;border-collapse:collapse;table-layout:fixed;margin:16px 0}
   .document-container th,.document-container td{border:1px solid #ddd!important;padding:9px 10px!important;color:#333!important;vertical-align:top;overflow-wrap:break-word}
   .document-container th{background:#f7f7f7;text-align:left;font-weight:700}
   .document-container td:last-child{word-wrap:break-word}
   .document-container .currency,.document-container td.currency{text-align:right!important;white-space:nowrap}
-  .document-container .signature-grid,.document-container .discipline-signatures{page-break-inside:avoid}
+  .document-container .signature-grid,.document-container .discipline-signatures{display:grid!important;grid-template-columns:1fr 1fr!important;gap:24px!important;page-break-inside:avoid}
   .document-action-buttons,.document-actions{display:none!important}
   @media print{@page{size:A4 portrait;margin:0}}
 `;
@@ -434,6 +446,11 @@ const statusBadge = (status) => {
 const persist = () => {
   secureStorage.set('boardingpro-state', state).catch((error) => console.error('[BoardingPro] Gagal menyimpan state terenkripsi:', error));
   secureStorage.set('boardingpro-role', state.role).catch((error) => console.error('[BoardingPro] Gagal menyimpan role terenkripsi:', error));
+  try {
+    localStorage.setItem('boardingpro_users', JSON.stringify(state.internalAccounts || []));
+  } catch (error) {
+    console.error('[BoardingPro] Gagal menyimpan akun ke localStorage:', error);
+  }
   window.appData.state = state;
   window.appData.currentSantri = currentStudent();
   syncFirebaseFinance();
@@ -691,8 +708,8 @@ function navItems() {
     yayasan: appendModules([...common, { id: 'finance', label: 'Keuangan Yayasan', icon: 'wallet-cards' }, { id: 'reports', label: 'Laporan Eksekutif', icon: 'bar-chart-3' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-alert' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'students', label: 'Data Santri', icon: 'users' }, { id: 'classes', label: 'Kelas & Program', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }]),
     kepsek: appendModules([...common, { id: 'finance', label: 'Keuangan Sekolah', icon: 'wallet-cards' }, { id: 'reports', label: 'Laporan Eksekutif', icon: 'bar-chart-3' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-alert' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'students', label: 'Data Santri', icon: 'users' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'academic', label: 'Akademik & Tahfizh', icon: 'book-marked' }]),
     maahad: appendModules([...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'accounts', label: 'Akun Internal', icon: 'key-round' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }]),
-    admin: appendModules([...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }]),
-    guru: appendModules([...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }]),
+    admin: appendModules([...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'accounts', label: 'Manajemen Akun User', icon: 'key-round' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }]),
+    guru: appendModules([...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'accounts', label: 'Manajemen Akun User', icon: 'key-round' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }]),
     guru_tahfizh: appendModules([...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'tahfizh', label: 'Laporan Tahfizh', icon: 'book-open-check' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }]),
     pembina: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     musyrif: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
@@ -1460,6 +1477,30 @@ function accountsTable() {
     return `<tr><td><b>${escapeHtml(account.name || account.nama)}</b></td><td>${escapeHtml(account.username)}</td><td>${accountRoles.map((role) => `<span class="badge badge-neutral">${escapeHtml(role)}</span>`).join(' ')}</td><td><code>${escapeHtml(account.password)}</code><small>${account.role === 'mahad' ? 'Tanpa batas' : `Ganti: ${account.passwordChangeCount || 0}/2`}</small></td><td><button type="button" class="btn btn-small btn-ghost" data-reset-account="${account.id}">Reset Password</button>${account.id !== 'ACC-SUPER' && account.id !== 'ACC-MASTER' ? ` <button type="button" class="btn btn-small btn-ghost" data-delete-account="${account.id}">Hapus Akun</button>` : ''}${isMasterAdminSession() && account.role !== 'master_admin' ? ` <button type="button" class="btn btn-small btn-ghost" data-toggle-account="${account.id}">${account.status === 'Aktif' ? 'Nonaktifkan' : 'Aktifkan'}</button> <button type="button" class="btn btn-small btn-ghost" data-edit-account="${account.id}">Edit Role</button>` : ''}</td></tr>`;
   }).join(''));
 }
+function ensureStudentAccounts(student) {
+  if (!student?.nis) return;
+  const nis = String(student.nis).trim();
+  const phone = String(student.parentPhone || student.phoneParent || '').trim();
+  const accountDefinitions = [
+    { role: 'student', username: nis, password: nis, name: student.name },
+    { role: 'parent', username: `ortu_${nis}`, password: phone || nis, name: `Wali dari ${student.name}` }
+  ];
+  accountDefinitions.forEach((definition) => {
+    const existing = state.internalAccounts.find((account) => account.username === definition.username);
+    const account = {
+      id: existing?.id || `ACC-${Date.now()}-${definition.role}`,
+      ...definition,
+      studentId: student.id,
+      status: existing?.status || 'Aktif',
+      active: existing?.active !== false,
+      passwordChangeCount: existing?.passwordChangeCount || 0,
+      roles: [roles[definition.role]?.label || (definition.role === 'student' ? 'Santri' : 'Wali Santri')]
+    };
+    if (existing) Object.assign(existing, account);
+    else state.internalAccounts.push(account);
+  });
+  state.users = state.internalAccounts;
+}
 function eventsTable() {
   const events = state.events.slice().sort((a, b) => new Date(`${a.date || today}T00:00:00`) - new Date(`${b.date || today}T00:00:00`));
   return table(['Tanggal', 'Event', 'Lokasi', 'Peserta', 'Status'], events.map((event) => `<tr><td>${formatDate(event.date)}</td><td><b>${event.title}</b></td><td>${event.location}</td><td>${event.audience}</td><td>${statusBadge(event.status)}</td></tr>`).join(''));
@@ -1833,7 +1874,7 @@ function bindActions() {
   document.querySelectorAll('[data-action="add-student"]').forEach((button) => button.addEventListener('click', openStudentModal));
   document.querySelectorAll('[data-action="promote-students"]').forEach((button) => button.addEventListener('click', promoteStudents));
   document.querySelectorAll('[data-edit-student]').forEach((button) => button.addEventListener('click', () => openStudentModal(studentById(button.dataset.editStudent))));
-  document.querySelectorAll('[data-reset-account]').forEach((button) => button.addEventListener('click', () => { if (!currentRoleIsAdmin()) return; const account = state.internalAccounts.find((item) => item.id === button.dataset.resetAccount); if (!account || (account.role === 'master_admin' && !isMasterAdminSession())) return; account.password = account.role === 'student' ? 'santri123' : 'user123'; account.passwordChangeCount = 0; persist(); render(); alert('Password akun berhasil direset.'); }));
+  document.querySelectorAll('[data-reset-account]').forEach((button) => button.addEventListener('click', () => { if (!canManageUserAccounts()) return; const account = state.internalAccounts.find((item) => item.id === button.dataset.resetAccount); if (!account || (account.role === 'master_admin' && !isMasterAdminSession())) return; account.password = account.role === 'student' ? String(account.username) : account.role === 'parent' ? String(account.username).replace(/^ortu_/, '') : 'user123'; account.passwordChangeCount = 0; persist(); render(); alert('Password akun berhasil direset.'); }));
   document.querySelectorAll('[data-delete-account]').forEach((button) => button.addEventListener('click', () => {
     if (!currentRoleIsAdmin()) return;
     const account = state.internalAccounts.find((item) => item.id === button.dataset.deleteAccount);
@@ -1970,15 +2011,12 @@ function openStudentModal(student) {
     const values = { name: form.get('name'), nis: form.get('nis'), program: form.get('program'), major: form.get('major'), className: form.get('className'), room: form.get('room'), parent: form.get('parent'), parentPhone: form.get('parentPhone') };
     if (editing) {
       Object.assign(student, values);
+      ensureStudentAccounts(student);
     } else {
       const newStudent = { id: `STD-${String(state.students.length + 1).padStart(3, '0')}`, gender: 'L', grade: 10, semester: 1, phone: '', attendance: 100, points: 0, tahfizh: 0, spp: 'Lunas', status: 'Aktif', ...values };
       state.students.push(newStudent);
-      const nis = String(newStudent.nis).trim();
-      state.users.push(
-        { id: `ACC-${Date.now()}-S`, role: 'santri', username: nis, password: nis, name: newStudent.name, studentId: newStudent.id },
-        { id: `ACC-${Date.now()}-P`, role: 'parent', username: `ortu_${nis}`, password: newStudent.phoneParent || newStudent.parentPhone || 'wali123', name: newStudent.parent, studentId: newStudent.id }
-      );
-      alert(`Akun otomatis dibuat: ${nis} dan ortu_${nis}.`);
+      ensureStudentAccounts(newStudent);
+      alert(`Akun otomatis dibuat: ${newStudent.nis} dan ortu_${newStudent.nis}.`);
     }
     persist();
     closeModal();
