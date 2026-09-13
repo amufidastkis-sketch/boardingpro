@@ -1,3 +1,5 @@
+
+// --- FIX LOGIN HANDLER ---
 /* Application behaviour. Shared catalogues and seed data live only in data.js. */
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const today = '2026-09-05';
@@ -2403,3 +2405,18 @@ db.ref('boardingpro_santri').on('value', (snapshot) => {
 
 // FUNCTION AUTO SYNC TO FIREBASE
 function syncToCloud(path, key, data) { if (typeof db !== 'undefined') { db.ref(path + '/' + key).set(data); } }
+
+
+// Fallback & Firebase Login Fix
+if (typeof handleLogin === 'function') {
+  const oldLogin = handleLogin;
+  handleLogin = function(e) {
+    if(e) e.preventDefault();
+    const users = JSON.parse(localStorage.getItem('boardingpro_users')) || [];
+    if (users.length === 0) {
+      alert('Data akun belum terisi dari Cloud / LocalStorage. Silakan coba beberapa detik lagi.');
+      return;
+    }
+    oldLogin(e);
+  };
+}
