@@ -91,7 +91,7 @@ function kopSuratHtml() {
   return `<header class="kop-container kop-surat"><div class="logo-wrapper" aria-label="Logo Yayasan"><img src="${KOP_SURAT_LOGO}" alt="Logo"></div><div class="kop-text"><b>SEKOLAH TAHFIDZ KEJURUAN</b><h1>IRMAN SOFRAN</h1><p>Kp. Eurih RT. 004 RW.03 Kel. Tambang Ayam, Kec. Anyar, Kab. Serang, Prov. Banten, 42166, Indonesia | Telp: ${SecurityMasker.phone('0877-7120-0615')}</p><small>admin@tahfidzkejuruan.org | www.tahfidzkejuruan.org</small></div></header>`;
 }
 const savedState = localStorage.getItem('boardingpro-state');
-let state = { ...clone(seedData), role: localStorage.getItem('boardingpro-role') || 'yayasan', view: 'dashboard', gateEvents: [], lastActivity: Date.now() };
+let state = { ...clone(seedData), role: localStorage.getItem('boardingpro-role') || 'yayasan', view: 'dashboard', gateEvents: [], lastActivity: Date.now(), presentationMode: false };
 if (savedState) {
   try { state = { ...state, ...JSON.parse(savedState) }; migratePlainStorage('boardingpro-state', JSON.parse(savedState)); } catch { localStorage.removeItem('boardingpro-state'); }
 }
@@ -146,9 +146,19 @@ function securityAlertBanner() {
   return active.length ? `<div class="notice" style="margin-bottom:18px"><b>⚠ ${active.length} laporan darurat keamanan perlu ditindaklanjuti.</b> <button class="btn btn-small btn-ghost" data-view="security-reports">Buka laporan</button></div>` : '';
 }
 Object.keys(seedData).forEach((key) => { if (!state[key]) state[key] = clone(seedData[key]); });
-['classes', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'internalAccounts', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords'].forEach((key) => {
+['classes', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'internalAccounts', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords', 'pklReports', 'tahfizhSemesterRecords'].forEach((key) => {
   if (!Array.isArray(state[key])) state[key] = clone(seedData[key] || []);
 });
+state.pklReports = state.pklReports.map((report) => ({
+  id: report.id,
+  studentId: report.studentId,
+  date: report.date || today,
+  checkIn: report.checkIn || '',
+  checkOut: report.checkOut || '',
+  status: ['Hadir', 'Izin', 'Sakit'].includes(report.status) ? report.status : 'Hadir',
+  activity: report.activity || '',
+  photo: report.photo || ''
+}));
 if (!state.internalAccounts.some((account) => account.username === 'admin')) {
   const master = seedData.internalAccounts.find((account) => account.username === 'admin');
   if (master) state.internalAccounts.unshift(clone(master));
@@ -207,9 +217,10 @@ const $ = (selector) => document.querySelector(selector);
 const initials = (name) => name.split(' ').map((part) => part[0]).slice(0, 2).join('');
 const studentById = (id) => state.students.find((student) => student.id === id) || { name: 'Tidak diketahui', className: '', room: '', nis: '' };
 const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+const formatLocalLongDate = (date = new Date()) => new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 const money = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
-const qrSignatureUrl = (payload) => `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=8&data=${encodeURIComponent(JSON.stringify(payload))}`;
-const documentActionRoles = ['orang_tua', 'parent', 'kepala_sekolah', 'kepsek', 'admin_mahad', 'mahad', 'maahad', 'admin', 'yayasan', 'pengurus_yayasan'];
+const qrSignatureUrl = (payload) => `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(JSON.stringify(payload))}`;
+const documentActionRoles = ['orang_tua', 'parent', 'kepala_sekolah', 'kepsek', 'admin_mahad', 'mahad', 'maahad', 'admin', 'yayasan', 'pengurus_yayasan', 'guru', 'guru_tahfizh'];
 const canUseDocumentActions = () => documentActionRoles.includes(String(effectiveRole() || '').toLowerCase());
 function printDocumentInFrame(html, title, pageStyle = '') {
   const frame = document.createElement('iframe');
@@ -239,23 +250,47 @@ function printDocumentInFrame(html, title, pageStyle = '') {
     if (document.body.contains(frame)) print();
   }, 500);
 }
-function downloadDocumentPdf(html, title, pageStyle = '') {
+async function downloadDocumentPdf(html, title, pageStyle = '') {
   const container = document.createElement('div');
   container.innerHTML = html;
   const documentNode = container.querySelector('.document-container, .permit-letter') || container.firstElementChild;
   if (!documentNode) throw new Error('Konten dokumen tidak ditemukan.');
   if (typeof window.html2pdf !== 'function') {
-    showToast('Generator PDF belum siap. Muat ulang halaman lalu coba lagi.', 'error');
-    return;
+    throw new Error('Generator PDF belum siap. Muat ulang halaman lalu coba lagi.');
   }
-  window.html2pdf().set({
-    margin: 0,
-    filename: `${String(title).replace(/[^\w.-]+/g, '_')}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['css', 'legacy'] }
-  }).from(documentNode).save();
+  const pdfNode = documentNode.cloneNode(true);
+  pdfNode.style.cssText = 'position:fixed;left:-100000px;top:0;width:210mm;background:#fff;z-index:-1;';
+  pdfNode.querySelectorAll('img').forEach((image) => {
+    image.crossOrigin = 'anonymous';
+    image.loading = 'eager';
+    image.removeAttribute('loading');
+    image.style.maxWidth = '100%';
+  });
+  document.body.appendChild(pdfNode);
+  await Promise.all(Array.from(pdfNode.querySelectorAll('img')).map((image) => image.complete
+    ? Promise.resolve()
+    : new Promise((resolve) => {
+      image.addEventListener('load', resolve, { once: true });
+      image.addEventListener('error', resolve, { once: true });
+    })));
+  try {
+    await window.html2pdf().set({
+      margin: 0,
+      filename: `${String(title).replace(/[^\w.-]+/g, '_')}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    }).from(pdfNode).save();
+  } finally {
+    pdfNode.remove();
+  }
+}
+function exportReportPdf() {
+  const role = roles[effectiveRole()] || roles.guru;
+  const rows = state.students.map((student) => `<tr><td>${escapeHtml(student.name)}</td><td>${escapeHtml(student.className || student.program || '—')}</td><td>${escapeHtml(String(student.attendance ?? '—'))}%</td><td>${escapeHtml(student.spp || '—')}</td></tr>`).join('');
+  const report = `<article class="document-container report-document"><h1 style="margin:0 0 6px;text-align:center">LAPORAN BOARDINGPRO STK IS</h1><p style="text-align:center;margin:0 0 18px;color:#475569">${escapeHtml(formatLocalLongDate())} · ${escapeHtml(role.label || role.demoName)}</p><table style="width:100%;border-collapse:collapse;table-layout:fixed;word-wrap:break-word"><thead><tr><th style="width:40%;padding:8px;border:1px solid #cbd5e1;text-align:left">Santri</th><th style="width:25%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kelas / Program</th><th style="width:15%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kehadiran</th><th style="width:20%;padding:8px;border:1px solid #cbd5e1;text-align:left">SPP</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="padding:12px;text-align:center">Belum ada data</td></tr>'}</tbody></table></article>`;
+  return downloadDocumentPdf(report, `Laporan-BoardingPro-${new Date().toISOString().slice(0, 10)}`);
 }
 function documentActionButtons(kind, id, label = 'Cetak') {
   if (!canUseDocumentActions()) return '';
@@ -266,7 +301,19 @@ function bindDocumentActions(root, title, pageStyle = '') {
   const actions = root.querySelector('[data-document-actions]');
   if (!documentNode || !actions) return;
   actions.querySelector('[data-document-preview]')?.addEventListener('click', () => documentNode.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  actions.querySelector('[data-document-download]')?.addEventListener('click', () => downloadDocumentPdf(documentNode.outerHTML, title, pageStyle));
+  actions.querySelector('[data-document-download]')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await downloadDocumentPdf(documentNode.outerHTML, title, pageStyle);
+      showToast('Dokumen PDF berhasil diunduh.');
+    } catch (error) {
+      console.error('[BoardingPro] Gagal mengunduh dokumen PDF:', error);
+      showToast('Dokumen PDF gagal diunduh. Silakan coba lagi.', 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
   actions.querySelector('[data-document-print]')?.addEventListener('click', () => printDocumentInFrame(documentNode.outerHTML, title, pageStyle));
 }
 function signatureQrHtml(label, name, timestamp, payload) {
@@ -274,7 +321,7 @@ function signatureQrHtml(label, name, timestamp, payload) {
   const signaturePayload = { ...payload, signer: name || 'Tidak diketahui', signedAt: safeTimestamp };
   const isApplicant = label.toLowerCase().includes('pemohon');
   const badge = isApplicant ? 'Terverifikasi Digital' : "Stempel Digital Ma'had";
-  return `<div class="signature-card" style="min-width:0;text-align:center;border:1px solid #cbd5e1;border-radius:8px;padding:12px;overflow-wrap:anywhere;break-inside:avoid"><b class="signature-title" style="display:block;font-size:11px">${escapeHtml(label)}</b><img src="${qrSignatureUrl(signaturePayload)}" alt="QR tanda tangan ${escapeHtml(label)}" width="120" height="120" style="display:block;width:120px;height:120px;max-width:100%;margin:8px auto;object-fit:contain" loading="lazy"><strong style="display:block;font-size:11px">${escapeHtml(name || 'Tidak diketahui')}</strong><small style="display:block;font-size:9px;color:#475569">${escapeHtml(new Date(safeTimestamp).toLocaleString('id-ID'))}</small><span class="signature-badge" style="display:inline-block;margin-top:8px;padding:4px 8px;border-radius:999px;background:#d1fae5;color:#047857;font-size:9px;font-weight:700">${escapeHtml(badge)}</span></div>`;
+  return `<div class="signature-card" style="min-width:0;text-align:center;border:1px solid #cbd5e1;border-radius:8px;padding:12px;overflow-wrap:anywhere;break-inside:avoid"><b class="signature-title" style="display:block;font-size:11px">${escapeHtml(label)}</b><img src="${qrSignatureUrl(signaturePayload)}" alt="QR tanda tangan ${escapeHtml(label)}" width="160" height="160" style="display:block;width:160px;height:160px;max-width:100%;margin:8px auto;object-fit:contain" loading="eager"><strong style="display:block;font-size:11px">${escapeHtml(name || 'Tidak diketahui')}</strong><small style="display:block;font-size:9px;color:#475569">${escapeHtml(new Date(safeTimestamp).toLocaleString('id-ID'))}</small><span class="signature-badge" style="display:inline-block;margin-top:8px;padding:4px 8px;border-radius:999px;background:#d1fae5;color:#047857;font-size:9px;font-weight:700">${escapeHtml(badge)}</span></div>`;
 }
 const documentEngineStyles = `*,*:before,*:after{box-sizing:border-box}html,body{margin:0;padding:0;background:#e2e8f0;color:#0f172a;font-family:Arial,sans-serif}.document-container{position:relative;width:100%;max-width:210mm;min-height:297mm;margin:18px auto;padding:15mm;background:#fff;box-shadow:0 8px 28px #0f172a22;overflow:hidden}.kop-container{display:flex;align-items:center;justify-content:center;gap:18px;width:100%;text-align:center;border-bottom:3px double #0f172a;padding-bottom:12px;margin-bottom:16px}.logo-wrapper{display:grid;place-items:center;flex:none;width:110px;height:110px}.logo-wrapper img{display:block;width:100%;height:100%;object-fit:contain}.kop-text{flex:1;min-width:0;text-align:center;line-height:1.35}.kop-text b,.kop-text h1,.kop-text p,.kop-text small{display:block;margin:2px 0;text-align:center}.kop-text h1{font-size:18px;line-height:1.2}.kop-text p,.kop-text small{font-size:10px;line-height:1.45;color:#475569}.document-header{text-align:center;border-bottom:5px double #0f172a;padding-bottom:10px;margin-bottom:22px}.document-header h1,.document-header h2,.document-header p{margin:3px 0;text-align:center}.document-header h1{font-size:20px}.document-header p{font-size:11px;color:#475569}.document-content{line-height:1.65;overflow-wrap:anywhere}.document-signatures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:28px;page-break-inside:avoid}.document-watermark{position:absolute;top:48%;left:50%;z-index:2;width:150%;transform:translate(-50%,-50%) rotate(-28deg);color:#b91c1c2b;font-size:34px;font-weight:800;letter-spacing:3px;text-align:center;pointer-events:none;white-space:nowrap}.document-container.is-draft .document-signatures{display:none}.document-container.is-draft .document-content{opacity:.9}.document-multiline{white-space:pre-line}@media(max-width:820px){.document-container{width:100%;min-height:auto;margin:0;padding:28px 20px;box-shadow:none}.document-signatures{grid-template-columns:1fr}.document-watermark{font-size:25px}}@media print{@page{size:A4 portrait;margin:15mm}.document-container{width:100%;max-width:210mm;min-height:297mm;margin:0;box-shadow:none}.document-actions{display:none!important}}`;
 function renderDocumentPreview(docType, docData = {}) {
@@ -335,6 +382,45 @@ const persist = () => {
 };
 const isPklEligible = (student) => student.program === 'SMK' && ((Number(student.grade) === 11 && Number(student.semester) === 2) || (Number(student.grade) === 12 && Number(student.semester) === 1));
 const currentAccount = () => state.users.find((account) => account.username === state.username) || state.currentUser;
+const normalizeName = (name) => String(name || '').trim().replace(/\s+/g, ' ');
+const nameParts = (name) => normalizeName(name).split(' ').filter(Boolean);
+const callName = (name) => nameParts(name).slice(0, 2).join(' ') || 'Pengguna';
+const roleDisplayPrefix = (role) => ({ guru: 'Ust.', guru_tahfizh: 'Ust.', pembina: 'Ust.', musyrif: 'Ust.', parent: 'Bpk.', yayasan: 'Dr.', kepsek: 'Drs.', mahad: 'Admin', maahad: 'Admin', admin: 'Admin' }[role] || '');
+function displayNameForAccount(account) {
+  if (!account) return '';
+  const prefix = roleDisplayPrefix(account.role);
+  const roleLabel = roles[account.role]?.label || account.role;
+  return `${prefix ? `${prefix} ` : ''}${callName(account.name || account.nama)} (${roleLabel})`;
+}
+function usernameForAccount(role, name) {
+  const roleSlug = String(role || 'user').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const nameSlug = String(name || 'pengguna').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  return `${roleSlug}_${nameSlug || 'pengguna'}`;
+}
+function pklSpecialistAccount(account = currentAccount()) {
+  return ['Guru DLE', 'Guru Instrumentasi'].includes(String(account?.subject || account?.specialization || '').trim());
+}
+function canViewPkl() {
+  return ['mahad', 'maahad', 'admin', 'kepsek', 'yayasan'].includes(effectiveRole()) || (effectiveRole() === 'guru' && pklSpecialistAccount());
+}
+function semesterDefaults(date = new Date()) {
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+  return month >= 7 ? { semester: '1', academicYear: `${year}/${year + 1}` } : { semester: '2', academicYear: `${year - 1}/${year}` };
+}
+function academicYearOptions() {
+  const current = new Date().getFullYear();
+  const defaultYear = semesterDefaults().academicYear;
+  return Array.from({ length: 4 }, (_, index) => {
+    const start = current - index;
+    const value = `${start}/${start + 1}`;
+    return `<option value="${value}" ${value === defaultYear ? 'selected' : ''}>${value}</option>`;
+  }).join('');
+}
+function semesterFilterForm(id = 'semester-filter-form') {
+  const defaults = semesterDefaults();
+  return `<form id="${id}" class="form-grid semester-filter"><label>Semester<select name="semester"><option value="1" ${defaults.semester === '1' ? 'selected' : ''}>Ganjil</option><option value="2" ${defaults.semester === '2' ? 'selected' : ''}>Genap</option></select></label><label>Tahun Ajaran<select name="academicYear">${academicYearOptions()}</select></label><button class="btn btn-primary" type="submit">Terapkan Filter</button></form>`;
+}
 const currentStudent = () => {
   const account = currentAccount();
   return state.students.find((student) => student.id === account?.studentId)
@@ -391,7 +477,50 @@ const categoryLabel = (id) => {
 };
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
 let inactivityTimer = null;
+let inactivityEventsBound = false;
 const INACTIVITY_LIMIT = 15 * 60 * 1000;
+const ACTIVE_SESSION_KEY = 'boardingpro-active-session';
+const sessionToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+let sessionHeartbeat = null;
+function activateSingleSession(account) {
+  if (!account?.username) return;
+  localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({ username: account.username, token: sessionToken, updatedAt: Date.now() }));
+  window.clearInterval(sessionHeartbeat);
+  sessionHeartbeat = window.setInterval(() => {
+    if (localStorage.getItem('boardingpro-auth') === 'true') localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({ username: account.username, token: sessionToken, updatedAt: Date.now() }));
+  }, 5000);
+}
+function endSingleSession() {
+  const active = JSON.parse(localStorage.getItem(ACTIVE_SESSION_KEY) || 'null');
+  if (active?.token === sessionToken) localStorage.removeItem(ACTIVE_SESSION_KEY);
+  window.clearInterval(sessionHeartbeat);
+  sessionHeartbeat = null;
+}
+window.addEventListener('storage', (event) => {
+  if (event.key !== ACTIVE_SESSION_KEY || localStorage.getItem('boardingpro-auth') !== 'true') return;
+  const active = JSON.parse(event.newValue || 'null');
+  if (active?.username === state.username && active.token !== sessionToken) {
+    endSingleSession();
+    localStorage.removeItem('boardingpro-auth');
+    showLanding();
+    alert('Sesi akun ini digunakan di perangkat lain. Anda telah logout otomatis.');
+  }
+});
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  if (localStorage.getItem('boardingpro-auth') === 'true') {
+    offerInstallPrompt().catch((error) => console.error('[BoardingPro] Prompt instalasi PWA gagal:', error));
+  }
+});
+async function offerInstallPrompt() {
+  if (!deferredInstallPrompt || localStorage.getItem('boardingpro-install-prompted') === 'true') return;
+  localStorage.setItem('boardingpro-install-prompted', 'true');
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+}
 const firebaseState = { database: null, syncing: false, ready: false };
 const firebaseConfig = window.BOARDINGPRO_FIREBASE_CONFIG || null;
 window.appData = window.appData || {};
@@ -472,7 +601,7 @@ function stopInactivityTimer() {
 
 function resetInactivityTimer() {
   stopInactivityTimer();
-  if (localStorage.getItem('boardingpro-auth') !== 'true') return;
+  if (localStorage.getItem('boardingpro-auth') !== 'true' || state.presentationMode) return;
   state.lastActivity = Date.now();
   inactivityTimer = window.setTimeout(() => {
     localStorage.removeItem('boardingpro-auth');
@@ -482,24 +611,31 @@ function resetInactivityTimer() {
 }
 
 function startInactivityTimer() {
-  ['mousemove', 'click', 'keypress', 'touchstart'].forEach((eventName) => {
-    document.addEventListener(eventName, resetInactivityTimer, { passive: true });
-  });
+  if (!inactivityEventsBound) {
+    ['mousemove', 'keydown', 'touchstart', 'scroll'].forEach((eventName) => {
+      document.addEventListener(eventName, resetInactivityTimer, { passive: true });
+    });
+    inactivityEventsBound = true;
+  }
+  if (state.presentationMode) return;
   resetInactivityTimer();
 }
 
 function navItems() {
   const common = [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'schedule', label: 'Jadwal & Event', icon: 'calendar-days' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }];
-  const pklItem = isPklEligible(currentStudent()) ? { id: 'pkl', label: 'Praktik Kerja Lapangan', icon: 'briefcase-business' } : { id: 'pkl', label: 'PKL · Terkunci', icon: 'lock-keyhole' };
+  const pklItem = canViewPkl() ? { id: 'pkl', label: 'Laporan PKL Santri', icon: 'briefcase-business' } : null;
+  const semesterTahfizhItem = ['yayasan', 'kepsek', 'mahad', 'maahad', 'admin', 'pembina', 'musyrif', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'tahfizh-semester', label: 'Rekap Tahfizh Semester', icon: 'book-open-check' } : null;
+  const semesterAttendanceItem = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'attendance-semester', label: 'Rekap Absensi Semester', icon: 'calendar-check' } : null;
+  const appendModules = (items) => [...items, ...(pklItem ? [pklItem] : []), ...(semesterTahfizhItem ? [semesterTahfizhItem] : []), ...(semesterAttendanceItem ? [semesterAttendanceItem] : [])];
   const map = {
-    yayasan: [...common, { id: 'finance', label: 'Keuangan Yayasan', icon: 'wallet-cards' }, { id: 'reports', label: 'Laporan Eksekutif', icon: 'bar-chart-3' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-alert' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'students', label: 'Data Santri', icon: 'users' }, { id: 'classes', label: 'Kelas & Program', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }],
-    kepsek: [...common, { id: 'finance', label: 'Keuangan Sekolah', icon: 'wallet-cards' }, { id: 'reports', label: 'Laporan Eksekutif', icon: 'bar-chart-3' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-alert' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'students', label: 'Data Santri', icon: 'users' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'academic', label: 'Akademik & Tahfizh', icon: 'book-marked' }],
-    maahad: [...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'accounts', label: 'Akun Internal', icon: 'key-round' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }],
-    admin: [...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }],
-    guru: [...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }],
-    guru_tahfizh: [...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'tahfizh', label: 'Laporan Tahfizh', icon: 'book-open-check' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }],
-    pembina: [...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }],
-    musyrif: [...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }],
+    yayasan: appendModules([...common, { id: 'finance', label: 'Keuangan Yayasan', icon: 'wallet-cards' }, { id: 'reports', label: 'Laporan Eksekutif', icon: 'bar-chart-3' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-alert' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'students', label: 'Data Santri', icon: 'users' }, { id: 'classes', label: 'Kelas & Program', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }]),
+    kepsek: appendModules([...common, { id: 'finance', label: 'Keuangan Sekolah', icon: 'wallet-cards' }, { id: 'reports', label: 'Laporan Eksekutif', icon: 'bar-chart-3' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-alert' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'students', label: 'Data Santri', icon: 'users' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'academic', label: 'Akademik & Tahfizh', icon: 'book-marked' }]),
+    maahad: appendModules([...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'accounts', label: 'Akun Internal', icon: 'key-round' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }]),
+    admin: appendModules([...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }]),
+    guru: appendModules([...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }]),
+    guru_tahfizh: appendModules([...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'tahfizh', label: 'Laporan Tahfizh', icon: 'book-open-check' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }]),
+    pembina: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
+    musyrif: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     security: [...common, { id: 'gate', label: 'Log Gerbang', icon: 'scan-line' }, { id: 'security-reports', label: 'Laporan Keamanan', icon: 'shield-alert' }],
     parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
     student: [...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Sanksi Saya', icon: 'shield-alert' }, { id: 'tahfizh', label: 'Tahfizh Saya', icon: 'book-open-check' }, pklItem]
@@ -539,13 +675,31 @@ function renderShell() {
   ensureNavigationIcons(quickNav);
   if ($('#page-title')) $('#page-title').textContent = (items.find((item) => item.id === state.view) || items[0]).label;
   const account = currentAccount();
-  if ($('#user-role')) $('#user-role').textContent = account?.name || role.demoName;
+  if ($('#user-role')) $('#user-role').textContent = displayNameForAccount(account) || `${role.demoName} (${role.label})`;
+  if ($('#user-role-label')) $('#user-role-label').textContent = role.label;
   if ($('#user-avatar')) $('#user-avatar').textContent = initials(role.demoName);
   const switcher = $('#role-switcher');
   const emulatorRoles = ['mahad', 'yayasan', 'kepsek', 'guru', 'pembina', 'security', 'parent', 'student'];
   if (switcher) switcher.innerHTML = isMasterAdminSession()
     ? `<label class="role-switch-label">Tampilan Sebagai: <select id="active-role-view">${emulatorRoles.map((item) => `<option value="${item}" ${item === effectiveRole() ? 'selected' : ''}>${roles[item]?.label || item}</option>`).join('')}</select></label>`
     : '';
+  const presentationToggle = $('#presentation-toggle');
+  const presentationRoles = ['yayasan', 'mahad', 'admin', 'kepsek', 'guru', 'guru_tahfizh'];
+  if (presentationToggle) {
+    const canPresent = presentationRoles.includes(String(effectiveRole()).toLowerCase());
+    presentationToggle.hidden = !canPresent;
+    presentationToggle.setAttribute('aria-pressed', String(Boolean(state.presentationMode)));
+    presentationToggle.textContent = state.presentationMode ? 'Mode Presentasi: Aktif' : 'Mode Presentasi';
+    presentationToggle.classList.toggle('btn-primary', Boolean(state.presentationMode));
+    presentationToggle.classList.toggle('btn-ghost', !state.presentationMode);
+    presentationToggle.onclick = () => {
+      state.presentationMode = !state.presentationMode;
+      persist();
+      if (state.presentationMode) stopInactivityTimer();
+      else startInactivityTimer();
+      renderShell();
+    };
+  }
   $('#active-role-view')?.addEventListener('change', (event) => {
     state.activeRoleView = event.target.value === 'mahad' ? null : event.target.value;
     const simulatedItems = navItems();
@@ -616,7 +770,7 @@ function teacherDashboard() {
   ];
   const tabs = reports.map(([id, label], index) => `<button type="button" class="btn ${index === 0 ? 'btn-primary' : 'btn-ghost'}" data-report-tab="${id}">${label}</button>`).join('');
   const panels = reports.map(([id, label, content, actions = ''], index) => `<section class="panel teacher-report-panel" data-report-panel="${id}" ${index ? 'hidden' : ''}><div class="panel-head"><div><h2>${label}</h2><p>Reguler SMK Kelas 10, 11, 12, PPTAK, dan KWNQ</p></div>${actions}</div>${content}</section>`).join('');
-  return commonDashboard('GURU / USTADZ · AKADEMIK', 'Kelola presensi mandiri dan perkembangan santri di kelas yang diampu.', `${teacherPersonalAttendanceView()}${section('Laporan Santri', 'Pilih modul laporan yang ingin ditinjau.', `<div class="actions-inline" style="margin-bottom:16px">${tabs}</div>${panels}`)}`);
+  return commonDashboard('GURU / USTADZ · AKADEMIK', 'Kelola presensi mandiri dan perkembangan santri di kelas yang diampu.', `${teacherPersonalAttendanceView()}${section('Laporan Santri', 'Pilih modul laporan yang ingin ditinjau.', `<div class="actions-inline" style="margin-bottom:16px">${tabs}</div>${panels}`, `<button type="button" class="btn btn-primary" data-action="export">${icon('download')} Export Laporan</button>`)}`);
 }
 
 function guardianDashboard() {
@@ -669,19 +823,19 @@ function unifiedDashboard() {
   const announcementRows = announcements.map((item) => `<div class="activity"><span class="activity-icon green">${icon('megaphone')}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div><time>${formatDate(item.date)}</time></div>`).join('');
   const pocketSection = canViewFinance() ? section('Uang Saku Santri', 'Saldo dan mutasi sesuai hak akses role', `<div class="finance-grid"><div class="finance-tile"><span>Saldo ${escapeHtml(student.name)}</span><b>${money(balance)}</b></div><div class="finance-tile"><span>Top up bulan ini</span><b>${money(transactions.filter((item) => item.type === 'Top Up').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div><div class="finance-tile"><span>Transaksi terbaru</span><b>${transactions.length}</b></div></div>${table(['Tanggal','Jenis','Nominal','Catatan'], transactions.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${item.type}</td><td>${money(item.amount)}</td><td>${escapeHtml(item.note)}</td></tr>`).join(''), 'Belum ada mutasi uang saku')}`) : '';
   const financeSection = canViewFinance() ? section('Keuangan & Invoice', 'SPP, non-SPP, beasiswa, laundry, dan dokumen pembayaran', `${billingTable(4)}<div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-view="finance">Buka pusat keuangan</button></div>`) : '';
-  return `${welcome(`BOARDINGPRO STK IS · ${role.label.toUpperCase()}`, `Assalamu'alaikum, ${role.demoName.split(' ')[0]} 👋`, 'Satu ruang kendali untuk menjaga amanah.', canManageAnnouncements() ? `<button class="btn btn-primary" data-action="add-announcement">${icon('plus')} Pengumuman</button>` : '')}
+  return `${welcome(`BOARDINGPRO STK IS · ${role.label.toUpperCase()}`, `Assalamu'alaikum, ${role.demoName.split(' ')[0]} 👋`, `${formatLocalLongDate()} · Satu ruang kendali untuk menjaga amanah.`, canManageAnnouncements() ? `<button class="btn btn-primary" data-action="add-announcement">${icon('plus')} Pengumuman</button>` : '')}
     <div class="stats-grid">${stats}</div>
     <div class="grid-2">${section('Pengumuman & Feed Harian', 'Kabar terbaru ma’had dan perkembangan santri', `<div class="activity-list">${announcementRows || '<div class="empty">Belum ada pengumuman.</div>'}${feed.map((item) => `<div class="activity"><span class="activity-icon green">${icon(item.type === 'tahfizh' ? 'book-open-check' : 'bell')}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div><time>${formatDate(item.date)}</time></div>`).join('')}</div>`, `<button class="btn btn-ghost btn-small" data-view="announcements">Lihat semua</button>`)}
       ${section('Jadwal & Event', 'Agenda kegiatan boarding school', `${activityTimeline()}<div class="panel-head" style="margin-top:15px"><div><h2>Event mendatang</h2><p>Agenda resmi sekolah</p></div><button class="btn btn-ghost btn-small" data-view="schedule">Buka agenda</button></div>${eventsTable()}`)}</div>
     ${pocketSection}
     <div class="grid-2">${financeSection}${section('Tahfizh & Academic', 'Capaian hafalan dan hasil belajar terbaru', `${tahfizhTable()}${gradeTable()}<div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-view="academic">Lihat rekap akademik</button></div>`)}</div>
-    ${section('PKL · Praktik Kerja Lapangan', 'Monitoring eligibility, penempatan, progress, dan pembimbing', `${pklTable()}<div class="actions-inline"><button class="btn btn-ghost btn-small" data-view="pkl">Buka modul PKL</button></div>`)}`;
+    ${canViewPkl() ? section('PKL · Praktik Kerja Lapangan', 'Jam kerja, status absensi, kegiatan, dan dokumentasi praktik', `${pklTable()}<div class="actions-inline"><button class="btn btn-ghost btn-small" data-view="pkl">Buka modul PKL</button></div>`) : ''}`;
 }
 
 function yayasanDashboard() {
   const verified = state.payments.filter((payment) => payment.status === 'Verified').reduce((sum, payment) => sum + payment.amount, 0);
   const pending = state.payments.filter((payment) => payment.status === 'Pending').length;
-  return `${welcome('EXECUTIVE OVERVIEW · SABTU, 05 SEPTEMBER 2026', "Assalamu'alaikum, Pengelola 👋", 'Ringkasan kinerja dan kesehatan keuangan BoardingPro STK IS.', `<button class="btn btn-primary" data-action="export">${icon('download')} Export Laporan</button>`)}
+  return `${welcome(`EXECUTIVE OVERVIEW · ${formatLocalLongDate()}`, "Assalamu'alaikum, Pengelola 👋", 'Ringkasan kinerja dan kesehatan keuangan BoardingPro STK IS.', `<button class="btn btn-primary" data-action="export">${icon('download')} Export Laporan</button>`)}
     <div class="stats-grid">${statCard('Total Santri', state.students.length, '+8.2% tahun ini', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '+2.4% bulan ini', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '92,4% target', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}</div>
     <div class="finance-grid"><div class="finance-tile"><span>SPP bulanan</span><b>${money(verified * .72)}</b><div class="metric-note">78% dari penerimaan</div></div><div class="finance-tile"><span>Dana Yayasan</span><b>${money(verified * .12)}</b><div class="metric-note">Operasional & beasiswa</div></div><div class="finance-tile"><span>Non-SPP & uang saku</span><b>${money(verified * .16)}</b><div class="metric-note">Asrama, makan, saku</div></div></div>
     <div class="grid-2">${section('Rekapitulasi Penerimaan Kas per Program', 'Laporan kas masuk dan penerimaan terverifikasi', financeProgramTable())}${section('Aktivitas Terbaru', 'Pembaruan data secara real-time', activityList())}</div>
@@ -808,13 +962,8 @@ function studentView() {
   const student = currentStudent();
   return `${welcome('PORTAL SANTRI · PERSONAL DASHBOARD', `Assalamu'alaikum, ${student.name.split(' ')[0]}! 👋`, 'Semangat menjalani aktivitas hari ini.', '')}
     <div class="stats-grid">${statCard('Total Poin Saya', `${student.points > 0 ? '+' : ''}${student.points}`, '+4 minggu ini', 'award', 'purple')}${statCard('Hafalan', `${student.tahfizh} Juz`, 'Terus bertumbuh', 'book-open-check', 'green')}${statCard('Kehadiran', `${student.attendance}%`, 'Bulan ini', 'calendar-check', 'blue')}${statCard('Program', student.program, student.className, 'graduation-cap', 'orange')}</div>
-    <div class="grid-2">${section('Jadwal Kegiatan Hari Ini', 'Jaga semangat dan kedisiplinan', activityTimeline())}${section('Status PKL', isPklEligible(student) ? 'Modul aktif untuk semester ini' : 'Modul belum dibuka', pklSummary(student))}</div>
+    <div class="grid-2">${section('Jadwal Kegiatan Hari Ini', 'Jaga semangat dan kedisiplinan', activityTimeline())}</div>
     ${section('Tahfizh Saya', 'Ziyadah, Murajaah, catatan, dan presensi jam Tahfizh pribadi', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${tahfizhTable(student.id)}${attendanceTable('tahfizh')}</div>`)}`;
-}
-function pklSummary(student) {
-  if (!isPklEligible(student)) return `<div class="locked-card">${icon('lock', 25)}<p>Modul PKL aktif untuk siswa SMK kelas 11 semester 2 atau kelas 12 semester 1.</p><button class="btn btn-ghost" data-view="pkl">Lihat status modul</button></div>`;
-  const report = state.pklReports.find((item) => item.studentId === student.id);
-  return report ? `<div><div class="notice"><span class="status-dot"></span>${report.status} · ${report.company}</div><p class="metric-note">Progress laporan ${report.progress}% · Kehadiran ${report.attendance}%</p><button class="btn btn-ghost" data-view="pkl">Buka modul PKL ${icon('arrow-right')}</button></div>` : '<div class="empty">Belum ada penempatan PKL.</div>';
 }
 function gateView() {
   const active = state.permits.filter((permit) => permit.status === 'Approved' && permit.date === today && permit.checkout && !permit.checkin).length;
@@ -884,7 +1033,7 @@ function attendanceTable(type = 'kelas') {
   return groupedStudentRecords(data, (item) => `<div class="accordion-record"><b>${escapeHtml(studentById(item.studentId).name)}</b><span>${formatDate(item.date)} · ${item.status}</span><small>${escapeHtml(item.by || 'Pembina')}</small></div>`);
 }
 function pklTable() {
-  return table(['Santri', 'Tempat PKL', 'Pembimbing', 'Progress', 'Status'], state.pklReports.map((report) => `<tr><td>${studentById(report.studentId).name}</td><td>${report.company}</td><td>${report.mentor}</td><td>${report.progress}%</td><td>${statusBadge(report.status)}</td></tr>`).join(''));
+  return table(['Santri', 'Jam Masuk', 'Jam Pulang', 'Status Absensi', 'Deskripsi Kegiatan', 'Foto'], state.pklReports.map((report) => `<tr><td>${escapeHtml(studentById(report.studentId).name)}</td><td>${escapeHtml(report.checkIn || '—')}</td><td>${escapeHtml(report.checkOut || '—')}</td><td>${statusBadge(report.status)}</td><td>${escapeHtml(report.activity || '—')}</td><td>${report.photo ? 'Tersedia' : '—'}</td></tr>`).join(''));
 }
 function billingTable(limit, studentId) {
   const bills = state.financeBills.filter((bill) => (!studentId || bill.studentId === studentId) && isActiveStudent(studentById(bill.studentId))).slice().sort((a, b) => new Date(b.dueDate || b.date || 0) - new Date(a.dueDate || a.date || 0)).slice(0, limit || state.financeBills.length);
@@ -1114,6 +1263,9 @@ function renderView() {
   else if (state.view === 'payments') html = canViewFinance() ? (effectiveRole() === 'parent' ? paymentForm() : section('Verifikasi Pembayaran', 'Validasi bukti transfer wali santri', paymentTable(currentRoleIsAdmin(), effectiveRole() === 'parent' ? currentStudent().id : undefined), currentRoleIsAdmin() ? `<button type="button" class="btn btn-primary" data-action="add-billing">${icon('plus')} Buat Tagihan</button>` : '')) : dashboard();
   else if (state.view === 'pocket') html = canViewFinance() ? pocketMoneyView() : dashboard();
   else if (state.view === 'academic') html = academicView();
+  else if (state.view === 'pkl') html = canViewPkl() ? pklView() : dashboard();
+  else if (state.view === 'tahfizh-semester') html = ['yayasan', 'kepsek', 'mahad', 'maahad', 'admin', 'pembina', 'musyrif', 'guru_tahfizh'].includes(effectiveRole()) ? tahfizhSemesterView() : dashboard();
+  else if (state.view === 'attendance-semester') html = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? attendanceSemesterView() : dashboard();
   else if (state.view === 'grades') html = section('Nilai Pelajaran', 'Input dan rekap nilai KBM', gradeTable(), `<button class="btn btn-primary" data-action="add-grade">${icon('plus')} Input Nilai</button>`);
   else if (state.view === 'attendance') html = section('Presensi Kelas', 'Kehadiran KBM hari ini', attendanceTable());
   else if (state.view === 'teacher-attendance') html = (currentRoleIsAdmin() || ['kepsek', 'yayasan'].includes(effectiveRole())) ? teacherAttendanceAdminView() : effectiveRole() === 'guru' ? teacherPersonalAttendanceView() : dashboard();
@@ -1126,7 +1278,6 @@ function renderView() {
   else if (state.view === 'schedule') html = scheduleView();
   else if (state.view === 'security-reports') html = securityReportsView();
   else if (state.view === 'announcements') html = announcementsView();
-  else if (state.view === 'pkl') html = pklViewWithEligibility();
   else if (state.view === 'permit-form') html = permitForm();
   else if (state.view === 'child') html = parentView();
   else html = dashboard();
@@ -1244,50 +1395,6 @@ function announcementsView() {
   const rows = state.announcements.map((item) => `<tr><td><b>${item.title}</b><small>${item.detail}</small></td><td>${formatDate(item.date)}</td><td>${item.author}</td><td>${canManageAnnouncements() ? `<div class="actions-inline"><button class="icon-btn" data-edit-announcement="${item.id}" title="Edit">${icon('pencil', 15)}</button><button class="icon-btn" data-delete-announcement="${item.id}" title="Hapus">${icon('trash-2', 15)}</button></div>` : '—'}</td></tr>`).join('');
   return section('Pengumuman', 'Informasi resmi untuk seluruh role', table(['Judul & Detail', 'Tanggal', 'Oleh', 'Aksi'], rows), action);
 }
-function pklView() {
-  const student = currentStudent();
-  if (effectiveRole() === 'student' && !isPklEligible(student)) return section('Praktik Kerja Lapangan', 'Modul terkunci', '<div class="locked-card">' + icon('lock', 30) + '<h3>PKL belum aktif</h3><p>PKL hanya tersedia untuk SMK kelas 11 semester 2 atau kelas 12 semester 1.</p></div>');
-  return section('Praktik Kerja Lapangan', 'Laporan, presensi, dan monitoring pembimbing', pklTable(), `<button class="btn btn-primary" data-action="add-pkl">${icon('plus')} Kirim Laporan</button>`);
-}
-
-function prosesKirimLaporanPKL() {
-  const student = currentStudent();
-  if (effectiveRole() !== 'student') {
-    alert('Pengiriman laporan PKL hanya tersedia untuk role Siswa.');
-    return;
-  }
-  if (!isPklEligible(student)) {
-    alert('Modul PKL belum aktif untuk siswa ini.');
-    return;
-  }
-  const existing = state.pklReports.find((report) => report.studentId === student.id);
-  openModal('Kirim Laporan PKL', `<form id="pkl-report-form" class="form-grid"><label class="full">Ringkasan Kegiatan<textarea name="lastReport" required placeholder="Tuliskan kegiatan PKL hari ini..."></textarea></label><label>Progress (%)<input name="progress" type="number" min="0" max="100" value="${existing?.progress || 0}" required></label><label>Kehadiran (%)<input name="attendance" type="number" min="0" max="100" value="${existing?.attendance || 0}" required></label><button type="submit" class="btn btn-primary full">Kirim Laporan</button></form>`);
-  $('#pkl-report-form').addEventListener('submit', (event) => {
-    event.preventDefault();
-    const form = new FormData(event.target);
-    const values = {
-      studentId: student.id,
-      lastReport: String(form.get('lastReport')).trim(),
-      progress: Number(form.get('progress')),
-      attendance: Number(form.get('attendance')),
-      status: existing?.status || 'Berjalan'
-    };
-    if (existing) Object.assign(existing, values);
-    else state.pklReports.unshift({ id: `PKL-${Date.now()}`, company: 'Belum diisi', mentor: 'Belum ditentukan', startDate: today, endDate: today, ...values });
-    persist();
-    closeModal();
-    render();
-    alert('Laporan PKL berhasil dikirim.');
-  });
-}
-
-document.addEventListener('click', (event) => {
-  const button = event.target.closest('[data-action="add-pkl"]');
-  if (!button) return;
-  event.preventDefault();
-  prosesKirimLaporanPKL();
-});
-
 function promoteStudents() {
   if (!canPromoteStudents()) {
     alert('Kenaikan kelas hanya dapat diproses oleh Ma’had / Admin atau Kepala Sekolah.');
@@ -1333,11 +1440,77 @@ function processPromotion(selectedGrade) {
 }
 
 function pklViewWithEligibility() {
+  if (!canViewPkl()) return section('Laporan PKL Santri', 'Akses terbatas untuk Guru DLE, Guru Instrumentasi, dan manajemen.', '<div class="notice">Anda tidak memiliki hak akses ke modul Laporan PKL.</div>');
   const student = currentStudent();
   if (effectiveRole() === 'student' && !isPklEligible(student)) {
     return section('Praktik Kerja Lapangan', 'Modul belum dibuka', `<div class="notice">${icon('lock', 25)}<b>Akses PKL belum tersedia</b><p class="metric-note">PKL hanya dibuka untuk siswa SMK kelas 11 semester 2 atau kelas 12 semester 1. Status Anda saat ini: kelas ${escapeHtml(student.grade || '—')} semester ${escapeHtml(student.semester || '—')}.</p></div>`);
   }
   return pklView();
+}
+
+function pklTable() {
+  return `<div class="table-responsive table-wrap">${table(['Santri', 'Jam Masuk', 'Jam Pulang', 'Status Absensi', 'Deskripsi Kegiatan', 'Foto'], state.pklReports.map((report) => `<tr><td>${escapeHtml(studentById(report.studentId).name)}</td><td>${escapeHtml(report.checkIn || '—')}</td><td>${escapeHtml(report.checkOut || '—')}</td><td>${statusBadge(report.status)}</td><td>${escapeHtml(report.activity || '—')}</td><td>${report.photo ? `<a href="${escapeHtml(report.photo)}" target="_blank" rel="noopener">Lihat Foto</a>` : '—'}</td></tr>`).join(''), 'Belum ada laporan PKL')}</div>`;
+}
+function pklView() {
+  const canInput = effectiveRole() === 'guru' && pklSpecialistAccount();
+  const form = canInput ? `<form id="pkl-report-form" class="form-grid"><label>Santri<select name="studentId">${state.students.filter((student) => student.program === 'SMK').map((student) => `<option value="${student.id}">${escapeHtml(student.name)}</option>`).join('')}</select></label><label>Jam Masuk<input type="time" name="checkIn" required></label><label>Jam Pulang<input type="time" name="checkOut" required></label><label>Status Absensi<select name="status"><option>Hadir</option><option>Izin</option><option>Sakit</option></select></label><label class="full">Deskripsi Kegiatan<textarea name="activity" required></textarea></label><label class="full">Unggah Foto (opsional)<input type="file" name="photo" accept="image/*"></label><button class="btn btn-primary full" type="submit">Simpan Laporan PKL</button></form>` : '';
+  return `${welcome('PRAKTIK KERJA LAPANGAN', 'Laporan PKL Santri', 'Jam kerja, status absensi, kegiatan, dan dokumentasi praktik.', '')}${form ? section('Input Laporan PKL', 'Form sederhana tanpa progress persentase.', form) : ''}${section('Rekap PKL', 'Monitoring laporan praktik santri.', pklTable())}`;
+}
+
+function tahfizhSemesterRows(semester, academicYear) {
+  const records = state.tahfizhSemesterRecords.filter((record) => String(record.semester) === String(semester) && record.academicYear === academicYear);
+  return state.students.map((student) => {
+    const record = records.find((item) => item.studentId === student.id) || {};
+    const attendance = state.attendance.filter((item) => item.type === 'tahfizh' && item.studentId === student.id && semesterDateMatches(item.date, semester, academicYear));
+    const counts = ['Hadir', 'Izin', 'Sakit', 'Alpa'].reduce((result, status) => ({ ...result, [status]: attendance.filter((item) => item.status === status).length }), {});
+    const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+    const percent = total ? Math.round(counts.Hadir / total * 100) : 0;
+    return { student, record, counts, percent };
+  });
+}
+function semesterDateMatches(date, semester, academicYear) {
+  const [start] = String(academicYear || '').split('/');
+  const year = Number(start);
+  const month = new Date(`${date}T00:00:00`).getMonth() + 1;
+  return semester === '1' ? new Date(`${date}T00:00:00`).getFullYear() === year && month >= 7 : new Date(`${date}T00:00:00`).getFullYear() === year + 1 && month <= 6;
+}
+function tahfizhSemesterView() {
+  const role = effectiveRole();
+  const canEdit = ['pembina', 'musyrif', 'guru_tahfizh'].includes(role) || (role === 'guru' && currentAccount()?.isTahfizhTeacher === true);
+  const defaults = semesterDefaults();
+  const filter = state.tahfizhSemesterFilter || defaults;
+  const rows = tahfizhSemesterRows(filter.semester, filter.academicYear);
+  const tableHtml = `<div class="table-responsive table-wrap"><table><thead><tr><th>Nama Santri</th><th>Kelas/Halaqah</th><th>Target Semester</th><th>Capaian Ziadah Realisasi</th><th>Status Mutqin</th><th>Predikat/Nilai</th><th>Musyrif Pembina</th><th>Absensi Halaqah</th>${canEdit ? '<th>Aksi</th>' : ''}</tr></thead><tbody>${rows.map(({ student, record, counts, percent }) => `<tr><td>${escapeHtml(student.name)}</td><td>${escapeHtml(student.className || '—')}</td><td>${escapeHtml(record.target || '—')}</td><td>${escapeHtml(record.achievement || '—')}</td><td>${statusBadge(record.mutqin || 'Belum dinilai')}</td><td>${escapeHtml(record.score ?? '—')}</td><td>${escapeHtml(record.mentor || '—')}</td><td>H ${counts.Hadir} · I ${counts.Izin} · S ${counts.Sakit} · A ${counts.Alpa}<br><small>${percent}%</small></td>${canEdit ? `<td><button type="button" class="btn btn-small btn-ghost" data-edit-semester-tahfizh="${student.id}">Edit</button></td>` : ''}</tr>`).join('') || '<tr><td colspan="9" class="empty">Belum ada rekap semester.</td></tr>'}</tbody></table></div>`;
+  return `${welcome('REKAP TAHFIZH PER SEMESTER', 'Rapor Tahfizh Semester', 'Target, capaian ziadah, mutqin, nilai, pembina, dan kehadiran halaqah.', `<button type="button" class="btn btn-primary" data-action="export-tahfizh-semester">${icon('download')} Export PDF / Cetak Rapor</button>`)}${section('Filter Semester', 'Pilihan default mengikuti Juli–Desember = Ganjil dan Januari–Juni = Genap.', semesterFilterForm())}${section('Rekap Tahfizh Semester', `${filter.semester === '1' ? 'Ganjil' : 'Genap'} · ${filter.academicYear}`, tableHtml)}`;
+}
+function attendanceSemesterView() {
+  const defaults = semesterDefaults();
+  const filter = state.attendanceSemesterFilter || defaults;
+  const rows = state.students.map((student) => {
+    const records = state.attendance.filter((item) => item.type === 'kelas' && item.studentId === student.id && semesterDateMatches(item.date, filter.semester, filter.academicYear));
+    const counts = ['Hadir', 'Izin', 'Sakit', 'Alpa'].map((status) => records.filter((item) => item.status === status).length);
+    const percent = records.length ? Math.round(counts[0] / records.length * 100) : 0;
+    return `<tr><td>${escapeHtml(student.name)}</td><td>${escapeHtml(student.className || '—')}</td><td>${counts[0]}</td><td>${counts[1]}</td><td>${counts[2]}</td><td>${counts[3]}</td><td>${percent}%</td></tr>`;
+  }).join('');
+  return `${welcome('REKAP ABSENSI PER SEMESTER', 'Absensi Santri Semester', 'Rekap hadir, izin, sakit, alpha, dan persentase kehadiran.', `<button type="button" class="btn btn-primary" data-action="export-attendance-semester">${icon('download')} Export PDF</button>`)}${section('Filter Semester', 'Filter otomatis dapat dipilih kembali untuk arsip.', semesterFilterForm('attendance-semester-filter'))}${section('Rekap Absensi', `${filter.semester === '1' ? 'Ganjil' : 'Genap'} · ${filter.academicYear}`, `<div class="table-responsive table-wrap">${table(['Nama Santri', 'Kelas', 'Total Hadir', 'Izin', 'Sakit', 'Alpha', 'Persentase Kehadiran (%)'], rows)}</div>`)}`;
+}
+function openTahfizhSemesterModal(studentId) {
+  if (!['pembina', 'musyrif', 'guru_tahfizh'].includes(effectiveRole()) && !(effectiveRole() === 'guru' && currentAccount()?.isTahfizhTeacher)) return;
+  const filter = state.tahfizhSemesterFilter || semesterDefaults();
+  const existing = state.tahfizhSemesterRecords.find((item) => item.studentId === studentId && String(item.semester) === String(filter.semester) && item.academicYear === filter.academicYear) || {};
+  openModal('Edit Rekap Tahfizh Semester', `<form id="semester-tahfizh-form" class="form-grid"><label>Target Semester<input name="target" value="${escapeHtml(existing.target || '')}" required></label><label>Capaian Ziadah Realisasi<input name="achievement" value="${escapeHtml(existing.achievement || '')}" required></label><label>Status Mutqin<select name="mutqin"><option ${existing.mutqin === 'Mutqin' ? 'selected' : ''}>Mutqin</option><option ${existing.mutqin === 'Baik' ? 'selected' : ''}>Baik</option><option ${existing.mutqin === 'Perlu Bimbingan' ? 'selected' : ''}>Perlu Bimbingan</option></select></label><label>Predikat/Nilai<input name="score" type="number" min="0" max="100" value="${escapeHtml(existing.score ?? '')}" required></label><label class="full">Nama Musyrif Pembina<input name="mentor" value="${escapeHtml(existing.mentor || currentAccount()?.name || '')}" required></label><button class="btn btn-primary full" type="submit">Simpan Rekap</button></form>`);
+  $('#semester-tahfizh-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(event.target).entries());
+    if (existing.id) Object.assign(existing, values);
+    else state.tahfizhSemesterRecords.push({ id: `TS-${Date.now()}`, studentId, semester: filter.semester, academicYear: filter.academicYear, ...values });
+    persist(); closeModal(); render();
+  });
+}
+function exportSemesterReport(type) {
+  const content = type === 'tahfizh' ? document.querySelector('.table-responsive')?.innerHTML : document.querySelector('.table-responsive')?.innerHTML;
+  if (!content) return;
+  downloadDocumentPdf(`<article class="document-container"><h1 style="text-align:center">${type === 'tahfizh' ? 'Rapor Tahfizh Semester' : 'Rekap Absensi Semester'}</h1><p style="text-align:center">${escapeHtml(formatLocalLongDate())}</p>${content}</article>`, `${type === 'tahfizh' ? 'Rapor-Tahfizh' : 'Rekap-Absensi'}-${new Date().toISOString().slice(0, 10)}`).catch((error) => { console.error('[BoardingPro] Ekspor rekap semester gagal:', error); showToast('Rekap gagal diunduh.', 'error'); });
 }
 
 function permitForm() {
@@ -1350,7 +1523,7 @@ function paymentForm() {
   return section('Konfirmasi Pembayaran', 'Kirim konfirmasi SPP, non-SPP ma’had, atau uang saku', `<form id="payment-form" class="form-grid"><label>Jenis Pembayaran<select name="category">${categories.map((category) => `<option value="${category.id}">${category.label}</option>`).join('')}</select></label><label>Periode<input name="period" value="September 2026" required></label><label>Nominal Bayar (Rp)<input name="amount" type="number" min="1" required></label><label>Metode<select name="method"><option>Transfer BSI</option><option>Virtual Account</option><option>Tunai ke Admin</option></select></label><label class="full">Upload Bukti Transfer (gambar)<input id="upload-receipt" name="receiptImage" type="file" accept="image/*"><small id="receipt-scan-status">Belum ada pemindaian.</small></label><label class="full">Catatan / Nama file bukti<input name="proof" placeholder="contoh: bukti-transfer.jpg" required></label><div class="full"><button type="submit" class="btn btn-primary">${icon('send')} Kirim Konfirmasi</button></div></form>${section('Riwayat Pembayaran', 'Status verifikasi admin', paymentTable(false, currentStudent().id))}${compactSection('Tagihan & Kuitansi', 'Rincian pembayaran santri', renderWaliInvoices(currentStudent().nis))}`);
 }
 function openModal(title, content) {
-  $('#modal-root').innerHTML = `<div class="modal-backdrop modal-overlay"><div class="modal modal-card"><div class="modal-head modal-card-header"><h2 style="font-size:1rem;font-weight:600">${escapeHtml(title)}</h2><button type="button" class="icon-btn modal-close" data-close-modal aria-label="Tutup">${icon('x')}</button></div>${content}</div></div>`;
+  $('#modal-root').innerHTML = `<div class="modal-backdrop modal-overlay"><div class="modal modal-card"><div class="modal-head modal-card-header"><h2 style="font-size:1rem;font-weight:600">${escapeHtml(title)}</h2><button type="button" class="icon-btn modal-close" data-close-modal aria-label="Tutup">${icon('x')}</button></div><div class="modal-body">${content}</div></div></div>`;
   $('#modal-root').querySelector('[data-close-modal]').addEventListener('click', closeModal);
   bindSensitiveDocumentGuard();
   if (window.lucide) lucide.createIcons();
@@ -1452,6 +1625,24 @@ function openDocument(invoiceId, receiptId, print = false) {
 }
 function bindActions() {
   bindMajorCodeGenerator();
+  const semesterFilter = $('#semester-filter-form');
+  if (semesterFilter) semesterFilter.addEventListener('submit', (event) => { event.preventDefault(); state.tahfizhSemesterFilter = Object.fromEntries(new FormData(semesterFilter).entries()); render(); });
+  const attendanceSemesterFilter = $('#attendance-semester-filter');
+  if (attendanceSemesterFilter) attendanceSemesterFilter.addEventListener('submit', (event) => { event.preventDefault(); state.attendanceSemesterFilter = Object.fromEntries(new FormData(attendanceSemesterFilter).entries()); render(); });
+  const pklForm = $('#pkl-report-form');
+  if (pklForm) pklForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!pklSpecialistAccount()) return;
+    const form = new FormData(pklForm);
+    const photo = form.get('photo');
+    let photoData = '';
+    if (photo instanceof File && photo.size) photoData = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(photo); });
+    state.pklReports.unshift({ id: `PKL-${Date.now()}`, studentId: form.get('studentId'), date: today, checkIn: form.get('checkIn'), checkOut: form.get('checkOut'), status: form.get('status'), activity: sanitizeInput(form.get('activity')), photo: photoData });
+    persist(); alert('Laporan PKL berhasil disimpan.'); render();
+  });
+  document.querySelectorAll('[data-edit-semester-tahfizh]').forEach((button) => button.addEventListener('click', () => openTahfizhSemesterModal(button.dataset.editSemesterTahfizh)));
+  document.querySelectorAll('[data-action="export-tahfizh-semester"]').forEach((button) => button.addEventListener('click', () => exportSemesterReport('tahfizh')));
+  document.querySelectorAll('[data-action="export-attendance-semester"]').forEach((button) => button.addEventListener('click', () => exportSemesterReport('attendance')));
   document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => {
     state.view = button.dataset.view;
     render();
@@ -1638,7 +1829,18 @@ function bindActions() {
   document.querySelectorAll('[data-action="add-account"]').forEach((button) => button.addEventListener('click', openAccountModal));
   document.querySelectorAll('[data-action="add-billing"]').forEach((button) => button.addEventListener('click', openBillingModal));
   document.querySelectorAll('[data-edit-billing]').forEach((button) => button.addEventListener('click', () => { if (canManageFinance()) openBillingModal(state.financeBills.find((bill) => bill.id === button.dataset.editBilling)); }));
-  document.querySelectorAll('[data-action="export"]').forEach((button) => button.addEventListener('click', () => alert('Laporan berhasil disiapkan untuk diunduh.')));
+  document.querySelectorAll('[data-action="export"]').forEach((button) => button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      await exportReportPdf();
+      showToast('Laporan berhasil diunduh.');
+    } catch (error) {
+      console.error('[BoardingPro] Gagal mengekspor laporan:', error);
+      showToast('Laporan gagal diunduh. Silakan coba lagi.', 'error');
+    } finally {
+      button.disabled = false;
+    }
+  }));
   const permit = $('#permit-form');
   if (permit) permit.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(permit); const requestedDays = Math.min(3, Math.max(1, Number(form.get('requestedDays') || 1))); const submittedAt = new Date().toISOString(); const permitId = `IZN-${Date.now()}`; const parent = currentAccount(); state.permits.unshift({ id: permitId, studentId: sanitizeInput(form.get('studentId')), type: sanitizeInput(form.get('type')), reason: sanitizeInput(form.get('reason')), date: sanitizeInput(form.get('date')), requestedDays, approvedDays: null, endDate: null, status: 'Pending', approvedBy: null, approvedAt: null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali', applicantSignature: '[ TERVERIFIKASI DIGITAL WALI SANTRI ]', applicantSignedAt: submittedAt, applicantQrPayload: { documentId: permitId, documentType: 'permit', role: 'parent' }, checkout: null, checkin: null }); persist(); alert('Pengajuan izin berhasil dikirim.'); render(); });
   const musyrifPermit = $('#musyrif-permit-form');
@@ -1774,11 +1976,16 @@ function openAccountModal() {
   openModal('Buat Akun Staf Internal', `<form id="account-modal-form" class="form-grid"><label>Nama Lengkap<input id="nama-staf" name="name" required></label><label>Username / ID<input id="username-staf" name="username" required autocomplete="off"></label><div class="full role-assignment"><div class="role-assignment-head"><b>Penugasan Peran</b><button type="button" class="btn btn-small btn-ghost" id="add-master-role">+ Tambah Opsi Peran</button></div><div id="master-role-options" class="role-options">${roleOptions()}</div></div><label>Password<input name="password" value="123456" required></label><label class="full"><input type="checkbox" name="isTahfizhTeacher"> Bertugas sebagai Guru/Ustadz Tahfizh</label><label class="full"><input type="checkbox" name="isMusyrif"> Bertugas sebagai Musyrif/Pembina Asrama</label><button type="submit" class="btn btn-primary full">Simpan Akun</button></form>`);
   const nameInput = $('#nama-staf');
   const usernameInput = $('#username-staf');
-  nameInput.addEventListener('input', () => {
+  const updateGeneratedUsername = () => {
+    const selectedRole = $('#master-role-options input[name="roles"]:checked')?.value || 'user';
     if (usernameInput.dataset.manual === 'true') return;
-    usernameInput.value = compactUsername(nameInput.value);
+    usernameInput.value = usernameForAccount(selectedRole, nameInput.value);
+  };
+  nameInput.addEventListener('input', () => {
+    updateGeneratedUsername();
   });
   usernameInput.addEventListener('input', () => { usernameInput.dataset.manual = 'true'; });
+  $('#master-role-options').addEventListener('change', updateGeneratedUsername);
   $('#add-master-role').addEventListener('click', () => {
     openInputModal('Tambah Opsi Peran', 'Nama peran baru', '', (roleName) => {
       saveMasterRoles([...masterRoles(), roleName]);
@@ -1793,7 +2000,7 @@ function openAccountModal() {
     const selectedRoles = form.getAll('roles').map((role) => String(role).trim()).filter(Boolean);
     if (!selectedRoles.length) { alert('Pilih minimal satu peran.'); return; }
     if (state.internalAccounts.some((account) => account.username === username)) { alert('Username sudah digunakan.'); return; }
-    state.internalAccounts.push({ id: `ACC-${Date.now()}`, name: form.get('name'), username, password: form.get('password'), passwordChangeCount: 0, roles: selectedRoles, role: selectedRoles[0], isTahfizhTeacher: form.get('isTahfizhTeacher') === 'on', isMusyrif: form.get('isMusyrif') === 'on' });
+    state.internalAccounts.push({ id: `ACC-${Date.now()}`, name: form.get('name'), username, password: form.get('password'), passwordChangeCount: 0, roles: selectedRoles, role: selectedRoles[0], displayName: displayNameForAccount({ name: form.get('name'), role: selectedRoles[0] }), isTahfizhTeacher: form.get('isTahfizhTeacher') === 'on', isMusyrif: form.get('isMusyrif') === 'on' });
     persist();
     closeModal();
     render();
@@ -1930,9 +2137,11 @@ function showDashboard() {
   shell.hidden = false;
   renderDashboard();
   startInactivityTimer();
+  offerInstallPrompt().catch((error) => console.error('[BoardingPro] Prompt instalasi PWA gagal:', error));
 }
 function showLanding() {
   stopInactivityTimer();
+  endSingleSession();
   const landing = $('#landing');
   const shell = $('#app-shell');
   if (!landing || !shell) return;
@@ -1947,6 +2156,9 @@ function showLanding() {
   updatePreview();
 }
 document.addEventListener('DOMContentLoaded', () => {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch((error) => console.error('[BoardingPro] Service worker gagal didaftarkan:', error));
+  }
   initializeFirebase().catch((error) => console.error('[BoardingPro] Firebase tidak siap:', error));
   const accountLogin = $('#account-login-form');
   if (accountLogin) accountLogin.addEventListener('submit', (event) => {
@@ -1969,6 +2181,7 @@ document.addEventListener('DOMContentLoaded', () => {
     state.studentId = account.studentId || null;
     state.view = 'dashboard';
     localStorage.setItem('boardingpro-auth', 'true');
+    activateSingleSession(account);
     saveAuthenticatedUser();
     persist();
     showDashboard();
@@ -1977,6 +2190,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const logout = $('#logout');
   if (logout) logout.addEventListener('click', () => { localStorage.removeItem('boardingpro-auth'); secureStorage.set('boardingpro-user', null).catch((error) => console.error('[BoardingPro] Gagal menghapus sesi terenkripsi:', error)); showLanding(); });
   if (localStorage.getItem('boardingpro-auth') === 'true') {
+    activateSingleSession(currentAccount());
     saveAuthenticatedUser();
     showDashboard();
   } else showLanding();

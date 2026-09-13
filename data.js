@@ -112,7 +112,7 @@ const seedData = {
     { id: 'ACC-MASTER', role: 'master_admin', username: 'admin.stkis', password: 'StkIs#2026!Pro', name: 'Master Admin Ma’had', nama: 'Master Admin Ma’had', passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
     { id: 'ACC-001', role: 'yayasan', username: 'yayasan.demo', password: 'demo123', name: 'Dr. H. Abdullah', nama: 'Dr. H. Abdullah', passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-002', role: 'maahad', username: 'admin.maahad', password: 'admin123', name: 'Ust. Hasyim', nama: 'Ust. Hasyim', passwordChangeCount: 0, status: 'Aktif', active: true },
-    { id: 'ACC-003', role: 'guru', username: 'guru.demo', password: 'demo123', name: 'Ustadzah Rahma', nama: 'Ustadzah Rahma', isTahfizhTeacher: false, passwordChangeCount: 0, status: 'Aktif', active: true },
+    { id: 'ACC-003', role: 'guru', username: 'guru.demo', password: 'demo123', name: 'Ustadzah Rahma', nama: 'Ustadzah Rahma', subject: 'Guru DLE', isTahfizhTeacher: false, passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-004', role: 'pembina', username: 'pembina.demo', password: 'demo123', name: 'Ust. Salman', nama: 'Ust. Salman', passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-005', role: 'security', username: 'security.demo', password: 'demo123', name: 'Pak Joko', nama: 'Pak Joko', passwordChangeCount: 0, status: 'Aktif', active: true }
   ],
@@ -170,6 +170,13 @@ const seedData = {
     { id: 'AT-01', studentId: 'STD-001', date: '2026-09-05', type: 'kelas', status: 'Hadir', by: 'Ustadzah Rahma' },
     { id: 'AT-02', studentId: 'STD-002', date: '2026-09-05', type: 'asrama', status: 'Hadir', by: 'Ust. Salman' },
     { id: 'AT-03', studentId: 'STD-003', date: '2026-09-05', type: 'kelas', status: 'Izin', by: 'Ustadzah Rahma' }
+  ],
+  pklReports: [
+    { id: 'PKL-001', studentId: 'STD-001', date: '2026-09-05', checkIn: '07:00', checkOut: '15:00', status: 'Hadir', activity: 'Perakitan panel listrik', photo: '' }
+  ],
+  tahfizhSemesterRecords: [
+    { id: 'TS-001', studentId: 'STD-001', semester: 1, academicYear: '2026/2027', target: '5 Juz', achievement: '3 Juz', mutqin: 'Baik', score: 86, mentor: 'Ust. Salman' },
+    { id: 'TS-002', studentId: 'STD-002', semester: 1, academicYear: '2026/2027', target: '6 Juz', achievement: '4 Juz', mutqin: 'Mutqin', score: 92, mentor: 'Ust. Salman' }
   ],
   dormAttendance: [
     { id: 'DA-01', studentId: 'STD-001', date: '2026-09-05', shift: 'Subuh', status: 'Hadir' },
@@ -244,10 +251,6 @@ const seedData = {
     { id: 'EV-01', date: '2026-09-06', title: 'Parent Visit Day', location: 'Lapangan Utama', audience: 'Semua wali', status: 'Published' },
     { id: 'EV-02', date: '2026-09-12', title: 'Simulasi Asesmen SMK', location: 'Gedung SMK', audience: 'SMK kelas 11-12', status: 'Published' },
     { id: 'EV-03', date: '2026-09-19', title: 'Tasmi’ Akbar', location: 'Masjid', audience: 'PPTAK', status: 'Draft' }
-  ],
-  pklReports: [
-    { id: 'PKL-001', studentId: 'STD-001', company: 'PT Solusi Digital Nusantara', mentor: 'Budi Santoso', startDate: '2026-08-03', endDate: '2026-10-03', attendance: 96, progress: 72, status: 'Berjalan', lastReport: 'Implementasi jaringan LAN kantor' },
-    { id: 'PKL-002', studentId: 'STD-004', company: 'CV Kreasi Aplikasi', mentor: 'Dewi Lestari', startDate: '2026-07-15', endDate: '2026-09-30', attendance: 94, progress: 88, status: 'Berjalan', lastReport: 'Modul autentikasi aplikasi inventaris' }
   ],
   activities: [
     { time: '04:00', title: 'Qiyamul Lail & Shalat Subuh', icon: 'moon-star' },
