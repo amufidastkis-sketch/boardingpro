@@ -262,20 +262,34 @@ const canUseDocumentActions = () => documentActionRoles.includes(String(effectiv
 const canManageUserAccounts = () => currentRoleIsAdmin() || ['guru', 'guru_tahfizh'].includes(effectiveRole());
 const documentLayoutStyles = `
   html,body{margin:0;background:#fff;color:#333;font-family:Arial,Helvetica,sans-serif}
-  .document-container{width:794px!important;min-height:1123px!important;padding:40px!important;margin:0 auto!important;background:#fff!important;color:#333!important;box-shadow:none!important;display:block!important;visibility:visible!important}
+  .document-container{width:794px!important;min-height:1123px!important;padding:30px!important;margin:0 auto!important;background:#fff!important;color:#333!important;box-shadow:none!important;display:block!important;visibility:visible!important;page-break-after:avoid!important;break-after:avoid-page!important}
   .kop-container,.kop-surat{display:grid;grid-template-columns:110px minmax(0,1fr);align-items:center;width:100%;gap:18px;border-bottom:5px double #333!important;padding:0 0 14px!important;margin:0 0 22px!important;text-align:left}
   .kop-container .logo-wrapper,.kop-surat .logo-wrapper{width:110px;height:110px}
   .kop-text{min-width:0;color:#333;text-align:left}.kop-text b,.kop-text h1,.kop-text p,.kop-text small{text-align:left}.kop-text p,.kop-text small{color:#333!important}
-  .document-container table{width:100%;border-collapse:collapse;table-layout:fixed;margin:16px 0}
+  .document-container table{width:100%;border-collapse:collapse;table-layout:fixed;margin:16px 0;page-break-inside:avoid;break-inside:avoid}
   .document-container th,.document-container td{border:1px solid #ddd!important;padding:9px 10px!important;color:#333!important;vertical-align:top;overflow-wrap:break-word}
   .document-container th{background:#f7f7f7;text-align:left;font-weight:700}
   .document-container td:last-child{word-wrap:break-word}
   .document-container .currency,.document-container td.currency{text-align:right!important;white-space:nowrap}
-  .document-container .signature-grid,.document-container .discipline-signatures{display:grid!important;grid-template-columns:1fr 1fr!important;gap:24px!important;page-break-inside:avoid}
+  .document-container .signature-grid,.document-container .discipline-signatures{display:grid!important;grid-template-columns:1fr 1fr!important;gap:24px!important;page-break-inside:avoid;break-inside:avoid;page-break-after:avoid;break-after:avoid-page}
   .document-action-buttons,.document-actions{display:none!important}
-  @media print{@page{size:A4 portrait;margin:0}}
+  @media print{@page{size:A4 portrait;margin:0}.document-container{page-break-after:avoid!important;break-after:avoid-page!important;page-break-inside:avoid}}
 `;
+function normalizeDocumentVisibility(root) {
+  root.hidden = false;
+  root.classList.remove('d-none', 'hidden');
+  root.style.removeProperty('display');
+  root.style.display = 'block';
+  root.style.visibility = 'visible';
+  root.querySelectorAll('[hidden],.d-none,.hidden,[style*="display: none"],[style*="display:none"]').forEach((element) => {
+    element.hidden = false;
+    element.classList.remove('d-none', 'hidden');
+    element.style.removeProperty('display');
+    element.style.visibility = 'visible';
+  });
+}
 function waitForDocumentReady(root) {
+  normalizeDocumentVisibility(root);
   const images = Array.from(root.querySelectorAll('img'));
   const imageReady = images.map((image) => {
     image.removeAttribute('hidden');
@@ -329,9 +343,8 @@ async function downloadDocumentPdf(html, title, pageStyle = '') {
     throw new Error('Generator PDF belum siap. Muat ulang halaman lalu coba lagi.');
   }
   const pdfNode = documentNode.cloneNode(true);
-  pdfNode.style.cssText = 'position:fixed;left:-100000px;top:0;width:794px;min-height:1123px;padding:40px;background:#fff;z-index:-1;display:block!important;visibility:visible!important;';
-  pdfNode.classList.remove('d-none');
-  pdfNode.hidden = false;
+  pdfNode.style.cssText = 'position:fixed;left:-100000px;top:0;width:794px;min-height:1123px;padding:30px;background:#fff;z-index:-1;display:block!important;visibility:visible!important;page-break-after:avoid;break-after:avoid-page;';
+  normalizeDocumentVisibility(pdfNode);
   const styleNode = document.createElement('style');
   styleNode.textContent = documentLayoutStyles;
   pdfNode.prepend(styleNode);
@@ -507,9 +520,10 @@ const isMasterAdminSession = () => {
   const account = currentAccount();
   return account?.role === 'mahad';
 };
+const canonicalRole = (role) => role === 'santri' ? 'student' : role === 'wali' ? 'parent' : role;
 const effectiveRole = () => {
   const currentUser = state.currentUser || currentAccount();
-  return state.activeRoleView || currentUser?.role || state.role;
+  return canonicalRole(state.activeRoleView || currentUser?.role || state.role);
 };
 const currentRoleIsAdmin = () => ['mahad', 'admin'].includes(effectiveRole());
 const checkPermission = () => currentRoleIsAdmin();
@@ -1482,8 +1496,8 @@ function ensureStudentAccounts(student) {
   const nis = String(student.nis).trim();
   const phone = String(student.parentPhone || student.phoneParent || '').trim();
   const accountDefinitions = [
-    { role: 'student', username: nis, password: nis, name: student.name },
-    { role: 'parent', username: `ortu_${nis}`, password: phone || nis, name: `Wali dari ${student.name}` }
+    { role: 'santri', username: nis, password: nis, name: student.name },
+    { role: 'wali', username: `ortu_${nis}`, password: phone || nis, name: `Wali dari ${student.name}` }
   ];
   accountDefinitions.forEach((definition) => {
     const existing = state.internalAccounts.find((account) => account.username === definition.username);
@@ -1494,7 +1508,7 @@ function ensureStudentAccounts(student) {
       status: existing?.status || 'Aktif',
       active: existing?.active !== false,
       passwordChangeCount: existing?.passwordChangeCount || 0,
-      roles: [roles[definition.role]?.label || (definition.role === 'student' ? 'Santri' : 'Wali Santri')]
+      roles: [roles[definition.role]?.label || (definition.role === 'santri' ? 'Santri' : 'Wali Santri')]
     };
     if (existing) Object.assign(existing, account);
     else state.internalAccounts.push(account);
@@ -1874,7 +1888,7 @@ function bindActions() {
   document.querySelectorAll('[data-action="add-student"]').forEach((button) => button.addEventListener('click', openStudentModal));
   document.querySelectorAll('[data-action="promote-students"]').forEach((button) => button.addEventListener('click', promoteStudents));
   document.querySelectorAll('[data-edit-student]').forEach((button) => button.addEventListener('click', () => openStudentModal(studentById(button.dataset.editStudent))));
-  document.querySelectorAll('[data-reset-account]').forEach((button) => button.addEventListener('click', () => { if (!canManageUserAccounts()) return; const account = state.internalAccounts.find((item) => item.id === button.dataset.resetAccount); if (!account || (account.role === 'master_admin' && !isMasterAdminSession())) return; account.password = account.role === 'student' ? String(account.username) : account.role === 'parent' ? String(account.username).replace(/^ortu_/, '') : 'user123'; account.passwordChangeCount = 0; persist(); render(); alert('Password akun berhasil direset.'); }));
+  document.querySelectorAll('[data-reset-account]').forEach((button) => button.addEventListener('click', () => { if (!canManageUserAccounts()) return; const account = state.internalAccounts.find((item) => item.id === button.dataset.resetAccount); if (!account || (account.role === 'master_admin' && !isMasterAdminSession())) return; account.password = ['student', 'santri'].includes(account.role) ? String(account.username) : ['parent', 'wali'].includes(account.role) ? String(account.username).replace(/^ortu_/, '') : 'user123'; account.passwordChangeCount = 0; persist(); render(); alert('Password akun berhasil direset.'); }));
   document.querySelectorAll('[data-delete-account]').forEach((button) => button.addEventListener('click', () => {
     if (!currentRoleIsAdmin()) return;
     const account = state.internalAccounts.find((item) => item.id === button.dataset.deleteAccount);

@@ -16,6 +16,7 @@ const roles = {
   musyrif: { label: 'Musyrif / Pembina', icon: 'shield-check', description: 'Dormitory & Tahfizh', demoName: 'Ust. Salman' },
   security: { label: 'Security / Pos Jaga', icon: 'scan-line', description: 'Gatekeeper Dashboard', demoName: 'Pak Joko' },
   parent: { label: 'Orang Tua / Wali', icon: 'users', description: 'Parent Portal', demoName: 'Bpk. Muhammad Fauzi' },
+  wali: { label: 'Wali Santri', icon: 'users', description: 'Parent Portal', demoName: 'Wali Santri' },
   student: { label: 'Siswa / Santri', icon: 'user-round', description: 'Student Portal', demoName: 'Ahmad Fauzan' },
   santri: { label: 'Siswa / Santri', icon: 'user-round', description: 'Student Portal', demoName: 'Ahmad Fauzan' }
 };
