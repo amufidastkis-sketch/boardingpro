@@ -2346,3 +2346,5 @@ function showUnreadCriticalNotifications() {
   playCriticalAlert();
   openModal('Notifikasi Penting', `<div class="notice" style="margin-bottom:12px"><b>${unread.length} notifikasi kedisiplinan membutuhkan perhatian.</b></div><div class="activity-list">${unread.map((item) => `<div class="activity"><span class="activity-icon red">${icon('triangle-alert', 16)}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.description)}</p></div></div>`).join('')}</div>`);
 }
+// AUTO GENERATE AKUN SANTRI & ORTU
+if (typeof saveData === 'function') { const originalSave = saveData; saveData = function(data) { originalSave(data); let users = JSON.parse(localStorage.getItem('boardingpro_users')) || []; if (data && data.nis) { users.push({ username: data.nis, password: data.nis, name: data.nama || 'Santri', role: 'santri' }); users.push({ username: 'ortu_' + data.nis, password: data.noHpOrtu || data.nis, name: 'Wali dari ' + (data.nama || 'Santri'), role: 'wali' }); localStorage.setItem('boardingpro_users', JSON.stringify(users)); } }; }
