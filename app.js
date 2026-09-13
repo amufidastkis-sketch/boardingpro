@@ -30,9 +30,18 @@ const secureStorage = {
   }
 };
 const SecurityEngine = secureStorage;
+const dataSantri = (() => {
+  try {
+    const stored = JSON.parse(localStorage.getItem('boardingpro_santri') || '[]');
+    return Array.isArray(stored) ? stored : [];
+  } catch (error) {
+    console.warn('[BoardingPro] Data santri lokal tidak valid, memakai data kosong:', error);
+    return [];
+  }
+})();
 const fallbackSeedData = {
   internalAccounts: [{ id: 'ACC-ADMIN', role: 'admin', username: 'admin', password: 'admin123', name: 'Administrator', nama: 'Administrator', status: 'Aktif', active: true }],
-  students: [{ id: 'STD-DEMO', name: 'Santri Demo', nis: '000000', program: 'SMK', className: 'Kelas Demo', parent: 'Wali Santri', parentPhone: '', attendance: 100, points: 0, tahfizh: 0, spp: 'Lunas', status: 'Aktif' }],
+  students: dataSantri.length ? dataSantri : [{ id: 'STD-DEMO', name: 'Santri Demo', nis: '000000', program: 'SMK', className: 'Kelas Demo', parent: 'Wali Santri', parentPhone: '', attendance: 100, points: 0, tahfizh: 0, spp: 'Lunas', status: 'Aktif' }],
   classes: [], teachers: [], financeBills: [], scholarships: [], discounts: [], invoices: [], receipts: [],
   dailyFeed: [], monthlySummaries: [], yayasanProgress: [], announcements: [], pocketTransactions: [],
   pocketBalances: [], majors: [], teacherTeachingRecords: [], incidents: [], lostFound: [],
