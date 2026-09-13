@@ -62,6 +62,10 @@
       .room-summary-group tr:last-child td{border-bottom:0}
       .discipline-letter{max-width:100%;overflow-wrap:anywhere}
       .document-container{position:relative;width:100%;max-width:210mm;min-height:297mm;margin:0 auto;padding:15mm;background:#fff;box-shadow:0 8px 28px #0f172a22;overflow:visible}
+      .document-container.invoice-document,.document-container.permit-letter,.document-container.discipline-letter{width:794px;min-height:1123px;padding:40px;background:#fff;color:#333;font-family:Arial,Helvetica,sans-serif}
+      .document-container.invoice-document table,.document-container.permit-letter table,.document-container.discipline-letter table{border-collapse:collapse;table-layout:fixed}
+      .document-container.invoice-document th,.document-container.invoice-document td,.document-container.permit-letter th,.document-container.permit-letter td,.document-container.discipline-letter th,.document-container.discipline-letter td{border:1px solid #ddd;padding:9px 10px;color:#333}
+      .document-container .currency{white-space:nowrap;text-align:right}
       .receipt-document{width:100%;max-width:210mm;min-height:297mm}
       .modal-overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto !important;padding:40px 10px;background:#0f172a66;backdrop-filter:blur(6px)}
       .modal-card{width:min(650px,calc(100vw - 24px));max-width:650px;margin:0;border-radius:16px;background:#fff;box-shadow:0 24px 70px #0f172a44;overflow:visible}

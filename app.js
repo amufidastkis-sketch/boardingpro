@@ -249,6 +249,36 @@ const money = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const qrSignatureUrl = (payload) => `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(JSON.stringify(payload))}`;
 const documentActionRoles = ['orang_tua', 'parent', 'kepala_sekolah', 'kepsek', 'admin_mahad', 'mahad', 'maahad', 'admin', 'yayasan', 'pengurus_yayasan', 'guru', 'guru_tahfizh'];
 const canUseDocumentActions = () => documentActionRoles.includes(String(effectiveRole() || '').toLowerCase());
+const documentLayoutStyles = `
+  html,body{margin:0;background:#fff;color:#333;font-family:Arial,Helvetica,sans-serif}
+  .document-container{width:794px!important;min-height:1123px!important;padding:40px!important;margin:0 auto!important;background:#fff!important;color:#333!important;box-shadow:none!important;display:block!important;visibility:visible!important}
+  .kop-container,.kop-surat{display:flex;align-items:center;justify-content:center;width:100%;gap:18px;border-bottom:5px double #333!important;padding:0 0 14px!important;margin:0 0 22px!important;text-align:center}
+  .kop-text{flex:1;min-width:0;color:#333}.kop-text p,.kop-text small{color:#333!important}
+  .document-container table{width:100%;border-collapse:collapse;table-layout:fixed;margin:16px 0}
+  .document-container th,.document-container td{border:1px solid #ddd!important;padding:9px 10px!important;color:#333!important;vertical-align:top;overflow-wrap:break-word}
+  .document-container th{background:#f7f7f7;text-align:left;font-weight:700}
+  .document-container td:last-child{word-wrap:break-word}
+  .document-container .currency,.document-container td.currency{text-align:right!important;white-space:nowrap}
+  .document-container .signature-grid,.document-container .discipline-signatures{page-break-inside:avoid}
+  .document-action-buttons,.document-actions{display:none!important}
+  @media print{@page{size:A4 portrait;margin:0}}
+`;
+function waitForDocumentReady(root) {
+  const images = Array.from(root.querySelectorAll('img'));
+  const imageReady = images.map((image) => {
+    image.removeAttribute('hidden');
+    image.classList.remove('d-none');
+    image.style.removeProperty('display');
+    image.style.visibility = 'visible';
+    image.loading = 'eager';
+    return image.complete ? Promise.resolve() : new Promise((resolve) => {
+      image.addEventListener('load', resolve, { once: true });
+      image.addEventListener('error', resolve, { once: true });
+    });
+  });
+  const fontsReady = document.fonts?.ready || Promise.resolve();
+  return Promise.all([fontsReady, ...imageReady]).then(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
 function printDocumentInFrame(html, title, pageStyle = '') {
   const frame = document.createElement('iframe');
   frame.className = 'document-print-frame';
@@ -262,20 +292,21 @@ function printDocumentInFrame(html, title, pageStyle = '') {
     throw new Error('Dokumen print iframe tidak tersedia.');
   }
   frameDocument.open();
-  frameDocument.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${documentEngineStyles}${pageStyle}</style></head><body>${html}</body></html>`);
+  frameDocument.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${documentEngineStyles}${documentLayoutStyles}${pageStyle}</style></head><body>${html}</body></html>`);
   frameDocument.close();
   let printed = false;
-  const print = () => {
+  const print = async () => {
     if (printed) return;
     printed = true;
+    await waitForDocumentReady(frameDocument);
     frame.contentWindow.focus();
     frame.contentWindow.print();
     window.setTimeout(() => frame.remove(), 1000);
   };
-  frame.onload = () => window.setTimeout(print, 80);
+  frame.onload = () => window.setTimeout(() => print(), 80);
   window.setTimeout(() => {
     if (document.body.contains(frame)) print();
-  }, 500);
+  }, 1000);
 }
 async function downloadDocumentPdf(html, title, pageStyle = '') {
   const container = document.createElement('div');
@@ -286,7 +317,12 @@ async function downloadDocumentPdf(html, title, pageStyle = '') {
     throw new Error('Generator PDF belum siap. Muat ulang halaman lalu coba lagi.');
   }
   const pdfNode = documentNode.cloneNode(true);
-  pdfNode.style.cssText = 'position:fixed;left:-100000px;top:0;width:210mm;background:#fff;z-index:-1;';
+  pdfNode.style.cssText = 'position:fixed;left:-100000px;top:0;width:794px;min-height:1123px;padding:40px;background:#fff;z-index:-1;display:block!important;visibility:visible!important;';
+  pdfNode.classList.remove('d-none');
+  pdfNode.hidden = false;
+  const styleNode = document.createElement('style');
+  styleNode.textContent = documentLayoutStyles;
+  pdfNode.prepend(styleNode);
   pdfNode.querySelectorAll('img').forEach((image) => {
     image.crossOrigin = 'anonymous';
     image.loading = 'eager';
@@ -294,12 +330,7 @@ async function downloadDocumentPdf(html, title, pageStyle = '') {
     image.style.maxWidth = '100%';
   });
   document.body.appendChild(pdfNode);
-  await Promise.all(Array.from(pdfNode.querySelectorAll('img')).map((image) => image.complete
-    ? Promise.resolve()
-    : new Promise((resolve) => {
-      image.addEventListener('load', resolve, { once: true });
-      image.addEventListener('error', resolve, { once: true });
-    })));
+  await waitForDocumentReady(pdfNode);
   try {
     await window.html2pdf().set({
       margin: 0,
@@ -1633,7 +1664,7 @@ function renderInvoiceModal(invoiceId, print = false, receiptId = null) {
   const header = kopSuratHtml();
   const isReceipt = Boolean(receipt);
   const title = isReceipt ? 'KWITANSI PEMBAYARAN' : paid ? 'INVOICE PEMBAYARAN' : 'SURAT PENAGIHAN / INVOICE';
-  const detailRows = `<tr><td>Subtotal</td><td>${money(subtotal)}</td></tr><tr><td>Potongan/Beasiswa</td><td>- ${money(adjustment.scholarship + adjustment.discount)}</td></tr><tr><td><b>Total Kewajiban</b></td><td><b>${money(total)}</b></td></tr>`;
+  const detailRows = `<tr><td>Subtotal</td><td class="currency">${money(subtotal)}</td></tr><tr><td>Potongan/Beasiswa</td><td class="currency">- ${money(adjustment.scholarship + adjustment.discount)}</td></tr><tr><td><b>Total Kewajiban</b></td><td class="currency"><b>${money(total)}</b></td></tr>`;
   const invoiceSignatureBlock = `<div class="signature-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:28px">${signatureQrHtml('Pemohon', source.applicantName || 'Orang Tua / Wali', source.applicantSignedAt, source.applicantQrPayload || { documentId: source.id, documentType: 'invoice', role: 'parent' })}${signatureQrHtml('Mengetahui & Menyetujui', source.verifierName || (paid ? 'Administrator' : 'Belum diverifikasi'), source.verifierSignedAt, source.verifierQrPayload || { documentId: source.id, documentType: 'invoice', role: 'verifier' })}</div>`;
   const cleanRows = `<tr><td>Nomor</td><td>${escapeHtml(source.number || source.id)}</td></tr><tr><td>Santri</td><td>${escapeHtml(student.name)} (${escapeHtml(SecurityMasker.identity(student.nis || '—'))})</td></tr><tr><td>Tagihan</td><td>${escapeHtml(source.label || categoryLabel(source.category))}</td></tr>${detailRows}<tr><td>Status</td><td>${paid ? 'LUNAS / PAID' : 'BELUM LUNAS / UNPAID'}</td></tr>`;
   const pageStyle = '@page{size:A4 portrait;margin:15mm}.document-container,.receipt-document{width:100%;max-width:210mm;min-height:297mm;padding:15mm}';
