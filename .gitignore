@@ -1,0 +1,9 @@
+# Local environment and deployment secrets
+.env
+.env.*
+!.env.example
+
+# Local editor/system files
+.vscode/*.local.json
+.DS_Store
+Thumbs.db
