@@ -2463,3 +2463,18 @@ window.executeLogin = function(username, password) {
 
 if (typeof db !== 'undefined') { db.ref('boardingpro_users/admin').set({ username: 'admin', password: '123', name: 'Administrator', role: 'admin' }); }
 
+
+// --- MULTI-MAPEL HANDLER FOR GURU ---
+function getMapelGuru(guruData) {
+  if (!guruData || !guruData.mapel) return [];
+  if (Array.isArray(guruData.mapel)) return guruData.mapel;
+  return guruData.mapel.split(',').map(m => m.trim());
+}
+
+function renderDropdownMapelGuru(guruData, selectElementId) {
+  const mapelList = getMapelGuru(guruData);
+  const selectEl = document.getElementById(selectElementId);
+  if (!selectEl) return;
+  
+  selectEl.innerHTML = mapelList.map(m => <option value="\">\</option>).join('');
+}
