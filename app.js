@@ -2476,5 +2476,5 @@ function renderDropdownMapelGuru(guruData, selectElementId) {
   const selectEl = document.getElementById(selectElementId);
   if (!selectEl) return;
   
-  selectEl.innerHTML = mapelList.map(m => <option value="\">\</option>).join('');
+  selectEl.innerHTML = mapelList.map(m => '<option value="\">\</option>').join('');
 }
