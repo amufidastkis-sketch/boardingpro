@@ -262,7 +262,7 @@ const seedData = {
   ],
   dailyFeed: [
     { id: 'FEED-001', date: '2026-09-05', title: 'Alhamdulillah, Ahmad hadir shalat Subuh berjamaah', detail: 'Presensi asrama tercatat hadir dengan baik.', type: 'asrama' },
-    { id: 'FEED-002', date: '2026-09-05', title: 'Setoran tahfizh terverifikasi', detail: 'Juz 2 â”¬â•– Al-Baqarah ayat 142-150.', type: 'tahfizh' },
+    { id: 'FEED-002', date: '2026-09-05', title: 'Setoran tahfizh terverifikasi', detail: 'Juz 2 ”¬•– Al-Baqarah ayat 142-150.', type: 'tahfizh' },
     { id: 'FEED-003', date: '2026-09-04', title: 'Catatan pembina', detail: 'Menjadi teladan dalam kegiatan sore.', type: 'catatan' }
   ],
   announcements: [
