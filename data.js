@@ -2,13 +2,13 @@
  * This file is intentionally loaded before app.js?v=999?v=101 and owns every shared dataset.
  */
 const roles = {
-  ma'had: { label: "ma'had/Admin!", icon: 'building-2', description: 'Management Dashboard', demoName: "ma'had/Admin!" },
-  Admin! { label: 'Admin! icon: 'clipboard-list', description: 'Operational Admin! demoName: 'Admin! },
-  master_Admin! { label: "Master Admin! ma'had", icon: 'shield-check', description: 'Master Admin! Dashboard', demoName: "Master Admin! ma'had" },
-  super_Admin! { label: 'Super Admin! icon: 'shield-check', description: 'Super User Dashboard', demoName: 'Super Admin! },
+  mahad: { label: "Ma'had/Admin", icon: 'building-2', description: 'Management Dashboard', demoName: "Ma'had/Admin" },
+  admin: { label: 'Admin', icon: 'clipboard-list', description: 'Operational Administration', demoName: 'Admin' },
+  master_admin: { label: "Master Admin Ma'had", icon: 'shield-check', description: 'Master Administration Dashboard', demoName: "Master Admin Ma'had" },
+  super_admin: { label: 'Super Admin', icon: 'shield-check', description: 'Super User Dashboard', demoName: 'Super Admin' },
   yayasan: { label: 'Yayasan', icon: 'landmark', description: 'Executive Dashboard', demoName: 'Dr. H. Abdullah' },
   pengurus_yayasan: { label: 'Pengurus Yayasan', icon: 'landmark', description: 'Executive Read-only Monitoring', demoName: 'Dr. H. Abdullah' },
-  ma'had: { label: "ma'had / Admin!", icon: 'building-2', description: 'Management Dashboard', demoName: 'Ust. Hasyim' },
+  maahad: { label: "Ma'had / Admin", icon: 'building-2', description: 'Management Dashboard', demoName: 'Ust. Hasyim' },
   kepsek: { label: 'Kepala Sekolah', icon: 'school', description: 'Executive Read-only', demoName: 'Drs. Ahmad Fauzi' },
   guru: { label: 'Guru / Ustadz', icon: 'graduation-cap', description: 'Academic Dashboard', demoName: 'Ustadzah Rahma' },
   guru_tahfizh: { label: 'Guru Tahfizh', icon: 'book-open-check', description: 'Tahfizh Dashboard', demoName: 'Ustadz Tahfizh' },
@@ -30,10 +30,10 @@ const roleNotifications = {
     { id: 'notif-kepsek-1', title: 'Rekap kehadiran guru diperbarui', description: 'Data presensi dan jam mengajar guru bulan September tersedia.', category: 'Presensi', timestamp: '15 menit lalu', targetView: 'teacher-attendance' },
     { id: 'notif-kepsek-2', title: 'Agenda asesmen mendatang', description: 'Simulasi Asesmen SMK dijadwalkan pada 12 September 2026.', category: 'Agenda', timestamp: 'Hari ini, 07:45', targetView: 'schedule' }
   ],
-  ma'had: [
-    { id: 'notif-ma'had-1', title: 'Pembayaran menunggu verifikasi', description: 'Ada pembayaran wali santri yang perlu diperiksa.', category: 'Keuangan', timestamp: '5 menit lalu', targetView: 'payments' },
-    { id: 'notif-ma'had-2', title: 'Pengajuan izin baru', description: 'Pengajuan izin santri baru menunggu persetujuan.', category: 'Perizinan', timestamp: 'Hari ini, 09:10', targetView: 'permits' },
-    { id: 'notif-ma'had-3', title: 'Rekap guru tersedia', description: 'Rekap kehadiran dan jam mengajar guru siap ditinjau.', category: 'Presensi', timestamp: 'Hari ini, 08:00', targetView: 'teacher-attendance' }
+  maahad: [
+    { id: 'notif-maahad-1', title: 'Pembayaran menunggu verifikasi', description: 'Ada pembayaran wali santri yang perlu diperiksa.', category: 'Keuangan', timestamp: '5 menit lalu', targetView: 'payments' },
+    { id: 'notif-maahad-2', title: 'Pengajuan izin baru', description: 'Pengajuan izin santri baru menunggu persetujuan.', category: 'Perizinan', timestamp: 'Hari ini, 09:10', targetView: 'permits' },
+    { id: 'notif-maahad-3', title: 'Rekap guru tersedia', description: 'Rekap kehadiran dan jam mengajar guru siap ditinjau.', category: 'Presensi', timestamp: 'Hari ini, 08:00', targetView: 'teacher-attendance' }
   ],
   guru: [
     { id: 'notif-guru-1', title: 'Jadwal KBM diperbarui', description: 'Jadwal mengajar hari ini telah disinkronkan.', category: 'Jadwal', timestamp: '20 menit lalu', targetView: 'schedule' },
@@ -59,7 +59,7 @@ const roleNotifications = {
 
 const programs = [
   { id: 'SMK', name: 'SMK Boarding', description: 'Sekolah Menengah Kejuruan', color: 'blue', pkl: true },
-  { id: 'PPTAK', name: 'PPTAK', description: 'Program Pendidikan Tahfizh Al-Qur–an', color: 'green', pkl: false },
+  { id: 'PPTAK', name: 'PPTAK', description: 'Program Pendidikan Tahfizh Al-Qur✓  color: 'green', pkl: false },
   { id: 'KWNQ', name: 'KWNQ', description: 'Kelas Wirausaha dan NQ', color: 'purple', pkl: false }
 ];
 
@@ -94,14 +94,14 @@ const semesters = [
 const financeCategories = {
   spp: { id: 'SPP', label: 'SPP Bulanan', nominal: 850000, account: '4111' },
   foundation: { id: 'FOUNDATION', label: 'Uang Bangunan', nominal: 250000, account: '4210' },
-  ma'hadNonSpp: [
-    { id: 'ma'had_KAMAR', label: 'Uang Kamar & Asrama', nominal: 450000 },
-    { id: 'ma'had_MAKAN', label: 'Uang Makan', nominal: 650000 },
-    { id: 'ma'had_KEGIATAN', label: 'Kegiatan Asrama', nominal: 150000 },
-    { id: 'ma'had_SERAGAM', label: 'Seragam', nominal: 300000 },
-    { id: 'ma'had_LAUNDRY', label: 'Laundry', nominal: 100000 },
-    { id: 'ma'had_PENDAFTARAN', label: 'Pendaftaran', nominal: 500000 },
-    { id: 'ma'had_BUKU', label: 'Buku', nominal: 175000 }
+  maahadNonSpp: [
+    { id: 'MAAHAD_KAMAR', label: 'Uang Kamar & Asrama', nominal: 450000 },
+    { id: 'MAAHAD_MAKAN', label: 'Uang Makan', nominal: 650000 },
+    { id: 'MAAHAD_KEGIATAN', label: 'Kegiatan Asrama', nominal: 150000 },
+    { id: 'MAAHAD_SERAGAM', label: 'Seragam', nominal: 300000 },
+    { id: 'MAAHAD_LAUNDRY', label: 'Laundry', nominal: 100000 },
+    { id: 'MAAHAD_PENDAFTARAN', label: 'Pendaftaran', nominal: 500000 },
+    { id: 'MAAHAD_BUKU', label: 'Buku', nominal: 175000 }
   ],
   pocketMoney: { id: 'POCKET_MONEY', label: 'Uang Saku', nominal: 300000 },
   custom: { id: 'CUSTOM', label: 'Komponen Non-SPP Lainnya', nominal: 0 }
@@ -109,10 +109,10 @@ const financeCategories = {
 
 const seedData = {
   internalAccounts: [
-    { id: 'ACC-SUPER', role: 'master_Admin! username: 'masterAdmin! password: 'superAdmin! name: "Master Admin! ma'had", nama: "Master Admin! ma'had", passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
-    { id: 'ACC-MASTER', role: 'master_Admin! username: 'Admin! password: 'STKIS — name: 'Master Admin! ma'had', nama: 'Master Admin! ma'had', passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
+    { id: 'ACC-SUPER', role: 'master_admin', username: 'masteradmin', password: 'superadmin123', name: "Master Admin Ma'had", nama: "Master Admin Ma'had", passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
+    { id: 'ACC-MASTER', role: 'master_admin', username: 'admin.stkis', password: 'StkIs#2026!Pro', name: 'Master Admin Ma✓  nama: 'Master Admin Ma✓  passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
     { id: 'ACC-001', role: 'yayasan', username: 'yayasan.demo', password: 'demo123', name: 'Dr. H. Abdullah', nama: 'Dr. H. Abdullah', passwordChangeCount: 0, status: 'Aktif', active: true },
-    { id: 'ACC-002', role: 'ma'had', username: 'Admin! password: 'Admin! name: 'Ust. Hasyim', nama: 'Ust. Hasyim', passwordChangeCount: 0, status: 'Aktif', active: true },
+    { id: 'ACC-002', role: 'maahad', username: 'admin.maahad', password: 'admin123', name: 'Ust. Hasyim', nama: 'Ust. Hasyim', passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-003', role: 'guru', username: 'guru.demo', password: 'demo123', name: 'Ustadzah Rahma', nama: 'Ustadzah Rahma', subject: 'Guru DLE', isTahfizhTeacher: false, passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-004', role: 'pembina', username: 'pembina.demo', password: 'demo123', name: 'Ust. Salman', nama: 'Ust. Salman', passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-005', role: 'security', username: 'security.demo', password: 'demo123', name: 'Pak Joko', nama: 'Pak Joko', passwordChangeCount: 0, status: 'Aktif', active: true }
@@ -187,7 +187,7 @@ const seedData = {
   payments: [
     { id: 'PAY-001', studentId: 'STD-001', category: 'SPP', period: 'September 2026', amount: 850000, method: 'Transfer BSI', status: 'Verified', submittedAt: '2026-09-01', proof: 'transfer-september.jpg' },
     { id: 'PAY-002', studentId: 'STD-003', category: 'SPP', period: 'September 2026', amount: 850000, method: 'Transfer BSI', status: 'Pending', submittedAt: '2026-09-04', proof: 'bukti-240103.jpg' },
-    { id: 'PAY-003', studentId: 'STD-001', category: 'ma'had_MAKAN', period: 'September 2026', amount: 650000, method: 'Virtual Account', status: 'Pending', submittedAt: '2026-09-05', proof: 'makan-september.jpg' },
+    { id: 'PAY-003', studentId: 'STD-001', category: 'MAAHAD_MAKAN', period: 'September 2026', amount: 650000, method: 'Virtual Account', status: 'Pending', submittedAt: '2026-09-05', proof: 'makan-september.jpg' },
     { id: 'PAY-004', studentId: 'STD-001', category: 'POCKET_MONEY', period: 'September 2026', amount: 300000, method: 'Transfer BSI', status: 'Verified', submittedAt: '2026-09-01', proof: 'saku-ahmad.jpg' },
     { id: 'PAY-005', studentId: 'STD-002', category: 'FOUNDATION', period: 'Tahun Ajaran 2026/2027', amount: 250000, method: 'Transfer BSI', status: 'Verified', submittedAt: '2026-07-01', proof: 'foundation-fatimah.jpg' }
     ,{ id: 'PAY-006', studentId: 'STD-005', category: 'SPP', period: 'September 2026', amount: 850000, method: 'Transfer BSI', status: 'Pending', submittedAt: '2026-09-04', proof: 'spp-bilal.jpg' }
@@ -195,7 +195,7 @@ const seedData = {
   ],
   financeBills: [
     { id: 'BILL-INV-001', studentId: 'STD-001', category: 'SPP', label: 'SPP September 2026', period: 'September 2026', amount: 850000, dueDate: '2026-09-10', status: 'Open', scholarship: 0, discount: 0 },
-    { id: 'BILL-INV-002', studentId: 'STD-001', category: 'ma'had_MAKAN', label: 'Uang makan September 2026', period: 'September 2026', amount: 650000, dueDate: '2026-09-08', status: 'Open', scholarship: 0, discount: 50000 },
+    { id: 'BILL-INV-002', studentId: 'STD-001', category: 'MAAHAD_MAKAN', label: 'Uang makan September 2026', period: 'September 2026', amount: 650000, dueDate: '2026-09-08', status: 'Open', scholarship: 0, discount: 50000 },
     { id: 'BILL-INV-003', studentId: 'STD-002', category: 'SPP', label: 'SPP September 2026', period: 'September 2026', amount: 850000, dueDate: '2026-09-10', status: 'Open', scholarship: 150000, discount: 0 },
     { id: 'BILL-INV-004', studentId: 'STD-003', category: 'SPP', label: 'SPP September 2026', period: 'September 2026', amount: 850000, dueDate: '2026-09-10', status: 'Open', scholarship: 0, discount: 0 }
     ,{ id: 'BILL-INV-005', studentId: 'STD-005', category: 'SPP', label: 'SPP September 2026', period: 'September 2026', amount: 850000, dueDate: '2026-09-10', status: 'Open', scholarship: 0, discount: 0 }
@@ -222,8 +222,8 @@ const seedData = {
   ],
   billingNotifications: [
     { id: 'BILL-001', studentId: 'STD-003', category: 'SPP', title: 'SPP September belum dibayar', amount: 850000, dueDate: '2026-09-10', read: false },
-    { id: 'BILL-002', studentId: 'STD-005', category: 'ma'had_KAMAR', title: 'Tagihan kamar September', amount: 450000, dueDate: '2026-09-10', read: false },
-    { id: 'BILL-003', studentId: 'STD-001', category: 'ma'had_MAKAN', title: 'Konfirmasi uang makan', amount: 650000, dueDate: '2026-09-08', read: true }
+    { id: 'BILL-002', studentId: 'STD-005', category: 'MAAHAD_KAMAR', title: 'Tagihan kamar September', amount: 450000, dueDate: '2026-09-10', read: false },
+    { id: 'BILL-003', studentId: 'STD-001', category: 'MAAHAD_MAKAN', title: 'Konfirmasi uang makan', amount: 650000, dueDate: '2026-09-08', read: true }
   ],
   teacherAttendance: [
     { id: 'TA-01', teacher: 'Ustadzah Rahma', date: '2026-09-05', status: 'Hadir', checkIn: '06:42', checkOut: null },
@@ -251,7 +251,7 @@ const seedData = {
   events: [
     { id: 'EV-01', date: '2026-09-06', title: 'Parent Visit Day', location: 'Lapangan Utama', audience: 'Semua wali', status: 'Published' },
     { id: 'EV-02', date: '2026-09-12', title: 'Simulasi Asesmen SMK', location: 'Gedung SMK', audience: 'SMK kelas 11-12', status: 'Published' },
-    { id: 'EV-03', date: '2026-09-19', title: 'Tasmi– Akbar', location: 'Masjid', audience: 'PPTAK', status: 'Draft' }
+    { id: 'EV-03', date: '2026-09-19', title: 'Tasmi✓  Akbar', location: 'Masjid', audience: 'PPTAK', status: 'Draft' }
   ],
   activities: [
     { time: '04:00', title: 'Qiyamul Lail & Shalat Subuh', icon: 'moon-star' },
@@ -262,11 +262,11 @@ const seedData = {
   ],
   dailyFeed: [
     { id: 'FEED-001', date: '2026-09-05', title: 'Alhamdulillah, Ahmad hadir shalat Subuh berjamaah', detail: 'Presensi asrama tercatat hadir dengan baik.', type: 'asrama' },
-    { id: 'FEED-002', date: '2026-09-05', title: 'Setoran tahfizh terverifikasi', detail: 'Juz 2 â”¬â•– Al-Baqarah ayat 142-150.', type: 'tahfizh' },
+    { id: 'FEED-002', date: '2026-09-05', title: 'Setoran tahfizh terverifikasi', detail: 'Juz 2 ”•– Al-Baqarah ayat 142-150.', type: 'tahfizh' },
     { id: 'FEED-003', date: '2026-09-04', title: 'Catatan pembina', detail: 'Menjadi teladan dalam kegiatan sore.', type: 'catatan' }
   ],
   announcements: [
-    { id: 'ANN-001', title: 'Kajian Akbar Maulid Nabi', detail: 'Seluruh santri mengikuti kajian setelah Maghrib di masjid.', date: '2026-09-06', author: 'Admin! ma'had' },
+    { id: 'ANN-001', title: 'Kajian Akbar Maulid Nabi', detail: 'Seluruh santri mengikuti kajian setelah Maghrib di masjid.', date: '2026-09-06', author: 'Admin Ma✓  },
     { id: 'ANN-002', title: 'Parent Visit Day', detail: 'Kunjungan wali santri dilaksanakan di lapangan utama.', date: '2026-09-06', author: 'Yayasan' }
   ],
   pocketTransactions: [
