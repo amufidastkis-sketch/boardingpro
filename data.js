@@ -108,15 +108,6 @@ const financeCategories = {
 };
 
 const seedData = {
-  teachingAssignments: [
-    { id: 'ASG-001', teacherId: 'TCH-001', teacherName: 'Ustadzah Rahma', classId: 'CLS-SMK-XI-TKJ', className: 'XI TKJ', subject: 'Bahasa Arab', type: 'umum' },
-    { id: 'ASG-002', teacherId: 'TCH-001', teacherName: 'Ustadzah Rahma', classId: 'CLS-PPTAK', className: 'Kelas PPTAK', subject: 'Tahfizh', type: 'tahfizh' },
-    { id: 'ASG-003', teacherId: 'TCH-002', teacherName: 'Ust. Hasyim', classId: 'CLS-SMK-XII-RPL', className: 'XII RPL', subject: 'Fiqih', type: 'umum' }
-  ],
-  kbmAttendance: [],
-  kbmJournals: [],
-  kbmGrades: [],
-  tahfizhRecords: [],
   internalAccounts: [
     { id: 'ACC-SUPER', role: 'master_admin', username: 'masteradmin', password: 'superadmin123', name: "Master Admin Ma'had", nama: "Master Admin Ma'had", passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
     { id: 'ACC-MASTER', role: 'master_admin', username: 'admin.stkis', password: 'StkIs#2026!Pro', name: 'Master Admin Ma’had', nama: 'Master Admin Ma’had', passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
