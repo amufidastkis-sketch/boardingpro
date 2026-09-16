@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./assets/icon-192.png">
-  <title>BoardingPro STK IS ”•– Sistem Informasi Boarding</title>
+  <title>BoardingPro STKIS - Sistem Informasi Smart Boarding</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -52,7 +52,7 @@
       .room-summary-group summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;color:#065f46;background:#ecfdf5;font-size:12px;font-weight:800;cursor:pointer;list-style:none}
       .room-summary-group summary::-webkit-details-marker{display:none}
       .room-summary-group summary:after{content:'+';font-size:18px;line-height:1}
-      .room-summary-group[open] summary:after{content:'✓ 
+      .room-summary-group[open] summary:after{content:'-';font-size:18px;line-height:1}
       .room-summary-group summary small{color:#64748b;font-size:10px;font-weight:600}
       .room-summary-group .table-wrap{margin:0;padding:0 10px 8px}
       .room-summary-group table{width:100%;border-collapse:collapse}
@@ -247,8 +247,8 @@
   <section id="landing" class="landing">
     <div class="landing-glow"></div>
     <div class="landing-copy">
-      <div class="landing-brand"><span class="brand-mark"><i class="fa-solid fa-layer-group"></i></span><div><b>BoardingPro</b><small>STK IS ”•– SMART BOARDING</small></div></div>
-      <span class="eyebrow">SISTEM INFORMASI STK IS</span>
+      <div class="landing-brand"><span class="brand-mark"><i class="fa-solid fa-layer-group"></i></span><div><b>BoardingPro</b><small>STKIS - SMART BOARDING</small></div></div>
+      <span class="eyebrow">SISTEM INFORMASI STKIS</span>
       <h1>Karena Mendidik adalah Amanah<br><em>yang Kita Perjuangkan Bersama.</em></h1>
       <p>Bukan sekedar mengantar mereka tumbuh, tetapi menjaga setiap langkahnya agar tetap berada dalam kebaikan.</p>
       <div class="landing-points"><span>✓  Data real-time</span><span>✓  Role-based access</span><span>✓  Aman & terukur</span></div>
@@ -262,7 +262,7 @@
   <div id="app-shell" class="app" hidden>
     <main class="main">
       <header class="topbar">
-        <div class="topbar-left"><div class="brand"><span class="brand-mark"><i class="fa-solid fa-layer-group"></i></span><div><b>BoardingPro <small class="brand-badge">STK IS</small></b><small>SMART BOARDING</small></div></div><div><span id="page-title" style="font-size:12px;font-weight:700;color:#d7eee0">Dashboard Terpadu</span><small id="role-description" style="display:block;color:#a9cfb9;font-size:9px">Executive Dashboard</small></div></div>
+        <div class="topbar-left"><div class="brand"><span class="brand-mark"><i class="fa-solid fa-layer-group"></i></span><div><b>BoardingPro <small class="brand-badge">STKIS</small></b><small>SMART BOARDING</small></div></div><div><span id="page-title" style="font-size:12px;font-weight:700;color:#d7eee0">Dashboard Terpadu</span><small id="role-description" style="display:block;color:#a9cfb9;font-size:9px">Executive Dashboard</small></div></div>
         <div class="topbar-right"><div id="role-switcher"></div><button id="presentation-toggle" class="btn btn-ghost btn-small" type="button" hidden aria-pressed="false">Mode Presentasi</button><div class="notification-wrap"><button id="notification-bell" class="icon-btn notification-bell-button" title="Notifikasi" aria-label="Notifikasi" aria-expanded="false"><i data-lucide="bell"></i><span id="notification-badge" class="notification-badge" hidden>0</span></button><div id="notif-dropdown" class="notification-dropdown" hidden><div class="notification-dropdown-head"><b>Notifikasi</b><span id="notification-role-label">Role aktif</span></div><div id="notif-list"></div></div></div><button id="logout" class="icon-btn" title="Keluar" aria-label="Keluar"><i data-lucide="log-out"></i></button><div class="user"><span class="avatar" id="user-avatar">YA</span><div><b id="user-role">Yayasan</b><small id="user-role-label">Administrator</small></div></div></div>
       </header>
       <div class="dashboard-wrap">
@@ -272,8 +272,8 @@
     </main>
   </div>
   <div id="modal-root"></div>
-  <script src="data.js?v=21000?v=101?v=99"></script>
-  <script src="app.js?v=21000?v=101?v=99"></script>
+  <script src="data.js?v=6000"></script>
+  <script src="app.js?v=6000"></script>
 
 <!-- Modal Rincian Kehadiran Guru -->
 <div id="modal-detail-guru" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
@@ -314,7 +314,6 @@
 
 </body>
 </html>
-
 
 
 
