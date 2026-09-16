@@ -1,4 +1,4 @@
-﻿/* Application behaviour. Shared catalogues and seed data live only in data.js?v=101?v=101. */
+﻿/* Application behaviour. Shared catalogues and seed data live only in data.js?v=102?v=101. */
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const today = '2026-09-05';
 const KOP_SURAT_LOGO = './assets/logo-removebg-preview.png';
@@ -2686,5 +2686,6 @@ function showUnreadCriticalNotifications() {
   playCriticalAlert();
   openModal('Notifikasi Penting', `<div class="notice" style="margin-bottom:12px"><b>${unread.length} notifikasi kedisiplinan membutuhkan perhatian.</b></div><div class="activity-list">${unread.map((item) => `<div class="activity"><span class="activity-icon red">${icon('triangle-alert', 16)}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.description)}</p></div></div>`).join('')}</div>`);
 }
+
 
 

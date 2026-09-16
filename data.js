@@ -1,5 +1,5 @@
 ﻿/* BoardingPro STK IS shared catalogue and seed data.
- * This file is intentionally loaded before app.js?v=101?v=101 and owns every shared dataset.
+ * This file is intentionally loaded before app.js?v=102?v=101 and owns every shared dataset.
  */
 const roles = {
   mahad: { label: "Ma'had/Admin", icon: 'building-2', description: 'Management Dashboard', demoName: "Ma'had/Admin" },
@@ -293,5 +293,6 @@ const seedData = {
     { programId: 'KWNQ', classId: 'CLS-KWNQ', targetJuz: 3, targetSurah: 'Al-Baqarah', targetAyat: '1-70', achievementJuz: 2, achievementSurah: 'Al-Baqarah', achievementAyat: '1-40', mutqin: 'Baik' }
   ]
 };
+
 
 
