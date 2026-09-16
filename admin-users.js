@@ -1,4 +1,4 @@
-// ==========================================
+﻿// ==========================================
 // MANAJEMEN AKUN ADMIN
 // ==========================================
 function generateUsername() {
@@ -104,3 +104,4 @@ function hapusAtauNonaktifkanAkun(userId, nama, currentStatus) {
       .then(() => alert(`Status akun ${nama} diubah ke ${statusBaru}.`));
   }
 }
+

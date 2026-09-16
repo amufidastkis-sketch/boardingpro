@@ -1,4 +1,4 @@
-// ==========================================
+﻿// ==========================================
 // DASHBOARD STAFF & ABSENSI
 // ==========================================
 function initDashboardStaff(currentUser) {
@@ -94,3 +94,4 @@ function loadRekapAbsenStaff(userId) {
     listContainer.innerHTML = html || '<p class="p-4 text-xs text-gray-400 text-center">Belum ada riwayat absensi.</p>';
   });
 }
+
