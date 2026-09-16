@@ -1,5 +1,5 @@
 const CACHE_NAME = 'boardingpro-shell-v1';
-const SHELL_FILES = ['./', './index.html', './app.js?v=200?v=101', './data.js?v=200?v=101', './manifest.json'];
+const SHELL_FILES = ['./', './index.html', './app.js?v=999?v=101', './data.js?v=999?v=101', './manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES)));
