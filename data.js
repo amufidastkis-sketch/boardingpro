@@ -59,7 +59,7 @@ const roleNotifications = {
 
 const programs = [
   { id: 'SMK', name: 'SMK Boarding', description: 'Sekolah Menengah Kejuruan', color: 'blue', pkl: true },
-  { id: 'PPTAK', name: 'PPTAK', description: 'Program Pendidikan Tahfizh Al-QurÎ“Ã‡Ã–an', color: 'green', pkl: false },
+  { id: 'PPTAK', name: 'PPTAK', description: 'Program Pendidikan Tahfizh Al-Qur✓  color: 'green', pkl: false },
   { id: 'KWNQ', name: 'KWNQ', description: 'Kelas Wirausaha dan NQ', color: 'purple', pkl: false }
 ];
 
@@ -110,7 +110,7 @@ const financeCategories = {
 const seedData = {
   internalAccounts: [
     { id: 'ACC-SUPER', role: 'master_admin', username: 'masteradmin', password: 'superadmin123', name: "Master Admin Ma'had", nama: "Master Admin Ma'had", passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
-    { id: 'ACC-MASTER', role: 'master_admin', username: 'admin.stkis', password: 'StkIs#2026!Pro', name: 'Master Admin MaÎ“Ã‡Ã–had', nama: 'Master Admin MaÎ“Ã‡Ã–had', passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
+    { id: 'ACC-MASTER', role: 'master_admin', username: 'admin.stkis', password: 'StkIs#2026!Pro', name: 'Master Admin Ma✓  nama: 'Master Admin Ma✓  passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
     { id: 'ACC-001', role: 'yayasan', username: 'yayasan.demo', password: 'demo123', name: 'Dr. H. Abdullah', nama: 'Dr. H. Abdullah', passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-002', role: 'maahad', username: 'admin.maahad', password: 'admin123', name: 'Ust. Hasyim', nama: 'Ust. Hasyim', passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-003', role: 'guru', username: 'guru.demo', password: 'demo123', name: 'Ustadzah Rahma', nama: 'Ustadzah Rahma', subject: 'Guru DLE', isTahfizhTeacher: false, passwordChangeCount: 0, status: 'Aktif', active: true },
@@ -251,7 +251,7 @@ const seedData = {
   events: [
     { id: 'EV-01', date: '2026-09-06', title: 'Parent Visit Day', location: 'Lapangan Utama', audience: 'Semua wali', status: 'Published' },
     { id: 'EV-02', date: '2026-09-12', title: 'Simulasi Asesmen SMK', location: 'Gedung SMK', audience: 'SMK kelas 11-12', status: 'Published' },
-    { id: 'EV-03', date: '2026-09-19', title: 'TasmiÎ“Ã‡Ã– Akbar', location: 'Masjid', audience: 'PPTAK', status: 'Draft' }
+    { id: 'EV-03', date: '2026-09-19', title: 'Tasmi✓  Akbar', location: 'Masjid', audience: 'PPTAK', status: 'Draft' }
   ],
   activities: [
     { time: '04:00', title: 'Qiyamul Lail & Shalat Subuh', icon: 'moon-star' },
@@ -262,11 +262,11 @@ const seedData = {
   ],
   dailyFeed: [
     { id: 'FEED-001', date: '2026-09-05', title: 'Alhamdulillah, Ahmad hadir shalat Subuh berjamaah', detail: 'Presensi asrama tercatat hadir dengan baik.', type: 'asrama' },
-    { id: 'FEED-002', date: '2026-09-05', title: 'Setoran tahfizh terverifikasi', detail: 'Juz 2 ”¬•– Al-Baqarah ayat 142-150.', type: 'tahfizh' },
+    { id: 'FEED-002', date: '2026-09-05', title: 'Setoran tahfizh terverifikasi', detail: 'Juz 2 ”•– Al-Baqarah ayat 142-150.', type: 'tahfizh' },
     { id: 'FEED-003', date: '2026-09-04', title: 'Catatan pembina', detail: 'Menjadi teladan dalam kegiatan sore.', type: 'catatan' }
   ],
   announcements: [
-    { id: 'ANN-001', title: 'Kajian Akbar Maulid Nabi', detail: 'Seluruh santri mengikuti kajian setelah Maghrib di masjid.', date: '2026-09-06', author: 'Admin MaÎ“Ã‡Ã–had' },
+    { id: 'ANN-001', title: 'Kajian Akbar Maulid Nabi', detail: 'Seluruh santri mengikuti kajian setelah Maghrib di masjid.', date: '2026-09-06', author: 'Admin Ma✓  },
     { id: 'ANN-002', title: 'Parent Visit Day', detail: 'Kunjungan wali santri dilaksanakan di lapangan utama.', date: '2026-09-06', author: 'Yayasan' }
   ],
   pocketTransactions: [
