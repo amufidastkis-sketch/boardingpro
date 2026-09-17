@@ -1,7 +1,19 @@
 /* Application behaviour. Shared catalogues and seed data live only in data.js?v=6000. */
 const clone = (value) => JSON.parse(JSON.stringify(value));
-const today = '2026-09-05';
+const today = new Date().toISOString().slice(0, 10);
 const KOP_SURAT_LOGO = './assets/logo-removebg-preview.png';
+const OFFICIAL_EDUCATION_ACCOUNT = Object.freeze({
+  bank: 'BSI',
+  accountNumber: '7123456789',
+  accountName: 'Yayasan BoardingPro STKIS',
+  locked: true
+});
+const DEFAULT_POCKET_ACCOUNT = {
+  bank: 'BSI',
+  accountNumber: '7123456780',
+  accountName: 'BoardingPro Uang Saku',
+  locked: false
+};
 const SECURITY_STORAGE_PREFIX = 'boardingpro-secure:';
 const SECURITY_KEY_NAME = `${SECURITY_STORAGE_PREFIX}key`;
 const securityKeyMaterial = localStorage.getItem(SECURITY_KEY_NAME) || (() => {
@@ -119,6 +131,7 @@ secureStorage.get('boardingpro-state').then((storedState) => {
   if (storedState && typeof storedState === 'object') {
     state = { ...state, ...storedState };
     window.appData.state = state;
+    if (typeof resetWeeklyExitQuota === 'function' && resetWeeklyExitQuota()) persist();
     if (document.readyState !== 'loading') render();
   }
 }).catch((error) => console.error('[BoardingPro] Gagal membaca state terenkripsi:', error));
@@ -138,6 +151,10 @@ state.config.institution = {
   logo: '',
   logoUrl: '',
   ...(state.config.institution || {})
+};
+state.config.paymentAccounts = {
+  education: { ...OFFICIAL_EDUCATION_ACCOUNT },
+  pocketMoney: { ...DEFAULT_POCKET_ACCOUNT, ...(state.config.paymentAccounts?.pocketMoney || {}) }
 };
 const notificationStoreKey = 'boardingpro-notifications';
 let notificationState = {};
@@ -259,7 +276,9 @@ const money = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const qrSignatureUrl = (payload) => `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(JSON.stringify(payload))}`;
 const documentActionRoles = ['orang_tua', 'parent', 'kepala_sekolah', 'kepsek', 'admin_mahad', 'mahad', 'maahad', 'admin', 'yayasan', 'pengurus_yayasan', 'guru', 'guru_tahfizh'];
 const canUseDocumentActions = () => documentActionRoles.includes(String(effectiveRole() || '').toLowerCase());
-const canManageUserAccounts = () => currentRoleIsAdmin() || ['guru', 'guru_tahfizh'].includes(effectiveRole());
+// Account management is an administrative capability; teaching roles may only
+// manage their academic records.
+const canManageUserAccounts = () => currentRoleIsAdmin();
 const documentLayoutStyles = `
   html,body{margin:0;background:#fff;color:#333;font-family:Arial,Helvetica,sans-serif}
   .document-container{width:794px!important;min-height:1123px!important;padding:30px!important;margin:0 auto!important;background:#fff!important;color:#333!important;box-shadow:none!important;display:block!important;visibility:visible!important;page-break-after:avoid!important;break-after:avoid-page!important}
@@ -437,7 +456,11 @@ function renderDocumentPreview(docType, docData = {}) {
   return blobUrl;
 }
 const QUOTA_LIMIT = 3;
-const quotaFreeCategories = ['Dijenguk Orang Tua', 'Kegiatan Bersama Sekolah'];
+const quotaFreeCategories = ['Pulang / Mudik', 'Izin Pulang', 'Home Leave', 'Dijenguk Orang Tua', 'Kegiatan Bersama Sekolah'];
+const isHomeLeavePermit = (permit) => {
+  const category = String(permit?.kategori_izin || permit?.type || '').trim().toLowerCase();
+  return ['pulang / mudik', 'izin pulang', 'home leave'].includes(category);
+};
 function startOfWeek(dateValue) {
   const date = new Date(`${dateValue || today}T00:00:00`);
   const day = date.getDay();
@@ -446,9 +469,24 @@ function startOfWeek(dateValue) {
   return date.toISOString().slice(0, 10);
 }
 function isQuotaDeducted(permit) {
-  return permit?.is_quota_deducted !== false && !quotaFreeCategories.includes(permit?.kategori_izin || permit?.type);
+  if (isHomeLeavePermit(permit)) return false;
+  const category = String(permit?.kategori_izin || permit?.type || '').trim();
+  return permit?.is_quota_deducted !== false
+    && !quotaFreeCategories.includes(category)
+    && ['Keluar Kompleks', 'Keluar Mandiri'].includes(category);
+}
+function resetWeeklyExitQuota(referenceDate = today) {
+  const weekStart = startOfWeek(referenceDate);
+  if (state.exitQuotaWeekStart === weekStart) return false;
+  state.exitQuotaWeekStart = weekStart;
+  state.students.forEach((student) => {
+    student.weeklyExitQuotaUsed = 0;
+    student.weeklyExitQuotaWeek = weekStart;
+  });
+  return true;
 }
 function weeklyQuotaUsed(studentId, dateValue = today) {
+  resetWeeklyExitQuota(dateValue);
   const weekStart = startOfWeek(dateValue);
   return state.permits.filter((permit) => permit.studentId === studentId
     && ['Approved', 'Terverifikasi'].includes(permit.status)
@@ -518,10 +556,24 @@ function semesterFilterForm(id = 'semester-filter-form') {
 }
 const currentStudent = () => {
   const account = currentAccount();
-  return state.students.find((student) => student.id === account?.studentId)
+  const student = state.students.find((item) => item.id === account?.studentId)
     || state.students.find((student) => String(student.nis) === String(account?.username || '').trim())
     || state.students.find((student) => student.id === state.studentId)
     || state.students[0];
+  return student || {
+    id: account?.studentId || `STUDENT-${account?.username || 'CURRENT'}`,
+    name: account?.name || account?.nama || 'Santri',
+    nis: account?.username || '-',
+    className: '-',
+    room: '-',
+    program: '-',
+    parent: '-',
+    attendance: 0,
+    points: 0,
+    tahfizh: 0,
+    spp: 'Belum ada data',
+    status: 'Aktif'
+  };
 };
 const isMasterAdminSession = () => {
   const account = currentAccount();
@@ -728,9 +780,9 @@ function navItems() {
   const map = {
     yayasan: appendModules([...common, { id: 'finance', label: 'Keuangan Yayasan', icon: 'wallet-cards' }, { id: 'reports', label: 'Laporan Eksekutif', icon: 'bar-chart-3' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-alert' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'students', label: 'Data Santri', icon: 'users' }, { id: 'classes', label: 'Kelas & Program', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }]),
     kepsek: appendModules([...common, { id: 'finance', label: 'Keuangan Sekolah', icon: 'wallet-cards' }, { id: 'reports', label: 'Laporan Eksekutif', icon: 'bar-chart-3' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-alert' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'students', label: 'Data Santri', icon: 'users' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'academic', label: 'Akademik & Tahfizh', icon: 'book-marked' }]),
-    maahad: appendModules([...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'accounts', label: 'Akun Internal', icon: 'key-round' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }]),
+    maahad: appendModules([...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'teacher-attendance', label: 'Rekap Kehadiran Guru', icon: 'calendar-check' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }]),
     admin: appendModules([...common, { id: 'students', label: 'Data Master Santri', icon: 'users' }, { id: 'accounts', label: 'Manajemen Akun User', icon: 'key-round' }, { id: 'classes', label: 'Kelas', icon: 'school' }, { id: 'teachers', label: 'Data Guru', icon: 'graduation-cap' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'security-reports', label: 'Laporan Keamanan & Pos Jaga', icon: 'shield-alert' }, { id: 'permits', label: 'Approval Perizinan', icon: 'clipboard-check' }, { id: 'billing', label: 'Tagihan & Notifikasi', icon: 'receipt' }, { id: 'payments', label: 'Verifikasi Pembayaran', icon: 'badge-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'academic', label: 'Rekap Akademik & PKL', icon: 'book-marked' }]),
-    guru: appendModules([...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'accounts', label: 'Manajemen Akun User', icon: 'key-round' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }]),
+    guru: appendModules([...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }]),
     guru_tahfizh: appendModules([...common, { id: 'grades', label: 'Nilai Pelajaran', icon: 'notebook-pen' }, { id: 'tahfizh', label: 'Laporan Tahfizh', icon: 'book-open-check' }, { id: 'teacher-attendance', label: 'Presensi Guru', icon: 'calendar-check' }]),
     pembina: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     musyrif: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
@@ -747,7 +799,8 @@ function navItems() {
   const role = effectiveRole();
   if (role === 'guru' && currentAccount()?.isMusyrif) return [...map.guru, ...map.pembina.filter((item) => !map.guru.some((base) => base.id === item.id))];
   if (role === 'guru' && currentAccount()?.isTahfizhTeacher) return [...map.guru, { id: 'tahfizh', label: 'Laporan Tahfizh', icon: 'book-open-check' }];
-  return map[role] || map[role === 'mahad' ? 'maahad' : role === 'santri' ? 'student' : role] || common;
+  const items = map[role] || map[role === 'mahad' ? 'maahad' : role === 'santri' ? 'student' : role] || common;
+  return role === 'admin' ? items : items.filter((item) => item.id !== 'accounts');
 }
 
 function navigationIcon(name) {
@@ -968,7 +1021,7 @@ function managementView() {
   const pendingPayments = state.payments.filter((payment) => payment.status === 'Pending').length;
   return `${welcome('PUSAT KENDALI PENGASUHAN', 'Selamat datang, Admin', "Kelola santri, tagihan, dan laporan ma'had.", currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-student">${icon('plus')} Tambah Santri</button>` : '')}
     <div class="stats-grid">${statCard('Total Santri', state.students.length, '+3 bulan ini', 'users')}${statCard('Pembayaran Menunggu', pendingPayments, 'Perlu verifikasi', 'clock-3', 'orange')}${statCard('Notifikasi Tagihan', state.billingNotifications.filter((bill) => !bill.read).length, 'Belum dibaca', 'bell', 'purple')}</div>
-    <div class="grid-2">${section('Perizinan Terbaru', 'Tinjau pengajuan yang masuk hari ini', permitTable(true))}${section('Notifikasi Billing', 'Tindak lanjut wali santri', billingTable(3))}</div>${section('Keamanan Akun', 'Perbarui kredensial akun Anda.', selfPasswordForm())}`;
+    <div class="grid-2">${section('Perizinan Terbaru', 'Tinjau pengajuan yang masuk hari ini', permitTable(true))}${section('Notifikasi Billing', 'Tindak lanjut wali santri', billingTable(3))}</div>${renderPaymentDestinationDetails({ adminPanel: true })}${section('Keamanan Akun', 'Perbarui kredensial akun Anda.', selfPasswordForm())}`;
 }
 function academicView() {
   const canEdit = ['mahad', 'admin', 'kepsek', 'guru'].includes(effectiveRole());
@@ -1054,7 +1107,7 @@ function parentView() {
     <div class="stats-grid">${statCard('Progress Tahfizh', `${child.tahfizh} Juz`, '+1 juz semester ini', 'book-open-check', 'green')}${statCard('Poin Kedisiplinan', `+${child.points}`, '+4 bulan ini', 'award', 'purple')}${statCard('Kehadiran', `${child.attendance}%`, 'Sangat baik', 'calendar-check', 'blue')}${statCard('Status SPP', child.spp, 'September 2026', 'wallet-cards', 'orange')}</div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section(`Pengumuman  -  ${formatDate(today)}`, 'Informasi kegiatan dan perkembangan anak', `<div class="h-full flex flex-col justify-between p-5">${feed.length ? `<div class="activity-list">${feed.map((item) => `<div class="activity"><span class="activity-icon green">${icon(item.type === 'tahfizh' ? 'book-open-check' : 'bell')}</span><div><b>${item.title}</b><p>${item.detail}</p></div><time>${formatDate(item.date)}</time></div>`).join('')}</div>` : '<div class="empty">Belum ada pengumuman hari ini.</div>'}</div>`)}${section('Uang Saku Hari Ini', 'Saldo dan mutasi transaksi anak', `<div class="h-full flex flex-col justify-between p-5"style="max-height: 250px; overflow-y: auto; overflow-x: auto; white-space: nowrap;"><div class="finance-tile"><span>Saldo saat ini</span><b>${money(balance)}</b></div>${pocketTable}</div>`)}</div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section('Ringkasan Bulanan', summary.month || 'September 2026', compactSummary)}${section('Setoran Hafalan Terakhir', 'Riwayat capaian tahfizh', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${tahfizhTable(child.id)}</div><h3 style="margin-top:16px">Presensi Jam Tahfizh</h3><div style="max-height:350px;overflow-y:auto;overflow-x:auto">${attendanceTable('tahfizh')}</div>`)}</div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section('Riwayat Poin', 'Perkembangan karakter', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${pointsTable(child.id)}</div>`)}${compactSection('Tagihan & Kuitansi', 'Rincian pembayaran santri', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${renderWaliInvoices(child.nis)}</div>`)}</div>`;
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section('Riwayat Poin', 'Perkembangan karakter', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${pointsTable(child.id)}</div>`)}${compactSection('Tagihan & Kuitansi', 'Rincian pembayaran santri', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${renderWaliInvoices(child.nis)}</div>`)}</div>${renderPaymentDestinationDetails()}`;
 }
 function studentView() {
   const student = currentStudent();
@@ -1214,10 +1267,22 @@ function financeView() {
   const visibleBills = state.financeBills.filter((bill) => !studentId || bill.studentId === studentId);
   const outstanding = visibleBills.filter((bill) => bill.status !== 'Paid').reduce((sum, bill) => sum + billNet(bill), 0);
   return `${welcome('KEUANGAN YAYASAN', 'Billing, Beasiswa & Invoice', 'Komponen SPP dan non-SPP dikelola transparan dengan nominal fleksibel.', currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-billing">${icon('plus')} Tambah Komponen</button>` : '')}
+    ${renderPaymentDestinationDetails()}
     <div class="stats-grid">${statCard('Tagihan Aktif', state.financeBills.filter((bill) => bill.status !== 'Paid').length, 'Perlu ditindaklanjuti', 'receipt', 'orange')}${statCard('Piutang Bersih', money(outstanding), 'Setelah beasiswa & diskon', 'wallet-cards', 'purple')}${statCard('Beasiswa Aktif', state.scholarships.filter((item) => item.active).length, 'Program bantuan', 'heart-handshake', 'green')}${statCard('Invoice Terbit', state.invoices.length, 'Dapat dicetak', 'file-check-2', 'blue')}</div>
     ${section('Daftar Tagihan', 'Rincian nominal yang harus dibayar', billingTable(undefined, studentId))}
     ${section('Pembayaran & Invoice', 'Persetujuan otomatis menerbitkan invoice dan kuitansi', paymentTable(currentRoleIsAdmin(), studentId))}
     ${section('Invoice Digital', 'Admin dan wali dapat melihat, mencetak, atau mengunduh', invoiceTable(studentId))}`;
+}
+function paymentAccount(account, fallback) {
+  return { ...fallback, ...(account || {}) };
+}
+function renderPaymentDestinationDetails(options = {}) {
+  const education = paymentAccount(state.config?.paymentAccounts?.education, OFFICIAL_EDUCATION_ACCOUNT);
+  const pocketMoney = paymentAccount(state.config?.paymentAccounts?.pocketMoney, DEFAULT_POCKET_ACCOUNT);
+  const includeAdminPanel = options.adminPanel === true && currentRoleIsAdmin();
+  const card = (title, description, account, locked) => `<article class="panel payment-destination-card"><div class="panel-head"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></div><span class="badge ${locked ? 'badge-success' : 'badge-warning'}">${locked ? 'Rekening resmi' : 'Dapat diperbarui'}</span></div><dl class="payment-account-details"><div><dt>Bank</dt><dd>${escapeHtml(account.bank)}</dd></div><div><dt>Nomor Rekening</dt><dd><code>${escapeHtml(account.accountNumber)}</code></dd></div><div><dt>Atas Nama</dt><dd>${escapeHtml(account.accountName)}</dd></div></dl></article>`;
+  const adminPanel = includeAdminPanel ? `<section class="panel payment-account-settings"><div class="panel-head"><div><h2>Pengaturan Rekening Uang Saku</h2><p>Hanya rekening uang saku yang dapat diubah oleh admin berwenang. Rekening SPP tetap terkunci.</p></div></div><form id="pocket-account-form" class="form-grid"><label>Nama Bank<input name="bank" value="${escapeHtml(pocketMoney.bank)}" required></label><label>Nomor Rekening<input name="accountNumber" inputmode="numeric" value="${escapeHtml(pocketMoney.accountNumber)}" required></label><label class="full">Nama Pemilik Rekening<input name="accountName" value="${escapeHtml(pocketMoney.accountName)}" required></label><button type="submit" class="btn btn-primary full">Simpan Rekening Uang Saku</button></form></section>` : '';
+  return `<div class="payment-destinations"><div class="panel-head"><div><h2>Tujuan Pembayaran</h2><p>Gunakan rekening sesuai jenis pembayaran yang dipilih.</p></div></div><div class="grid-2">${card('SPP / Pendidikan', 'Pembayaran pendidikan dan uang bangunan.', education, true)}${card('Uang Saku', 'Top up uang saku santri.', pocketMoney, false)}</div>${adminPanel}</div>`;
 }
 function gateTable() {
   const data = state.permits.filter((permit) => permit.status === 'Approved');
@@ -1347,6 +1412,9 @@ function disciplineView() {
 }
 
 function renderView() {
+  if (state.view === 'accounts' && effectiveRole() !== 'admin') {
+    state.view = 'dashboard';
+  }
   let html;
   if (state.view === 'dashboard') html = dashboard();
   else if (state.view === 'finance') html = canViewFinance() ? financeView() : dashboard();
@@ -1355,7 +1423,7 @@ function renderView() {
   else if (state.view === 'students') html = section('Data Master Santri', 'Admin dapat mengelola data; role lain hanya membaca.', studentsTable(), currentRoleIsAdmin() ? `<div class="actions-inline"><button type="button" class="btn btn-primary" data-action="add-student">${icon('plus')} Tambah Santri</button><button type="button" class="btn btn-ghost" data-action="promote-students">${icon('arrow-up-circle')} Proses Kenaikan Kelas</button></div>` : canPromoteStudents() ? `<button type="button" class="btn btn-ghost" data-action="promote-students">${icon('arrow-up-circle')} Proses Kenaikan Kelas</button>` : '');
   else if (state.view === 'classes') html = section('Manajemen Kelas & Program', 'PPTAK/KWNQ satu kelas; SMK memakai jurusan dinamis.', `${classesTable()}${currentRoleIsAdmin() ? section('Jurusan SMK Dinamis', 'Tambah atau ubah jurusan sesuai kebutuhan sekolah.', majorsTable(), `<button type="button" class="btn btn-primary" data-action="add-major">${icon('plus')} Tambah Jurusan</button>`) : ''}`, currentRoleIsAdmin() ? `<button type="button" class="btn btn-primary" data-action="add-class">${icon('plus')} Tambah Kelas</button>` : '');
   else if (state.view === 'teachers') html = section('Manajemen Guru & Ustadz', 'Data pengajar dan pembina', teachersTable(), currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-teacher">${icon('plus')} Tambah Guru</button>` : '');
-  else if (state.view === 'accounts') html = section('Akun Internal Staf', 'Kelola username dan password internal tanpa email', accountsTable(), `<button class="btn btn-primary" data-action="add-account">${icon('plus')} Buat Akun Staf</button>`);
+  else if (state.view === 'accounts' && effectiveRole() === 'admin') html = section('Akun Internal Staf', 'Kelola username dan password internal tanpa email', accountsTable(), `<button class="btn btn-primary" data-action="add-account">${icon('plus')} Buat Akun Staf</button>`);
   else if (state.view === 'permits') html = effectiveRole() === 'parent' ? permitForm() : `${musyrifPermitForm()}${section('Manajemen Perizinan', 'Verifikasi seluruh pengajuan santri', permitTable(true))}`;
   else if (state.view === 'billing') html = canViewFinance() ? financeView() : dashboard();
   else if (state.view === 'payments') html = canViewFinance() ? (effectiveRole() === 'parent' ? paymentForm() : section('Verifikasi Pembayaran', 'Validasi bukti transfer wali santri', paymentTable(currentRoleIsAdmin(), effectiveRole() === 'parent' ? currentStudent().id : undefined), currentRoleIsAdmin() ? `<button type="button" class="btn btn-primary" data-action="add-billing">${icon('plus')} Buat Tagihan</button>` : '')) : dashboard();
@@ -1435,7 +1503,7 @@ function renderDashboard() {
         renderView();
       } catch (fallbackError) {
         console.error('[BoardingPro] Fallback dashboard juga gagal:', fallbackError);
-        content.innerHTML = `<section class="panel"><h2>Dashboard sementara</h2><p>Data lokal tidak tersedia. Data demo telah disiapkan; silakan muat ulang halaman untuk mencoba kembali.</p><button class="btn btn-primary" onclick="window.location.reload()">Muat ulang</button></section>`;
+        content.innerHTML = `<section class="panel empty-state"><div class="empty-state-icon">${icon('inbox', 28)}</div><h2>Belum Ada Data</h2><p>Data dashboard belum tersedia. Silakan coba lagi setelah sinkronisasi selesai.</p></section>`;
       }
     }
   }
@@ -1663,11 +1731,21 @@ function permitForm() {
 }
 function paymentForm() {
   const categories = [financeCategories.spp, financeCategories.foundation, ...financeCategories.maahadNonSpp, financeCategories.pocketMoney, financeCategories.custom];
-  return section('Konfirmasi Pembayaran', "Kirim konfirmasi SPP, non-SPP ma'had atau uang saku", `<form id="payment-form" class="form-grid"><label>Jenis Pembayaran<select name="category">${categories.map((category) => `<option value="${category.id}">${category.label}</option>`).join('')}</select></label><label>Periode<input name="period" value="September 2026" required></label><label>Nominal Bayar (Rp)<input name="amount" type="number" min="1" required></label><label>Metode<select name="method"><option>Transfer BSI</option><option>Virtual Account</option><option>Tunai ke Admin</option></select></label><label class="full">Upload Bukti Transfer (gambar)<input id="upload-receipt" name="receiptImage" type="file" accept="image/*"><small id="receipt-scan-status">Belum ada pemindaian.</small></label><label class="full">Catatan / Nama file bukti<input name="proof" placeholder="contoh: bukti-transfer.jpg" required></label><div class="full"><button type="submit" class="btn btn-primary">${icon('send')} Kirim Konfirmasi</button></div></form>${section('Riwayat Pembayaran', 'Status verifikasi admin', paymentTable(false, currentStudent().id))}${compactSection('Tagihan & Kuitansi', 'Rincian pembayaran santri', renderWaliInvoices(currentStudent().nis))}`);
+  return renderPaymentDestinationDetails() + section('Konfirmasi Pembayaran', "Kirim konfirmasi SPP, non-SPP ma'had atau uang saku", `<form id="payment-form" class="form-grid"><label>Jenis Pembayaran<select name="category">${categories.map((category) => `<option value="${category.id}">${category.label}</option>`).join('')}</select></label><label>Periode<input name="period" value="September 2026" required></label><label>Nominal Bayar (Rp)<input name="amount" type="number" min="1" required></label><label>Metode<select name="method"><option>Transfer BSI</option><option>Virtual Account</option><option>Tunai ke Admin</option></select></label><label class="full">Upload Bukti Transfer (gambar)<input id="upload-receipt" name="receiptImage" type="file" accept="image/*"><small id="receipt-scan-status">Belum ada pemindaian.</small></label><label class="full">Catatan / Nama file bukti<input name="proof" placeholder="contoh: bukti-transfer.jpg" required></label><div class="full"><button type="submit" class="btn btn-primary">${icon('send')} Kirim Konfirmasi</button></div></form>${section('Riwayat Pembayaran', 'Status verifikasi admin', paymentTable(false, currentStudent().id))}${compactSection('Tagihan & Kuitansi', 'Rincian pembayaran santri', renderWaliInvoices(currentStudent().nis))}`);
 }
+let modalEscapeHandler = null;
 function openModal(title, content) {
-  $('#modal-root').innerHTML = `<div class="modal-backdrop modal-overlay"><div class="modal modal-card"><div class="modal-head modal-card-header"><h2 style="font-size:1rem;font-weight:600">${escapeHtml(title)}</h2><button type="button" class="icon-btn modal-close" data-close-modal aria-label="Tutup">${icon('x')}</button></div><div class="modal-body">${content}</div></div></div>`;
-  $('#modal-root').querySelector('[data-close-modal]').addEventListener('click', closeModal);
+  closeModal();
+  $('#modal-root').innerHTML = `<div class="modal-backdrop modal-overlay" data-modal-backdrop><div class="modal modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-head modal-card-header no-print"><h2 id="modal-title" style="font-size:1rem;font-weight:600">${escapeHtml(title)}</h2><button type="button" class="btn btn-ghost modal-close" data-close-modal aria-label="Tutup" onclick="closeModal()"><span aria-hidden="true" style="font-size:1.35rem;line-height:1">×</span> Tutup</button></div><div class="modal-body">${content}</div></div></div>`;
+  const root = $('#modal-root');
+  root.querySelector('[data-close-modal]').addEventListener('click', closeModal);
+  root.querySelector('[data-modal-backdrop]').addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) closeModal();
+  });
+  modalEscapeHandler = (event) => {
+    if (event.key === 'Escape') closeModal();
+  };
+  document.addEventListener('keydown', modalEscapeHandler);
   bindSensitiveDocumentGuard();
   if (window.lucide) lucide.createIcons();
 }
@@ -1690,7 +1768,13 @@ function openConfirmModal(title, message, onConfirm) {
   $('#modal-root [data-confirm-cancel]').addEventListener('click', closeModal);
   $('#modal-root [data-confirm-ok]').addEventListener('click', () => { closeModal(); onConfirm(); });
 }
-function closeModal() { $('#modal-root').innerHTML = ''; }
+function closeModal() {
+  if (modalEscapeHandler) {
+    document.removeEventListener('keydown', modalEscapeHandler);
+    modalEscapeHandler = null;
+  }
+  $('#modal-root').innerHTML = '';
+}
 function createInvoiceForPayment(payment) {
   if (!payment || payment.status !== 'Verified') return null;
   const existing = state.invoices.find((invoice) => invoice.paymentId === payment.id);
@@ -1985,7 +2069,31 @@ function bindActions() {
     }
   }));
   const permit = $('#permit-form');
-  if (permit) permit.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(permit); const requestedDays = Math.min(3, Math.max(1, Number(form.get('requestedDays') || 1))); const submittedAt = new Date().toISOString(); const permitId = `IZN-${Date.now()}`; const parent = currentAccount(); state.permits.unshift({ id: permitId, studentId: sanitizeInput(form.get('studentId')), type: sanitizeInput(form.get('type')), reason: sanitizeInput(form.get('reason')), date: sanitizeInput(form.get('date')), requestedDays, approvedDays: null, endDate: null, status: 'Pending', approvedBy: null, approvedAt: null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali', applicantSignature: '[ TERVERIFIKASI DIGITAL WALI SANTRI ]', applicantSignedAt: submittedAt, applicantQrPayload: { documentId: permitId, documentType: 'permit', role: 'parent' }, checkout: null, checkin: null }); persist(); alert('Pengajuan izin berhasil dikirim.'); render(); });
+  if (permit) permit.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = new FormData(permit);
+    const studentId = sanitizeInput(form.get('studentId'));
+    const type = sanitizeInput(form.get('type'));
+    const date = sanitizeInput(form.get('date'));
+    if (isQuotaDeducted({ type }) && weeklyQuotaUsed(studentId, date) >= QUOTA_LIMIT) {
+      alert('Kuota Keluar Kompleks minggu ini sudah mencapai 3 kali.');
+      return;
+    }
+    const requestedDays = Math.min(3, Math.max(1, Number(form.get('requestedDays') || 1)));
+    const submittedAt = new Date().toISOString();
+    const permitId = `IZN-${Date.now()}`;
+    const parent = currentAccount();
+    state.permits.unshift({
+      id: permitId, studentId, type, reason: sanitizeInput(form.get('reason')), date, requestedDays,
+      is_quota_deducted: isQuotaDeducted({ type }), approvedDays: null, endDate: null, status: 'Pending',
+      approvedBy: null, approvedAt: null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali',
+      applicantSignature: '[ TERVERIFIKASI DIGITAL WALI SANTRI ]', applicantSignedAt: submittedAt,
+      applicantQrPayload: { documentId: permitId, documentType: 'permit', role: 'parent' }, checkout: null, checkin: null
+    });
+    persist();
+    alert('Pengajuan izin berhasil dikirim.');
+    render();
+  });
   const musyrifPermit = $('#musyrif-permit-form');
   if (musyrifPermit) musyrifPermit.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -2022,6 +2130,23 @@ function bindActions() {
   const teacherAttendance = $('#teacher-attendance-form');
   if (teacherAttendance) teacherAttendance.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(teacherAttendance); state.teacherAttendance.unshift({ id: `TA-${Date.now()}`, teacher: state.displayName || roles.guru.demoName, date: today, status: form.get('status'), checkIn: form.get('checkIn') || null, checkOut: form.get('checkOut') || null }); persist(); alert('Presensi pribadi tersimpan.'); render(); });
   const adminPassword = $('#admin-password-form');
+  const pocketAccountForm = $('#pocket-account-form');
+  if (pocketAccountForm) pocketAccountForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!currentRoleIsAdmin()) return;
+    const form = new FormData(pocketAccountForm);
+    const bank = String(form.get('bank') || '').trim();
+    const accountNumber = String(form.get('accountNumber') || '').replace(/\s+/g, '').trim();
+    const accountName = String(form.get('accountName') || '').trim();
+    if (!bank || !/^[0-9]{6,24}$/.test(accountNumber) || !accountName) {
+      alert('Lengkapi bank, nomor rekening 6-24 digit, dan nama pemilik rekening.');
+      return;
+    }
+    state.config.paymentAccounts.pocketMoney = { bank, accountNumber, accountName, locked: false };
+    persist();
+    render();
+    alert('Rekening uang saku berhasil diperbarui.');
+  });
   if (adminPassword) adminPassword.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(adminPassword); const account = currentAccount(); const currentPassword = String(form.get('currentPassword') || ''); const newPassword = String(form.get('newPassword') || ''); if (!account || account.password !== currentPassword) { alert('Password saat ini tidak sesuai.'); return; } if (!isMasterAdminSession() && (account.passwordChangeCount || 0) >= 2) { alert("Batas maksimal perubahan kata sandi mandiri telah tercapai (2/2 kali). Untuk melakukan perubahan/reset kata sandi kembali, silakan hubungi Admin Ma'had."); return; } if (newPassword.length < 10 || newPassword !== String(form.get('confirmPassword') || '')) { alert('Password baru minimal 10 karakter dan harus sama dengan konfirmasi.'); return; } account.password = newPassword; if (!isMasterAdminSession()) account.passwordChangeCount = (account.passwordChangeCount || 0) + 1; state.currentUser = account; persist(); adminPassword.reset(); alert('Password berhasil diubah.'); });
 }
 function openStudentModal(student) {
@@ -2296,6 +2421,7 @@ function showLanding() {
   updatePreview();
 }
 document.addEventListener('DOMContentLoaded', () => {
+  if (resetWeeklyExitQuota()) persist();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch((error) => console.error('[BoardingPro] Service worker gagal didaftarkan:', error));
   }

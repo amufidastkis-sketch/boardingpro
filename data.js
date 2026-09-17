@@ -107,6 +107,21 @@ const financeCategories = {
   custom: { id: 'CUSTOM', label: 'Komponen Non-SPP Lainnya', nominal: 0 }
 };
 
+const paymentAccounts = {
+  education: {
+    bank: 'BSI',
+    accountNumber: '7123456789',
+    accountName: 'Yayasan BoardingPro STKIS',
+    locked: true
+  },
+  pocketMoney: {
+    bank: 'BSI',
+    accountNumber: '7123456780',
+    accountName: 'BoardingPro Uang Saku',
+    locked: false
+  }
+};
+
 const seedData = {
   internalAccounts: [
     { id: 'ACC-SUPER', role: 'master_admin', username: 'masteradmin', password: 'superadmin123', name: "Master Admin Ma'had", nama: "Master Admin Ma'had", passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
@@ -122,6 +137,7 @@ const seedData = {
   semesters,
   financeCategories,
   finance: financeCategories,
+  paymentAccounts,
   students: [
     { id: 'STD-001', name: 'Ahmad Fauzan', nis: '240101', gender: 'L', program: 'SMK', major: 'TKJ', grade: 11, semester: 2, className: 'XI TKJ', parent: 'Bpk. Muhammad Fauzi', phone: '081234567890', attendance: 96, points: 18, tahfizh: 12, spp: 'Lunas', status: 'Aktif' },
     { id: 'STD-002', name: 'Fatimah Zahra', nis: '240102', gender: 'P', program: 'PPTAK', major: '', grade: 10, semester: 1, className: 'Kelas PPTAK', parent: 'Ibu Siti Aminah', phone: '081298765432', attendance: 98, points: 27, tahfizh: 15, spp: 'Lunas', status: 'Aktif' },
