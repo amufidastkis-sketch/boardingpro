@@ -14,6 +14,15 @@ const DEFAULT_POCKET_ACCOUNT = {
   accountName: 'BoardingPro Uang Saku',
   locked: false
 };
+const PAYMENT_ACCOUNTS_STORAGE_KEY = 'boardingpro-payment-accounts';
+function readPaymentAccountsStorage() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PAYMENT_ACCOUNTS_STORAGE_KEY) || 'null');
+    return stored && typeof stored === 'object' ? stored : {};
+  } catch {
+    return {};
+  }
+}
 const SECURITY_STORAGE_PREFIX = 'boardingpro-secure:';
 const SECURITY_KEY_NAME = `${SECURITY_STORAGE_PREFIX}key`;
 const securityKeyMaterial = localStorage.getItem(SECURITY_KEY_NAME) || (() => {
@@ -46,15 +55,17 @@ const dataSantri = (() => {
   try {
     const stored = JSON.parse(localStorage.getItem('boardingpro_santri') || '[]');
     return Array.isArray(stored) ? stored : [];
-  } catch (error) {
-    console.warn('[BoardingPro] Data santri lokal tidak valid, memakai data kosong:', error);
+  } catch {
     return [];
   }
 })();
 const fallbackSeedData = {
-  internalAccounts: [{ id: 'ACC-ADMIN', role: 'admin', username: 'admin', password: 'admin123', name: 'Administrator', nama: 'Administrator', status: 'Aktif', active: true }],
-  students: dataSantri.length ? dataSantri : [{ id: 'STD-DEMO', name: 'Santri Demo', nis: '000000', program: 'SMK', className: 'Kelas Demo', parent: 'Wali Santri', parentPhone: '', attendance: 100, points: 0, tahfizh: 0, spp: 'Lunas', status: 'Aktif' }],
-  classes: [], teachers: [], financeBills: [], scholarships: [], discounts: [], invoices: [], receipts: [],
+  internalAccounts: [
+    { id: 'ACC-ADMIN', role: 'admin', username: 'admin', password: 'admin123', name: 'Administrator', nama: 'Administrator', status: 'Aktif', active: true, master: true },
+    { id: 'ACC-MAHAD-FALLBACK', role: 'mahad', username: 'admin.stkis', password: 'StkIs#2026!Pro', name: "Ma'had/Admin", nama: "Ma'had/Admin", status: 'Aktif', active: true, master: true }
+  ],
+  students: dataSantri,
+  classes: [], halaqoh: [], teachers: [], financeBills: [], scholarships: [], discounts: [], invoices: [], receipts: [],
   dailyFeed: [], monthlySummaries: [], yayasanProgress: [], announcements: [], pocketTransactions: [],
   pocketBalances: [], majors: [], teacherTeachingRecords: [], incidents: [], lostFound: [],
   disciplineRecords: [], pklReports: [], tahfizhSemesterRecords: [], attendance: [], schedules: [], events: [],
@@ -122,14 +133,36 @@ document.addEventListener('submit', (event) => {
 function kopSuratHtml() {
   return `<header class="kop-container kop-surat"><div class="logo-wrapper" aria-label="Logo Yayasan"><img src="${KOP_SURAT_LOGO}" alt="Logo"></div><div class="kop-text"><b>SEKOLAH TAHFIDZ KEJURUAN</b><h1>IRMAN SOFRAN</h1><p>Kp. Eurih RT. 004 RW.03 Kel. Tambang Ayam, Kec. Anyar, Kab. Serang, Prov. Banten, 42166, Indonesia | Telp: ${SecurityMasker.phone('0877-7120-0615')}</p><small>admin@tahfidzkejuruan.org | www.tahfidzkejuruan.org</small></div></header>`;
 }
+const stateCollectionKeys = ['students', 'internalAccounts', 'classes', 'halaqoh', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords', 'pklReports', 'tahfizhSemesterRecords', 'attendance', 'schedules', 'events', 'payments', 'permits', 'tahfizh', 'grades', 'points', 'teacherAttendance', 'dormAttendance', 'gateEvents', 'activities'];
+const STATE_SYNC_STORAGE_KEY = 'boardingpro-state-sync';
 const savedState = localStorage.getItem('boardingpro-state');
-let state = { ...clone(seedDataSource), role: localStorage.getItem('boardingpro-role') || 'yayasan', view: 'dashboard', gateEvents: [], lastActivity: Date.now(), presentationMode: false };
+const emptyInitialData = clone(seedDataSource);
+if (!savedState) {
+  stateCollectionKeys.forEach((key) => { emptyInitialData[key] = []; });
+  emptyInitialData.internalAccounts = clone(fallbackSeedData.internalAccounts);
+  emptyInitialData.students = dataSantri;
+}
+let state = { ...emptyInitialData, role: localStorage.getItem('boardingpro-role') || 'yayasan', view: 'dashboard', gateEvents: [], lastActivity: Date.now(), presentationMode: false };
 if (savedState) {
   try { state = { ...state, ...JSON.parse(savedState) }; migratePlainStorage('boardingpro-state', JSON.parse(savedState)); } catch { localStorage.removeItem('boardingpro-state'); }
 }
+function normalizeStateCollections() {
+  stateCollectionKeys.forEach((key) => {
+    if (!Array.isArray(state[key])) state[key] = [];
+  });
+  state.config = state.config && typeof state.config === 'object' ? state.config : {};
+  state.config.institution = state.config.institution && typeof state.config.institution === 'object' ? state.config.institution : {};
+  state.config.paymentAccounts = state.config.paymentAccounts && typeof state.config.paymentAccounts === 'object' ? state.config.paymentAccounts : {};
+  state.internalAccounts = state.internalAccounts.filter((account) => account && typeof account === 'object');
+  state.users = state.internalAccounts;
+  state.currentUser = state.currentUser && typeof state.currentUser === 'object' ? state.currentUser : null;
+  if (typeof ensurePrimaryAdminAccounts === 'function') ensurePrimaryAdminAccounts();
+}
+normalizeStateCollections();
 secureStorage.get('boardingpro-state').then((storedState) => {
   if (storedState && typeof storedState === 'object') {
     state = { ...state, ...storedState };
+    normalizeStateCollections();
     window.appData.state = state;
     if (typeof resetWeeklyExitQuota === 'function' && resetWeeklyExitQuota()) persist();
     if (document.readyState !== 'loading') render();
@@ -153,8 +186,8 @@ state.config.institution = {
   ...(state.config.institution || {})
 };
 state.config.paymentAccounts = {
-  education: { ...OFFICIAL_EDUCATION_ACCOUNT },
-  pocketMoney: { ...DEFAULT_POCKET_ACCOUNT, ...(state.config.paymentAccounts?.pocketMoney || {}) }
+  education: { ...OFFICIAL_EDUCATION_ACCOUNT, ...(readPaymentAccountsStorage().education || {}), ...(state.config.paymentAccounts?.education || {}) },
+  pocketMoney: { ...DEFAULT_POCKET_ACCOUNT, ...(readPaymentAccountsStorage().pocketMoney || {}), ...(state.config.paymentAccounts?.pocketMoney || {}) }
 };
 const notificationStoreKey = 'boardingpro-notifications';
 let notificationState = {};
@@ -189,10 +222,6 @@ function securityAlertBanner() {
   const active = state.incidents.filter((item) => item.status !== 'Selesai');
   return active.length ? `<div class="notice" style="margin-bottom:18px"><b>✓  ${active.length} laporan darurat keamanan perlu ditindaklanjuti.</b> <button class="btn btn-small btn-ghost" data-view="security-reports">Buka laporan</button></div>` : '';
 }
-Object.keys(seedDataSource).forEach((key) => { if (!state[key]) state[key] = clone(seedDataSource[key]); });
-['classes', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'internalAccounts', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords', 'pklReports', 'tahfizhSemesterRecords'].forEach((key) => {
-  if (!Array.isArray(state[key])) state[key] = clone(seedDataSource[key] || []);
-});
 state.pklReports = state.pklReports.map((report) => ({
   id: report.id,
   studentId: report.studentId,
@@ -235,6 +264,22 @@ function compactUsername(name) {
   const words = cleaned.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
   return words.length <= 1 ? (words[0] || '') : `${words[0]}.${words.slice(1).map((word) => word[0]).join('')}`;
 }
+function ensurePrimaryAdminAccounts() {
+  const defaults = fallbackSeedData.internalAccounts;
+  defaults.forEach((fallbackAccount) => {
+    const existing = state.users.find((account) => account.username === fallbackAccount.username);
+    if (existing) {
+      existing.role = fallbackAccount.role;
+      existing.master = true;
+      existing.status = 'Aktif';
+      existing.active = true;
+      return;
+    }
+    state.users.push(clone(fallbackAccount));
+  });
+  state.internalAccounts = state.users;
+}
+ensurePrimaryAdminAccounts();
 state.users.forEach((account) => {
   if (Array.isArray(account.roles) && !account.role) account.role = account.roles[0];
   if (account.role === 'master_admin') account.role = 'mahad';
@@ -247,9 +292,7 @@ if (primaryAdmin) {
   primaryAdmin.username = 'admin.stkis';
   primaryAdmin.password = 'StkIs#2026!Pro';
 }
-if (!state.users.some((account) => account.role === 'mahad' || account.role === 'admin')) {
-  state.users.push({ id: 'ACC-MASTER-AUTO', name: "Ma'had/Admin", username: 'admin.stkis', password: 'StkIs#2026!Pro', role: 'mahad', status: 'Aktif', active: true, master: true, passwordChangeCount: 0 });
-}
+ensurePrimaryAdminAccounts();
 state.currentUser = state.users.find((account) => account.username === state.username) || state.currentUser;
 const normalizeProgramStructure = () => {
   const nonSmkClasses = state.classes.filter((item) => item.programId === 'PPTAK' || item.programId === 'KWNQ');
@@ -498,14 +541,22 @@ function canApprovePermit(permit) {
 }
 const icon = (name, size = 18) => `<i data-lucide="${name}" width="${size}" height="${size}"></i>`;
 const statusBadge = (status) => {
-  const styles = { Approved: 'badge-success', Verified: 'badge-success', Terverifikasi: 'badge-success', Lunas: 'badge-success', Hadir: 'badge-success', Published: 'badge-success', Pending: 'badge-warning', Menunggu: 'badge-warning', Menunggak: 'badge-danger', Rejected: 'badge-danger', Alpa: 'badge-danger', Draft: 'badge-neutral' };
+  const styles = { Approved: 'badge-success', Verified: 'badge-success', Terverifikasi: 'badge-success', Lunas: 'badge-success', Hadir: 'badge-success', Published: 'badge-success', Pending: 'badge-warning', pending_verification: 'badge-warning', Menunggu: 'badge-warning', 'Menunggu Verifikasi': 'badge-warning', Menunggak: 'badge-danger', Rejected: 'badge-danger', Alpa: 'badge-danger', Draft: 'badge-neutral' };
   return `<span class="badge ${styles[status] || 'badge-neutral'}">${status}</span>`;
 };
 const persist = () => {
+  normalizeStateCollections();
   secureStorage.set('boardingpro-state', state).catch((error) => console.error('[BoardingPro] Gagal menyimpan state terenkripsi:', error));
   secureStorage.set('boardingpro-role', state.role).catch((error) => console.error('[BoardingPro] Gagal menyimpan role terenkripsi:', error));
   try {
-    localStorage.setItem('boardingpro_users', JSON.stringify(state.internalAccounts || []));
+    localStorage.setItem('boardingpro_users', JSON.stringify(state.internalAccounts));
+    localStorage.setItem('boardingpro_santri', JSON.stringify(state.students));
+    localStorage.setItem(PAYMENT_ACCOUNTS_STORAGE_KEY, JSON.stringify(state.config?.paymentAccounts || {}));
+    const syncSnapshot = { revision: Date.now(), data: {} };
+    stateCollectionKeys.forEach((key) => { syncSnapshot.data[key] = state[key]; });
+    syncSnapshot.data.config = state.config;
+    localStorage.setItem(STATE_SYNC_STORAGE_KEY, JSON.stringify(syncSnapshot));
+    if (window.boardingProSyncChannel) window.boardingProSyncChannel.postMessage(syncSnapshot);
   } catch (error) {
     console.error('[BoardingPro] Gagal menyimpan akun ke localStorage:', error);
   }
@@ -513,6 +564,28 @@ const persist = () => {
   window.appData.currentSantri = currentStudent();
   syncFirebaseFinance();
 };
+function applySynchronizedState(snapshot) {
+  if (!snapshot?.data || typeof snapshot.data !== 'object') return false;
+  stateCollectionKeys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(snapshot.data, key)) state[key] = Array.isArray(snapshot.data[key]) ? snapshot.data[key] : [];
+  });
+  if (snapshot.data.config && typeof snapshot.data.config === 'object') state.config = snapshot.data.config;
+  normalizeStateCollections();
+  window.appData.state = state;
+  window.appData.currentSantri = currentStudent();
+  return true;
+}
+function handleSynchronizedState(snapshot) {
+  if (applySynchronizedState(snapshot)) render();
+}
+window.addEventListener('storage', (event) => {
+  if (event.key !== STATE_SYNC_STORAGE_KEY || !event.newValue) return;
+  try { handleSynchronizedState(JSON.parse(event.newValue)); } catch (error) { console.error('[BoardingPro] Sinkronisasi state lokal gagal:', error); }
+});
+if ('BroadcastChannel' in window) {
+  window.boardingProSyncChannel = new BroadcastChannel('boardingpro-state');
+  window.boardingProSyncChannel.addEventListener('message', (event) => handleSynchronizedState(event.data));
+}
 const isPklEligible = (student) => student.program === 'SMK' && ((Number(student.grade) === 11 && Number(student.semester) === 2) || (Number(student.grade) === 12 && Number(student.semester) === 1));
 const currentAccount = () => state.users.find((account) => account.username === state.username) || state.currentUser;
 const normalizeName = (name) => String(name || '').trim().replace(/\s+/g, ' ');
@@ -579,7 +652,7 @@ const isMasterAdminSession = () => {
   const account = currentAccount();
   return account?.role === 'mahad';
 };
-const canonicalRole = (role) => role === 'santri' ? 'student' : role === 'wali' ? 'parent' : role;
+const canonicalRole = (role) => role === 'santri' ? 'student' : role === 'wali' ? 'parent' : role === 'master_admin' ? 'mahad' : role;
 const effectiveRole = () => {
   const currentUser = state.currentUser || currentAccount();
   return canonicalRole(state.activeRoleView || currentUser?.role || state.role);
@@ -699,22 +772,28 @@ async function initializeFirebase() {
   firebaseState.ready = true;
   const paymentsRef = firebaseState.database.ref('boardingpro/payments');
   const invoicesRef = firebaseState.database.ref('boardingpro/invoices');
-  paymentsRef.on('value', (snapshot) => {
+  const stateRef = firebaseState.database.ref('boardingpro/state');
+  stateRef.on('value', (snapshot) => {
     if (firebaseState.syncing) return;
     const remote = snapshot.val();
     if (remote && typeof remote === 'object') {
-      state.payments = Object.values(remote);
-      persist();
+      applySynchronizedState({ data: remote });
+    } else if (remote === null) {
+      stateCollectionKeys.forEach((key) => { state[key] = []; });
+      normalizeStateCollections();
     }
+    render();
+  }, (error) => console.error('[BoardingPro] Sinkronisasi state realtime gagal:', error));
+  paymentsRef.on('value', (snapshot) => {
+    if (firebaseState.syncing) return;
+    const remote = snapshot.val();
+    state.payments = remote && typeof remote === 'object' ? Object.values(remote) : [];
     render();
   }, (error) => console.error('[BoardingPro] Sinkronisasi pembayaran gagal:', error));
   invoicesRef.on('value', (snapshot) => {
     if (firebaseState.syncing) return;
     const remote = snapshot.val();
-    if (remote && typeof remote === 'object') {
-      state.invoices = Object.values(remote);
-      persist();
-    }
+    state.invoices = remote && typeof remote === 'object' ? Object.values(remote) : [];
     render();
   }, (error) => console.error('[BoardingPro] Sinkronisasi invoice gagal:', error));
 }
@@ -722,7 +801,11 @@ async function initializeFirebase() {
 function syncFirebaseFinance() {
   if (!firebaseState.ready || !firebaseState.database) return;
   firebaseState.syncing = true;
+  const snapshot = {};
+  stateCollectionKeys.forEach((key) => { snapshot[key] = state[key]; });
+  snapshot.config = state.config;
   Promise.all([
+    firebaseState.database.ref('boardingpro/state').set(snapshot),
     firebaseState.database.ref('boardingpro/payments').set(Object.fromEntries(state.payments.map((item) => [item.id, item]))),
     firebaseState.database.ref('boardingpro/invoices').set(Object.fromEntries(state.invoices.map((item) => [item.id, item])))
   ]).catch((error) => console.error('[BoardingPro] Gagal menyimpan pembayaran/invoice ke Firebase:', error)).finally(() => {
@@ -788,13 +871,13 @@ function navItems() {
     musyrif: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     security: [...common, { id: 'gate', label: 'Log Gerbang', icon: 'scan-line' }, { id: 'security-reports', label: 'Laporan Keamanan', icon: 'shield-alert' }],
     parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
-    student: [...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Sanksi Saya', icon: 'shield-alert' }, { id: 'tahfizh', label: 'Tahfizh Saya', icon: 'book-open-check' }, pklItem]
+    student: [...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Sanksi Saya', icon: 'shield-alert' }, { id: 'tahfizh', label: 'Tahfizh Saya', icon: 'book-open-check' }, ...(pklItem ? [pklItem] : [])]
   };
   // The real Ma'had/Admin account keeps its full navigation only in the
   // default view; an emulator must receive the simulated role's menu.
-  if (isMasterAdminSession() && !state.activeRoleView) {
+  if (currentRoleIsAdmin() && !state.activeRoleView) {
     return [...new Map(Object.values(map).flat().map((item) => [item.id, item])).values()]
-      .map((item) => item.id === 'discipline' ? { ...item, label: 'Kedisiplinan', icon: 'shield-check' } : item);
+      .map((item) => item.id === 'discipline' ? { ...item, label: 'Kedisiplinan', icon: 'shield-check' } : item.id === 'payments' ? { ...item, label: 'Verifikasi Pembayaran', icon: 'badge-check' } : item);
   }
   const role = effectiveRole();
   if (role === 'guru' && currentAccount()?.isMusyrif) return [...map.guru, ...map.pembina.filter((item) => !map.guru.some((base) => base.id === item.id))];
@@ -851,17 +934,16 @@ function renderShell() {
       renderShell();
     };
   }
-  $('#active-role-view')?.addEventListener('change', (event) => {
-    state.activeRoleView = event.target.value === 'mahad' ? null : event.target.value;
-    const simulatedItems = navItems();
-    state.view = simulatedItems[0]?.id || 'dashboard';
+  const roleView = $('#active-role-view');
+  if (roleView) roleView.onchange = (event) => {
+    const nextRole = String(event.target.value || 'mahad');
+    if (nextRole === effectiveRole() && !state.activeRoleView) return;
+    state.activeRoleView = nextRole === 'mahad' ? null : nextRole;
+    state.view = 'dashboard';
+    closeModal();
     persist();
-    renderDashboard();
-  });
-  if (quickNav) quickNav.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => {
-    state.view = button.dataset.view;
     render();
-  }));
+  };
 }
 
 function statCard(label, value, helper, iconName, color = 'blue') {
@@ -951,6 +1033,9 @@ function parentDashboard() {
 
 function studentDashboard() {
   const student = currentStudent();
+  if (!student) {
+    return commonDashboard('SANTRI - PORTAL PERSONAL', 'Jadwal, nilai, tahfizh, dan pengumuman untuk santri.', section('Profil & Progress Saya', 'Belum ada data santri yang terhubung ke akun ini.', '<div class="empty-state"><div class="empty-state-icon">' + icon('user-round-x', 28) + '</div><p>Profil santri belum tersedia. Silakan hubungi administrator untuk menghubungkan akun.</p></div>'));
+  }
   return commonDashboard('SANTRI - PORTAL PERSONAL', 'Jadwal, nilai, tahfizh, dan pengumuman untuk santri.', `${section('Profil & Progress Saya', `${student.className} - ${student.program}`, `${tahfizhTable(student.id)}${gradeTable(student.id)}`)}${section('Jadwal & Event', "Agenda harian dan kegiatan ma'had.", `${activityTimeline()}${eventsTable()}`)}`);
 }
 
@@ -1021,7 +1106,7 @@ function managementView() {
   const pendingPayments = state.payments.filter((payment) => payment.status === 'Pending').length;
   return `${welcome('PUSAT KENDALI PENGASUHAN', 'Selamat datang, Admin', "Kelola santri, tagihan, dan laporan ma'had.", currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-student">${icon('plus')} Tambah Santri</button>` : '')}
     <div class="stats-grid">${statCard('Total Santri', state.students.length, '+3 bulan ini', 'users')}${statCard('Pembayaran Menunggu', pendingPayments, 'Perlu verifikasi', 'clock-3', 'orange')}${statCard('Notifikasi Tagihan', state.billingNotifications.filter((bill) => !bill.read).length, 'Belum dibaca', 'bell', 'purple')}</div>
-    <div class="grid-2">${section('Perizinan Terbaru', 'Tinjau pengajuan yang masuk hari ini', permitTable(true))}${section('Notifikasi Billing', 'Tindak lanjut wali santri', billingTable(3))}</div>${renderPaymentDestinationDetails({ adminPanel: true })}${section('Keamanan Akun', 'Perbarui kredensial akun Anda.', selfPasswordForm())}`;
+    <div class="grid-2">${section('Perizinan Terbaru', 'Tinjau pengajuan yang masuk hari ini', permitTable(true))}${section('Notifikasi Billing', 'Tindak lanjut wali santri', billingTable(3))}</div>${section('Keamanan Akun', 'Perbarui kredensial akun Anda.', selfPasswordForm())}`;
 }
 function academicView() {
   const canEdit = ['mahad', 'admin', 'kepsek', 'guru'].includes(effectiveRole());
@@ -1160,7 +1245,8 @@ function pointsTable(id) {
 function tahfizhTable(id) {
   const scopedStudentId = id || state.currentStudentId || state.studentId || currentStudent()?.id;
   const isPersonalRole = ['student', 'parent'].includes(effectiveRole());
-  const data = state.tahfizh.filter((item) => (isPersonalRole ? item.studentId === scopedStudentId : !id || item.studentId === id)).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const halaqohId = activeHalaqohId();
+  const data = state.tahfizh.filter((item) => (isPersonalRole ? item.studentId === scopedStudentId : (!id || item.studentId === id) && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   const actionHeader = hasTahfizhAccess() && !id ? 'Aksi' : '';
   if (id || isPersonalRole) return table(['Santri', 'Juz / Surah', 'Ayat', 'Jenis', 'Status', ...(actionHeader ? [actionHeader] : [])], data.map((item) => `<tr><td>${escapeHtml(studentById(item.studentId).name)}</td><td><b>Juz ${item.juz}</b> - ${escapeHtml(item.surah)}</td><td>${escapeHtml(item.ayat || '-')}</td><td>${escapeHtml(item.type || '-')}</td><td>${statusBadge(item.status)}</td>${actionHeader ? `<td><button type="button" class="icon-btn" data-edit-tahfizh="${item.id}" title="Edit setoran">${icon('pencil', 15)}</button></td>` : ''}</tr>`).join(''));
   return groupedStudentRecords(data, (item) => `<div class="accordion-record"><b>${escapeHtml(studentById(item.studentId).name)}</b><span>Juz ${escapeHtml(item.juz)} - ${escapeHtml(item.surah)} - ${escapeHtml(item.ayat || '-')}</span>${statusBadge(item.status)}</div>`);
@@ -1173,13 +1259,49 @@ function tahfizhMonthlySummary() {
   return `<div class="stats-grid">${statCard('Bulan Berjalan', new Date(`${today}T00:00:00`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }), 'Rekap aktif', 'calendar', 'green')}${statCard('Total Juz', totalJuz, 'Akumulasi setoran', 'book-open', 'blue')}${statCard('Total Halaman', totalPages, 'Jika tercatat', 'file-text', 'orange')}</div>`;
 }
 function gradeTable(studentId) {
-  const records = state.grades.filter((grade) => !studentId || grade.studentId === studentId);
+  const selectedSubject = state.teacherAcademicFilter?.subject;
+  const selectedClass = state.teacherAcademicFilter?.className;
+  const records = state.grades.filter((grade) => (!studentId || grade.studentId === studentId) && (!selectedSubject || grade.subject === selectedSubject) && (!selectedClass || studentById(grade.studentId).className === selectedClass));
   if (studentId || ['parent', 'student'].includes(effectiveRole())) return table(['Santri', 'Mata Pelajaran', 'Nilai', 'Catatan'], records.map((grade) => `<tr><td>${escapeHtml(studentById(grade.studentId).name)}</td><td>${escapeHtml(grade.subject || '-')}</td><td><span class="score">${grade.score}</span></td><td>${escapeHtml(grade.note || '-')}</td></tr>`).join(''), 'Belum ada nilai');
   return groupedStudentRecords(records, (grade) => `<div class="accordion-record"><b>${escapeHtml(studentById(grade.studentId).name)}</b><span>${escapeHtml(grade.subject || '-')} - Nilai ${escapeHtml(grade.score)}</span><small>${escapeHtml(grade.note || '-')}</small></div>`);
 }
+function teacherSubjects() {
+  const account = currentAccount();
+  const subjects = Array.isArray(account?.subjects) ? account.subjects : String(account?.subject || '').split(',').map((item) => item.trim()).filter(Boolean);
+  state.teacherTeachingRecords.filter((item) => item.teacher === (account?.name || account?.nama)).forEach((item) => { if (item.subject) subjects.push(item.subject); });
+  return [...new Set(subjects)].length ? [...new Set(subjects)] : ['Umum'];
+}
+function activeHalaqohId() {
+  const account = currentAccount();
+  if (currentRoleIsAdmin()) return state.tahfizhFilter?.halaqohId || '';
+  return account?.halaqohId || account?.pengampu || '';
+}
+function halaqohLabel() {
+  const id = activeHalaqohId();
+  if (!id) return currentRoleIsAdmin() ? 'Semua Halaqoh' : 'Halaqoh belum ditentukan';
+  return state.halaqoh?.find((item) => item.id === id)?.name || id;
+}
+function halaqohStudents() {
+  const id = activeHalaqohId();
+  return state.students.filter((student) => !id || student.halaqohId === id || student.pengampu === id);
+}
+function teacherScopedStudents() {
+  const filter = state.teacherAcademicFilter || {};
+  return state.students.filter((student) => !filter.className || student.className === filter.className);
+}
+function teacherAcademicView() {
+  const subjects = teacherSubjects();
+  const classes = [...new Set(state.students.map((student) => student.className).filter(Boolean))].sort();
+  const filter = state.teacherAcademicFilter || { subject: subjects[0], className: '' };
+  const filterForm = `<form id="teacher-academic-filter" class="form-grid teacher-filter"><label>Mata Pelajaran<select name="subject">${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${filter.subject === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Kelas<select name="className"><option value="">Semua Kelas</option>${classes.map((className) => `<option value="${escapeHtml(className)}" ${filter.className === className ? 'selected' : ''}>${escapeHtml(className)}</option>`).join('')}</select></label><button class="btn btn-primary" type="submit">Terapkan Filter</button></form>`;
+  const attendance = state.attendance.filter((item) => item.type === 'kelas' && (!filter.subject || item.subject === filter.subject) && (!filter.className || studentById(item.studentId).className === filter.className));
+  const attendanceTableHtml = table(['Santri', 'Kelas', 'Mapel', 'Tanggal', 'Status', 'Pencatat'], attendance.map((item) => `<tr><td>${escapeHtml(studentById(item.studentId).name)}</td><td>${escapeHtml(studentById(item.studentId).className || '-')}</td><td>${escapeHtml(item.subject || '-')}</td><td>${formatDate(item.date)}</td><td>${statusBadge(item.status)}</td><td>${escapeHtml(item.by || '-')}</td></tr>`).join(''), 'Belum ada presensi mapel ini');
+  return `${welcome('KBM GURU', 'Presensi dan Nilai Multi-Mapel', 'Pilih mapel dan kelas untuk mengisolasi input serta rekap.', '')}${section('Filter Kelas & Mata Pelajaran', 'Data tersimpan terpisah berdasarkan kombinasi mapel dan kelas.', filterForm)}${section('Input Presensi Siswa', 'Presensi KBM mengikuti filter aktif.', `<button type="button" class="btn btn-primary" data-action="add-teacher-student-attendance">${icon('plus')} Input Presensi</button>${attendanceTableHtml}`)}${section('Input Nilai Pelajaran', 'Nilai hanya tampil untuk mapel dan kelas aktif.', gradeTable(), `<button type="button" class="btn btn-primary" data-action="add-grade">${icon('plus')} Input Nilai</button>`)}`;
+}
 function attendanceTable(type = 'kelas') {
   if (type === 'tahfizh' && !hasTahfizhAccess() && !['parent', 'student'].includes(effectiveRole())) return '<div class="notice">Akses presensi jam Tahfizh hanya untuk Guru Tahfizh, Pembina/Musyrif, atau Administrator.</div>';
-  const data = state.attendance.filter((item) => item.type === type).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const halaqohId = type === 'tahfizh' ? activeHalaqohId() : '';
+  const data = state.attendance.filter((item) => item.type === type && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId)).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   if (['parent', 'student'].includes(effectiveRole())) return table(['Santri', 'Tanggal', 'Status', 'Pencatat'], data.filter((item) => item.studentId === currentStudent().id).map((item) => `<tr><td>${studentById(item.studentId).name}</td><td>${formatDate(item.date)}</td><td>${statusBadge(item.status)}</td><td>${item.by || 'Pembina'}</td></tr>`).join(''));
   return groupedStudentRecords(data, (item) => `<div class="accordion-record"><b>${escapeHtml(studentById(item.studentId).name)}</b><span>${formatDate(item.date)} - ${escapeHtml(item.status || '-')}</span><small>${escapeHtml(item.by || 'Pembina')}</small></div>`);
 }
@@ -1198,6 +1320,36 @@ function selfPasswordForm() {
   const warning = "Batas maksimal perubahan kata sandi mandiri telah tercapai (2/2 kali). Untuk melakukan perubahan/reset kata sandi kembali, silakan hubungi Admin Ma'had.";
   const message = account?.role === 'mahad' ? 'Perubahan kata sandi mandiri tanpa batas.' : locked ? warning : 'Batas maksimal ganti kata sandi mandiri adalah 2 kali.';
   return `<form id="admin-password-form" class="form-grid"><p class="notice ${locked ? 'font-bold' : ''}">${message}</p><label>Password Saat Ini<input name="currentPassword" type="password" autocomplete="current-password" required ${locked ? 'disabled' : ''}></label><label>Password Baru<input name="newPassword" type="password" minlength="10" autocomplete="new-password" required ${locked ? 'disabled' : ''}></label><label class="full">Konfirmasi Password Baru<input name="confirmPassword" type="password" minlength="10" autocomplete="new-password" required ${locked ? 'disabled' : ''}></label><button type="submit" class="btn btn-primary full" ${locked ? 'disabled' : ''}>Ubah Password</button></form>`;
+}
+function paymentProofGroup(payment) {
+  return String(payment.category || '').toUpperCase() === 'POCKET_MONEY' ? 'Uang Saku' : 'SPP / Non-SPP';
+}
+function paymentVerificationStatus(payment) {
+  return ['verified', 'approved', 'terverifikasi'].includes(String(payment.status || '').toLowerCase()) ? 'Terverifikasi' : 'Menunggu Verifikasi';
+}
+function paymentProofPreview(payment) {
+  if (!payment.receiptImageData) return '<div class="empty">Tidak ada gambar bukti tersimpan.</div>';
+  return `<img src="${escapeHtml(payment.receiptImageData)}" alt="Bukti transfer ${escapeHtml(studentById(payment.studentId).name)}" style="max-width:100%;max-height:480px;object-fit:contain;border-radius:12px;border:1px solid #d1fae5">`;
+}
+function paymentVerificationPanel() {
+  const pending = state.payments
+    .filter((payment) => isActiveStudent(studentById(payment.studentId)))
+    .slice()
+    .sort((a, b) => new Date(b.submittedAt || b.date || 0) - new Date(a.submittedAt || a.date || 0));
+  const renderGroup = (group) => {
+    const grouped = {};
+    pending.filter((payment) => paymentProofGroup(payment) === group).forEach((payment) => {
+      const student = studentById(payment.studentId);
+      const key = `${student.className || 'Kelas belum ditentukan'} - ${student.name}`;
+      (grouped[key] ||= []).push(payment);
+    });
+    const content = Object.entries(grouped).map(([studentLabel, payments]) => `<details class="accordion-group" open><summary><span>${escapeHtml(studentLabel)}</span><small>${payments.length} bukti</small></summary><div class="accordion-content"><div class="table-wrap"><table><thead><tr><th>Periode</th><th>Nominal</th><th>File</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${payments.map((payment) => {
+      const canVerify = currentRoleIsAdmin() && !['verified', 'approved', 'terverifikasi'].includes(String(payment.status || '').toLowerCase());
+      return `<tr><td>${escapeHtml(payment.period || '-')}</td><td>${money(payment.amount)}</td><td>${escapeHtml(payment.receiptFileName || payment.receiptImage || payment.proof || '-')}<small>${escapeHtml(payment.scanStatus || 'Belum dipindai')}</small></td><td>${statusBadge(payment.status)}</td><td class="actions-inline"><button type="button" class="btn btn-small btn-ghost" data-payment-proof="${payment.id}">Lihat Bukti</button>${canVerify ? `<button type="button" class="btn btn-small btn-primary" data-payment="${payment.id}" data-payment-status="Verified">Verifikasi</button>` : ''}</td></tr>`;
+    }).join('')}</tbody></table></div></div></details>`).join('');
+    return content || '<div class="empty">Belum ada bukti transfer pada kategori ini.</div>';
+  };
+  return `<section class="panel payment-verification-panel"><div class="panel-head"><div><h2>Pusat Verifikasi Bukti Transfer</h2><p>Terakhir diperbarui ${escapeHtml(formatLocalLongDate())}. Bukti dikelompokkan berdasarkan kelas dan nama santri.</p></div><span class="badge badge-warning">${pending.filter((item) => paymentVerificationStatus(item) !== 'Terverifikasi').length} menunggu</span></div><div class="grid-2"><div><h3 class="eyebrow">SPP / Non-SPP</h3>${renderGroup('SPP / Non-SPP')}</div><div><h3 class="eyebrow">UANG SAKU</h3>${renderGroup('Uang Saku')}</div></div></section>`;
 }
 function paymentTable(actions = false, studentId) {
   const data = state.payments.filter((payment) => (!studentId || payment.studentId === studentId) && isActiveStudent(studentById(payment.studentId))).slice().sort((a, b) => new Date(b.submittedAt || b.date || 0) - new Date(a.submittedAt || a.date || 0));
@@ -1267,7 +1419,7 @@ function financeView() {
   const visibleBills = state.financeBills.filter((bill) => !studentId || bill.studentId === studentId);
   const outstanding = visibleBills.filter((bill) => bill.status !== 'Paid').reduce((sum, bill) => sum + billNet(bill), 0);
   return `${welcome('KEUANGAN YAYASAN', 'Billing, Beasiswa & Invoice', 'Komponen SPP dan non-SPP dikelola transparan dengan nominal fleksibel.', currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-billing">${icon('plus')} Tambah Komponen</button>` : '')}
-    ${renderPaymentDestinationDetails()}
+    ${renderPaymentDestinationDetails({ adminPanel: currentRoleIsAdmin() })}
     <div class="stats-grid">${statCard('Tagihan Aktif', state.financeBills.filter((bill) => bill.status !== 'Paid').length, 'Perlu ditindaklanjuti', 'receipt', 'orange')}${statCard('Piutang Bersih', money(outstanding), 'Setelah beasiswa & diskon', 'wallet-cards', 'purple')}${statCard('Beasiswa Aktif', state.scholarships.filter((item) => item.active).length, 'Program bantuan', 'heart-handshake', 'green')}${statCard('Invoice Terbit', state.invoices.length, 'Dapat dicetak', 'file-check-2', 'blue')}</div>
     ${section('Daftar Tagihan', 'Rincian nominal yang harus dibayar', billingTable(undefined, studentId))}
     ${section('Pembayaran & Invoice', 'Persetujuan otomatis menerbitkan invoice dan kuitansi', paymentTable(currentRoleIsAdmin(), studentId))}
@@ -1280,9 +1432,9 @@ function renderPaymentDestinationDetails(options = {}) {
   const education = paymentAccount(state.config?.paymentAccounts?.education, OFFICIAL_EDUCATION_ACCOUNT);
   const pocketMoney = paymentAccount(state.config?.paymentAccounts?.pocketMoney, DEFAULT_POCKET_ACCOUNT);
   const includeAdminPanel = options.adminPanel === true && currentRoleIsAdmin();
-  const card = (title, description, account, locked) => `<article class="panel payment-destination-card"><div class="panel-head"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></div><span class="badge ${locked ? 'badge-success' : 'badge-warning'}">${locked ? 'Rekening resmi' : 'Dapat diperbarui'}</span></div><dl class="payment-account-details"><div><dt>Bank</dt><dd>${escapeHtml(account.bank)}</dd></div><div><dt>Nomor Rekening</dt><dd><code>${escapeHtml(account.accountNumber)}</code></dd></div><div><dt>Atas Nama</dt><dd>${escapeHtml(account.accountName)}</dd></div></dl></article>`;
-  const adminPanel = includeAdminPanel ? `<section class="panel payment-account-settings"><div class="panel-head"><div><h2>Pengaturan Rekening Uang Saku</h2><p>Hanya rekening uang saku yang dapat diubah oleh admin berwenang. Rekening SPP tetap terkunci.</p></div></div><form id="pocket-account-form" class="form-grid"><label>Nama Bank<input name="bank" value="${escapeHtml(pocketMoney.bank)}" required></label><label>Nomor Rekening<input name="accountNumber" inputmode="numeric" value="${escapeHtml(pocketMoney.accountNumber)}" required></label><label class="full">Nama Pemilik Rekening<input name="accountName" value="${escapeHtml(pocketMoney.accountName)}" required></label><button type="submit" class="btn btn-primary full">Simpan Rekening Uang Saku</button></form></section>` : '';
-  return `<div class="payment-destinations"><div class="panel-head"><div><h2>Tujuan Pembayaran</h2><p>Gunakan rekening sesuai jenis pembayaran yang dipilih.</p></div></div><div class="grid-2">${card('SPP / Pendidikan', 'Pembayaran pendidikan dan uang bangunan.', education, true)}${card('Uang Saku', 'Top up uang saku santri.', pocketMoney, false)}</div>${adminPanel}</div>`;
+  const card = (title, description, account) => `<article class="panel payment-destination-card"><div class="panel-head"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></div><span class="badge badge-success">Rekening aktif</span></div><dl class="payment-account-details"><div><dt>Bank</dt><dd>${escapeHtml(account.bank)}</dd></div><div><dt>Nomor Rekening</dt><dd><code>${escapeHtml(account.accountNumber)}</code></dd></div><div><dt>Atas Nama</dt><dd>${escapeHtml(account.accountName)}</dd></div></dl></article>`;
+  const adminPanel = includeAdminPanel ? `<section class="panel payment-account-settings"><div class="panel-head"><div><h2>Pengaturan Norek Yayasan</h2><p>Ma'had dan Admin dapat memperbarui rekening SPP/Pendidikan serta Uang Saku.</p></div></div><form id="payment-accounts-form" class="form-grid"><label>Bank SPP / Pendidikan<input name="educationBank" value="${escapeHtml(education.bank)}" required></label><label>Nomor Rekening SPP<input name="educationAccountNumber" inputmode="numeric" value="${escapeHtml(education.accountNumber)}" required></label><label>Nama Pemilik SPP<input name="educationAccountName" value="${escapeHtml(education.accountName)}" required></label><label>Bank Uang Saku<input name="pocketBank" value="${escapeHtml(pocketMoney.bank)}" required></label><label>Nomor Rekening Uang Saku<input name="pocketAccountNumber" inputmode="numeric" value="${escapeHtml(pocketMoney.accountNumber)}" required></label><label>Nama Pemilik Uang Saku<input name="pocketAccountName" value="${escapeHtml(pocketMoney.accountName)}" required></label><button type="submit" class="btn btn-primary full">Simpan Semua Rekening</button></form></section>` : '';
+  return `<div class="payment-destinations"><div class="panel-head"><div><h2>Tujuan Pembayaran</h2><p>Gunakan rekening sesuai jenis pembayaran yang dipilih.</p></div></div><div class="grid-2">${card('SPP / Pendidikan', 'Pembayaran pendidikan dan uang bangunan.', education)}${card('Uang Saku', 'Top up uang saku santri.', pocketMoney)}</div>${adminPanel}</div>`;
 }
 function gateTable() {
   const data = state.permits.filter((permit) => permit.status === 'Approved');
@@ -1412,7 +1564,7 @@ function disciplineView() {
 }
 
 function renderView() {
-  if (state.view === 'accounts' && effectiveRole() !== 'admin') {
+  if (state.view === 'accounts' && !canManageUserAccounts()) {
     state.view = 'dashboard';
   }
   let html;
@@ -1423,23 +1575,23 @@ function renderView() {
   else if (state.view === 'students') html = section('Data Master Santri', 'Admin dapat mengelola data; role lain hanya membaca.', studentsTable(), currentRoleIsAdmin() ? `<div class="actions-inline"><button type="button" class="btn btn-primary" data-action="add-student">${icon('plus')} Tambah Santri</button><button type="button" class="btn btn-ghost" data-action="promote-students">${icon('arrow-up-circle')} Proses Kenaikan Kelas</button></div>` : canPromoteStudents() ? `<button type="button" class="btn btn-ghost" data-action="promote-students">${icon('arrow-up-circle')} Proses Kenaikan Kelas</button>` : '');
   else if (state.view === 'classes') html = section('Manajemen Kelas & Program', 'PPTAK/KWNQ satu kelas; SMK memakai jurusan dinamis.', `${classesTable()}${currentRoleIsAdmin() ? section('Jurusan SMK Dinamis', 'Tambah atau ubah jurusan sesuai kebutuhan sekolah.', majorsTable(), `<button type="button" class="btn btn-primary" data-action="add-major">${icon('plus')} Tambah Jurusan</button>`) : ''}`, currentRoleIsAdmin() ? `<button type="button" class="btn btn-primary" data-action="add-class">${icon('plus')} Tambah Kelas</button>` : '');
   else if (state.view === 'teachers') html = section('Manajemen Guru & Ustadz', 'Data pengajar dan pembina', teachersTable(), currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-teacher">${icon('plus')} Tambah Guru</button>` : '');
-  else if (state.view === 'accounts' && effectiveRole() === 'admin') html = section('Akun Internal Staf', 'Kelola username dan password internal tanpa email', accountsTable(), `<button class="btn btn-primary" data-action="add-account">${icon('plus')} Buat Akun Staf</button>`);
+  else if (state.view === 'accounts' && canManageUserAccounts()) html = section('Akun Internal Staf', 'Kelola username dan password internal tanpa email', accountsTable(), `<button class="btn btn-primary" data-action="add-account">${icon('plus')} Buat Akun Staf</button>`);
   else if (state.view === 'permits') html = effectiveRole() === 'parent' ? permitForm() : `${musyrifPermitForm()}${section('Manajemen Perizinan', 'Verifikasi seluruh pengajuan santri', permitTable(true))}`;
   else if (state.view === 'billing') html = canViewFinance() ? financeView() : dashboard();
-  else if (state.view === 'payments') html = canViewFinance() ? (effectiveRole() === 'parent' ? paymentForm() : section('Verifikasi Pembayaran', 'Validasi bukti transfer wali santri', paymentTable(currentRoleIsAdmin(), effectiveRole() === 'parent' ? currentStudent().id : undefined), currentRoleIsAdmin() ? `<button type="button" class="btn btn-primary" data-action="add-billing">${icon('plus')} Buat Tagihan</button>` : '')) : dashboard();
+  else if (state.view === 'payments') html = canViewFinance() ? (effectiveRole() === 'parent' ? paymentForm() : `${paymentVerificationPanel()}${section('Riwayat Pembayaran', 'Seluruh transaksi pembayaran yang tercatat', paymentTable(currentRoleIsAdmin()))}`) : dashboard();
   else if (state.view === 'pocket') html = canViewFinance() ? pocketMoneyView() : dashboard();
   else if (state.view === 'academic') html = academicView();
   else if (state.view === 'pkl') html = canViewPkl() ? pklView() : dashboard();
   else if (state.view === 'tahfizh-semester') html = ['yayasan', 'kepsek', 'mahad', 'maahad', 'admin', 'pembina', 'musyrif', 'guru_tahfizh'].includes(effectiveRole()) ? tahfizhSemesterView() : dashboard();
   else if (state.view === 'attendance-semester') html = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? attendanceSemesterView() : dashboard();
-  else if (state.view === 'grades') html = section('Nilai Pelajaran', 'Input dan rekap nilai KBM', gradeTable(), `<button class="btn btn-primary" data-action="add-grade">${icon('plus')} Input Nilai</button>`);
+  else if (state.view === 'grades') html = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? teacherAcademicView() : section('Nilai Pelajaran', 'Input dan rekap nilai KBM', gradeTable(), `<button class="btn btn-primary" data-action="add-grade">${icon('plus')} Input Nilai</button>`);
   else if (state.view === 'attendance') html = section('Presensi Kelas', 'Kehadiran KBM hari ini', attendanceTable());
   else if (state.view === 'teacher-attendance') html = (currentRoleIsAdmin() || ['kepsek', 'yayasan'].includes(effectiveRole())) ? teacherAttendanceAdminView() : effectiveRole() === 'guru' ? teacherPersonalAttendanceView() : dashboard();
   else if (state.view === 'points') {
     const studentOnly = ['student', 'santri'].includes(effectiveRole());
     html = section('Poin Kedisiplinan', studentOnly ? 'Riwayat poin dan sanksi Anda' : 'Catat prestasi dan pelanggaran santri', pointsTable(studentOnly ? currentStudent().id : undefined), studentOnly ? '' : `<button class="btn btn-primary" data-action="add-point">${icon('plus')} Input Poin</button>`);
   }
-  else if (state.view === 'tahfizh') html = section('Program Tahfizh', 'Rekap capaian hafalan dan setoran santri', tahfizhMonthlySummary() + tahfizhTable(), (currentRoleIsAdmin() || hasTahfizhAccess()) ? `<button type="button" class="btn btn-primary" data-action="add-tahfizh">${icon('plus')} Input Setoran</button>` : '');
+  else if (state.view === 'tahfizh') html = section('Program Tahfizh', 'Rekap capaian hafalan dan setoran santri', `<div class="notice"><b>Halaqoh: ${escapeHtml(halaqohLabel())}</b><p class="metric-note">Data presensi dan progres dibatasi sesuai kelompok halaqoh pengampu.</p></div>${tahfizhMonthlySummary()}${tahfizhTable()}`, (currentRoleIsAdmin() || hasTahfizhAccess()) ? `<button type="button" class="btn btn-primary" data-action="add-tahfizh">${icon('plus')} Input Setoran</button>` : '');
   else if (state.view === 'gate') html = gateView();
   else if (state.view === 'schedule') html = scheduleView();
   else if (state.view === 'security-reports') html = securityReportsView();
@@ -1455,7 +1607,14 @@ function renderView() {
   bindNotificationActions();
 }
 
+let renderingDashboard = false;
+let queuedDashboardRender = false;
 function renderDashboard() {
+  if (renderingDashboard) {
+    queuedDashboardRender = true;
+    return;
+  }
+  renderingDashboard = true;
   try {
     renderShell();
     renderView();
@@ -1488,14 +1647,7 @@ function renderDashboard() {
     if (window.lucide) lucide.createIcons();
   } catch (error) {
     console.error('[BoardingPro] Gagal merender dashboard:', error);
-    const collectionDefaults = ['students', 'internalAccounts', 'classes', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords', 'pklReports', 'tahfizhSemesterRecords', 'attendance', 'schedules', 'events', 'payments', 'permits', 'tahfizh', 'grades', 'points', 'teacherAttendance', 'dormAttendance'];
-    collectionDefaults.forEach((key) => {
-      if (!Array.isArray(state[key])) state[key] = clone(seedDataSource[key] || []);
-    });
-    state.config = state.config && typeof state.config === 'object' ? state.config : { institution: {} };
-    state.config.institution = state.config.institution && typeof state.config.institution === 'object' ? state.config.institution : {};
-    state.users = Array.isArray(state.internalAccounts) ? state.internalAccounts : clone(fallbackSeedData.internalAccounts);
-    state.currentUser = state.currentUser || state.users[0] || null;
+    normalizeStateCollections();
     const content = $('#main-content');
     if (content) {
       try {
@@ -1505,6 +1657,12 @@ function renderDashboard() {
         console.error('[BoardingPro] Fallback dashboard juga gagal:', fallbackError);
         content.innerHTML = `<section class="panel empty-state"><div class="empty-state-icon">${icon('inbox', 28)}</div><h2>Belum Ada Data</h2><p>Data dashboard belum tersedia. Silakan coba lagi setelah sinkronisasi selesai.</p></section>`;
       }
+    }
+  } finally {
+    renderingDashboard = false;
+    if (queuedDashboardRender) {
+      queuedDashboardRender = false;
+      window.requestAnimationFrame(() => renderDashboard());
     }
   }
 
@@ -1731,7 +1889,29 @@ function permitForm() {
 }
 function paymentForm() {
   const categories = [financeCategories.spp, financeCategories.foundation, ...financeCategories.maahadNonSpp, financeCategories.pocketMoney, financeCategories.custom];
-  return renderPaymentDestinationDetails() + section('Konfirmasi Pembayaran', "Kirim konfirmasi SPP, non-SPP ma'had atau uang saku", `<form id="payment-form" class="form-grid"><label>Jenis Pembayaran<select name="category">${categories.map((category) => `<option value="${category.id}">${category.label}</option>`).join('')}</select></label><label>Periode<input name="period" value="September 2026" required></label><label>Nominal Bayar (Rp)<input name="amount" type="number" min="1" required></label><label>Metode<select name="method"><option>Transfer BSI</option><option>Virtual Account</option><option>Tunai ke Admin</option></select></label><label class="full">Upload Bukti Transfer (gambar)<input id="upload-receipt" name="receiptImage" type="file" accept="image/*"><small id="receipt-scan-status">Belum ada pemindaian.</small></label><label class="full">Catatan / Nama file bukti<input name="proof" placeholder="contoh: bukti-transfer.jpg" required></label><div class="full"><button type="submit" class="btn btn-primary">${icon('send')} Kirim Konfirmasi</button></div></form>${section('Riwayat Pembayaran', 'Status verifikasi admin', paymentTable(false, currentStudent().id))}${compactSection('Tagihan & Kuitansi', 'Rincian pembayaran santri', renderWaliInvoices(currentStudent().nis))}`);
+  return renderPaymentDestinationDetails() + section('Konfirmasi Pembayaran', "Kirim konfirmasi SPP, non-SPP ma'had atau uang saku", `<form id="payment-form" class="form-grid"><label>Jenis Pembayaran<select name="category">${categories.map((category) => `<option value="${category.id}">${category.label}</option>`).join('')}</select></label><label>Periode<input name="period" value="September 2026" required></label><label>Nominal Bayar (Rp)<input name="amount" type="number" min="1" required></label><label>Metode<select name="method"><option>Transfer BSI</option><option>Virtual Account</option><option>Tunai ke Admin</option></select></label><label class="full">Upload Bukti Transfer (gambar)<input id="upload-receipt" name="receiptImage" type="file" accept="image/*"><small id="receipt-scan-status">Belum ada pemindaian.</small><span id="receipt-preview" class="receipt-preview" hidden></span></label><label class="full">Catatan / Nama file bukti<input name="proof" placeholder="contoh: bukti-transfer.jpg" required></label><div class="full"><button type="submit" class="btn btn-primary">${icon('send')} Kirim Konfirmasi</button></div></form>${section('Riwayat Pembayaran', 'Status verifikasi admin', paymentTable(false, currentStudent().id))}${compactSection('Tagihan & Kuitansi', 'Rincian pembayaran santri', renderWaliInvoices(currentStudent().nis))}`);
+}
+function scanTransferReceipt(file) {
+  return new Promise((resolve, reject) => {
+    if (!(file instanceof File) || !file.type.startsWith('image/')) {
+      reject(new Error('Bukti transfer harus berupa gambar.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Bukti transfer tidak dapat dibaca.'));
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const image = new Image();
+      image.onload = () => {
+        const candidate = file.name.match(/(?:rp|nominal|amount|transfer)[^\d]*(\d[\d.,]*)/i);
+        const digits = candidate ? candidate[1].replace(/[.,]/g, '') : '';
+        resolve({ dataUrl, width: image.naturalWidth, height: image.naturalHeight, amount: digits ? Number(digits) : 0 });
+      };
+      image.onerror = () => reject(new Error('Format gambar bukti transfer tidak valid.'));
+      image.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 let modalEscapeHandler = null;
 function openModal(title, content) {
@@ -1975,6 +2155,12 @@ function bindActions() {
   document.querySelectorAll('[data-action="add-schedule"]').forEach((button) => button.addEventListener('click', () => openScheduleModal('schedule')));
   document.querySelectorAll('[data-action="add-event"]').forEach((button) => button.addEventListener('click', () => openScheduleModal('event')));
   document.querySelectorAll('[data-payment]').forEach((button) => button.addEventListener('click', (e) => { e.preventDefault(); const payment = state.payments.find((item) => item.id === button.dataset.payment); if (payment && currentRoleIsAdmin()) { payment.status = button.dataset.paymentStatus; if (payment.status === 'Verified') { const verifier = currentAccount(); payment.verifierName = verifier?.name || verifier?.nama || roles[effectiveRole()]?.label || 'Administrator'; payment.verifierSignedAt = new Date().toISOString(); payment.verifierQrPayload = { documentId: payment.id, documentType: 'invoice', role: effectiveRole() }; createInvoiceForPayment(payment); } persist(); render(); alert('Pembayaran disetujui. Invoice dan kuitansi digital otomatis diterbitkan.'); } }));
+  document.querySelectorAll('[data-payment-proof]').forEach((button) => button.addEventListener('click', () => {
+    const payment = state.payments.find((item) => item.id === button.dataset.paymentProof);
+    if (!payment || !currentRoleIsAdmin()) return;
+    const student = studentById(payment.studentId);
+    openModal('Pratinjau Bukti Transfer', `<div class="form-grid"><p><b>${escapeHtml(student.name)}</b> - ${escapeHtml(student.className || 'Kelas belum ditentukan')}<br>${escapeHtml(categoryLabel(payment.category))} - ${money(payment.amount)} - ${escapeHtml(payment.period || '-')}</p>${paymentProofPreview(payment)}<p class="metric-note">Status pemindaian: ${escapeHtml(payment.scanStatus || 'Belum dipindai')}<br>File: ${escapeHtml(payment.receiptFileName || payment.receiptImage || payment.proof || '-')}</p></div>`);
+  }));
   document.querySelectorAll('[data-pocket-approve]').forEach((button) => button.addEventListener('click', (e) => { e.preventDefault(); if (!currentRoleIsAdmin()) return; const transaction = state.pocketTransactions.find((item) => item.id === button.dataset.pocketApprove && item.type === 'Top Up' && item.status === 'Pending'); if (!transaction) return; transaction.status = 'Lunas'; const balance = state.pocketBalances.find((item) => item.studentId === transaction.studentId); if (balance) balance.balance = Number(balance.balance || 0) + Number(transaction.amount || 0); else state.pocketBalances.push({ studentId: transaction.studentId, balance: Number(transaction.amount || 0) }); const payment = { id: `PAY-${transaction.id}`, studentId: transaction.studentId, category: 'POCKET_MONEY', period: 'September 2026', amount: Number(transaction.amount || 0), method: transaction.method || 'Top Up Uang Saku', status: 'Verified', submittedAt: transaction.date, proof: transaction.note || '' }; state.payments.push(payment); createInvoiceForPayment(payment); persist(); render(); }));
   document.querySelectorAll('[data-billing-read]').forEach((button) => button.addEventListener('click', () => { const bill = state.billingNotifications.find((item) => item.id === button.dataset.billingRead); if (bill) { bill.read = true; persist(); render(); } }));
   document.querySelectorAll('[data-document="invoice"]').forEach((button) => button.addEventListener('click', () => renderInvoiceModal(button.dataset.invoice, false)));
@@ -2023,12 +2209,22 @@ function bindActions() {
       state.students = state.students.filter((item) => item.id !== student.id);
       state.internalAccounts = state.internalAccounts.filter((item) => item.studentId !== student.id);
       state.pocketBalances = state.pocketBalances.filter((item) => item.studentId !== student.id);
+      state.users = state.internalAccounts;
+      if (state.currentUser?.studentId === student.id) state.currentUser = null;
       persist();
       render();
     });
   }));
   document.querySelectorAll('[data-action="add-point"]').forEach((button) => button.addEventListener('click', openPointModal));
   document.querySelectorAll('[data-action="add-grade"]').forEach((button) => button.addEventListener('click', openGradeModal));
+  const teacherAcademicFilterForm = $('#teacher-academic-filter');
+  if (teacherAcademicFilterForm) teacherAcademicFilterForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    state.teacherAcademicFilter = Object.fromEntries(new FormData(teacherAcademicFilterForm).entries());
+    persist();
+    render();
+  });
+  document.querySelectorAll('[data-action="add-teacher-student-attendance"]').forEach((button) => button.addEventListener('click', openTeacherStudentAttendanceModal));
   document.querySelectorAll('[data-report-tab]').forEach((button) => button.addEventListener('click', () => {
     document.querySelectorAll('[data-report-tab]').forEach((item) => item.classList.toggle('btn-primary', item === button));
     document.querySelectorAll('[data-report-tab]').forEach((item) => item.classList.toggle('btn-ghost', item !== button));
@@ -2120,8 +2316,33 @@ function bindActions() {
   const payment = $('#payment-form');
   if (payment) {
     const receipt = $('#upload-receipt');
-    if (receipt) receipt.addEventListener('change', () => { const status = $('#receipt-scan-status'); const file = receipt.files[0]; if (!file) return; if (status) status.textContent = 'Memindai Bukti Transfer...'; window.setTimeout(() => { const candidate = file.name.match(/(?:rp|nominal|amount|transfer)[^\d]*(\d[\d.,]*)/i); const digits = candidate ? candidate[1].replace(/[.,]/g, '') : ''; const amount = payment.querySelector('[name="amount"]'); if (digits && amount) amount.value = digits; if (status) status.textContent = digits ? `Pemindaian selesai. Nominal terdeteksi: Rp ${Number(digits).toLocaleString('id-ID')}. Silakan pastikan benar.` : 'Pemindaian selesai. Nominal tidak terbaca otomatis; silakan isi manual.'; }, 700); });
-    payment.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(payment); const student = currentStudent(); const itemId = `PAY-${Date.now()}`; const submittedAt = new Date().toISOString(); const parent = currentAccount(); const item = { id: itemId, studentId: student.id, category: form.get('category'), period: form.get('period'), amount: Number(form.get('amount')), method: form.get('method'), status: 'pending_verification', submittedAt, proof: form.get('proof'), receiptImage: form.get('receiptImage')?.name || null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali', applicantQrPayload: { documentId: itemId, documentType: 'invoice', role: 'parent' } }; state.payments.unshift(item); const notice = { id: `notif-payment-${item.id}`, title: `Pembayaran baru A.N ${student.name}`, description: 'Memerlukan konfirmasi verifikasi.', category: 'Keuangan', timestamp: 'Baru', targetView: 'payments', createdAt: new Date().toISOString(), read: false }; ['maahad'].forEach((role) => roleNotifications[role].unshift(clone(notice))); persistNotificationState(); persist(); alert('Konfirmasi pembayaran berhasil dikirim.'); render(); });
+    if (receipt) receipt.addEventListener('change', async () => {
+      const status = $('#receipt-scan-status');
+      const preview = $('#receipt-preview');
+      const file = receipt.files[0];
+      if (!file) return;
+      if (status) status.textContent = 'Memindai dan memvalidasi bukti transfer...';
+      try {
+        const scan = await scanTransferReceipt(file);
+        payment.dataset.receiptData = scan.dataUrl;
+        payment.dataset.receiptWidth = String(scan.width);
+        payment.dataset.receiptHeight = String(scan.height);
+        const amount = payment.querySelector('[name="amount"]');
+        if (scan.amount && amount) amount.value = String(scan.amount);
+        if (preview) {
+          preview.hidden = false;
+          preview.innerHTML = `<img src="${escapeHtml(scan.dataUrl)}" alt="Pratinjau bukti transfer" style="max-width:280px;max-height:180px;object-fit:contain;border:1px solid #d1fae5;border-radius:10px;margin-top:8px">`;
+        }
+        if (status) status.textContent = scan.amount ? `Pemindaian selesai. Nominal terdeteksi: Rp ${scan.amount.toLocaleString('id-ID')}. Silakan pastikan benar.` : `Pemindaian selesai (${scan.width} x ${scan.height} px). Nominal silakan diisi atau diperiksa manual.`;
+        showToast('Bukti transfer berhasil dipindai dan siap diverifikasi.', 'success');
+      } catch (error) {
+        payment.dataset.receiptData = '';
+        if (preview) { preview.hidden = true; preview.innerHTML = ''; }
+        if (status) status.textContent = error.message;
+        showToast(error.message, 'error');
+      }
+    });
+    payment.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(payment); const student = currentStudent(); const itemId = `PAY-${Date.now()}`; const submittedAt = new Date().toISOString(); const parent = currentAccount(); const item = { id: itemId, studentId: student.id, category: form.get('category'), period: form.get('period'), amount: Number(form.get('amount')), method: form.get('method'), status: 'pending_verification', submittedAt, proof: form.get('proof'), receiptImage: form.get('receiptImage')?.name || null, receiptFileName: form.get('receiptImage')?.name || null, receiptImageData: payment.dataset.receiptData || null, scanStatus: payment.dataset.receiptData ? 'Pemindaian berhasil' : 'Belum dipindai', scannedAt: payment.dataset.receiptData ? new Date().toISOString() : null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali', applicantQrPayload: { documentId: itemId, documentType: 'invoice', role: 'parent' } }; state.payments.unshift(item); const notice = { id: `notif-payment-${item.id}`, title: `Pembayaran baru A.N ${student.name}`, description: 'Memerlukan konfirmasi verifikasi.', category: 'Keuangan', timestamp: 'Baru', targetView: 'payments', createdAt: new Date().toISOString(), read: false }; ['maahad', 'admin'].forEach((role) => { if (roleNotifications[role]) roleNotifications[role].unshift(clone(notice)); }); persistNotificationState(); persist(); alert('Konfirmasi pembayaran berhasil dikirim dan masuk ke antrean verifikasi.'); render(); });
   }
   const topup = $('#pocket-topup-form');
   if (topup) topup.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(topup); state.pocketTransactions.push({ id: `TRX-${Date.now()}`, studentId: currentStudent().id, date: today, type: 'Top Up', amount: Number(form.get('amount')), note: form.get('note') || `Top up ${form.get('method')}`, method: form.get('method'), status: 'Pending' }); persist(); alert('Pengajuan top up berhasil dikirim dan menunggu verifikasi admin.'); render(); });
@@ -2130,22 +2351,27 @@ function bindActions() {
   const teacherAttendance = $('#teacher-attendance-form');
   if (teacherAttendance) teacherAttendance.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(teacherAttendance); state.teacherAttendance.unshift({ id: `TA-${Date.now()}`, teacher: state.displayName || roles.guru.demoName, date: today, status: form.get('status'), checkIn: form.get('checkIn') || null, checkOut: form.get('checkOut') || null }); persist(); alert('Presensi pribadi tersimpan.'); render(); });
   const adminPassword = $('#admin-password-form');
-  const pocketAccountForm = $('#pocket-account-form');
-  if (pocketAccountForm) pocketAccountForm.addEventListener('submit', (event) => {
+  const paymentAccountsForm = $('#payment-accounts-form');
+  if (paymentAccountsForm) paymentAccountsForm.addEventListener('submit', (event) => {
     event.preventDefault();
-    if (!currentRoleIsAdmin()) return;
-    const form = new FormData(pocketAccountForm);
-    const bank = String(form.get('bank') || '').trim();
-    const accountNumber = String(form.get('accountNumber') || '').replace(/\s+/g, '').trim();
-    const accountName = String(form.get('accountName') || '').trim();
-    if (!bank || !/^[0-9]{6,24}$/.test(accountNumber) || !accountName) {
-      alert('Lengkapi bank, nomor rekening 6-24 digit, dan nama pemilik rekening.');
+    if (!canManageFinance()) return;
+    const form = new FormData(paymentAccountsForm);
+    const readAccount = (prefix) => ({
+      bank: String(form.get(`${prefix}Bank`) || '').trim(),
+      accountNumber: String(form.get(`${prefix}AccountNumber`) || '').replace(/\s+/g, '').trim(),
+      accountName: String(form.get(`${prefix}AccountName`) || '').trim(),
+      locked: false
+    });
+    const education = readAccount('education');
+    const pocketMoney = readAccount('pocket');
+    if (![education, pocketMoney].every((account) => account.bank && /^[0-9]{6,24}$/.test(account.accountNumber) && account.accountName)) {
+      alert('Lengkapi seluruh bank, nomor rekening 6-24 digit, dan nama pemilik rekening.');
       return;
     }
-    state.config.paymentAccounts.pocketMoney = { bank, accountNumber, accountName, locked: false };
+    state.config.paymentAccounts = { education, pocketMoney };
     persist();
     render();
-    alert('Rekening uang saku berhasil diperbarui.');
+    alert('Rekening SPP dan Uang Saku berhasil diperbarui.');
   });
   if (adminPassword) adminPassword.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(adminPassword); const account = currentAccount(); const currentPassword = String(form.get('currentPassword') || ''); const newPassword = String(form.get('newPassword') || ''); if (!account || account.password !== currentPassword) { alert('Password saat ini tidak sesuai.'); return; } if (!isMasterAdminSession() && (account.passwordChangeCount || 0) >= 2) { alert("Batas maksimal perubahan kata sandi mandiri telah tercapai (2/2 kali). Untuk melakukan perubahan/reset kata sandi kembali, silakan hubungi Admin Ma'had."); return; } if (newPassword.length < 10 || newPassword !== String(form.get('confirmPassword') || '')) { alert('Password baru minimal 10 karakter dan harus sama dengan konfirmasi.'); return; } account.password = newPassword; if (!isMasterAdminSession()) account.passwordChangeCount = (account.passwordChangeCount || 0) + 1; state.currentUser = account; persist(); adminPassword.reset(); alert('Password berhasil diubah.'); });
 }
@@ -2285,25 +2511,36 @@ function openPointModal() {
   $('#point-modal-form').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.target); const value = Number(form.get('value')) * (form.get('kind') === 'pelanggaran' ? -1 : 1); state.points.unshift({ id: `PT-${Date.now()}`, studentId: form.get('studentId'), kind: form.get('kind'), note: form.get('note'), value, date: today }); const student = studentById(form.get('studentId')); student.points += value; persist(); closeModal(); render(); });
 }
 function openGradeModal() {
-  if (!['mahad', 'admin', 'kepsek', 'guru'].includes(effectiveRole())) return;
-  openModal('Input Nilai Pelajaran', `<form id="grade-modal-form" class="form-grid"><label>Santri<select name="studentId">${state.students.map((student) => `<option value="${student.id}">${student.name}</option>`).join('')}</select></label><label>Mata Pelajaran<input name="subject" required></label><label>Nilai<input name="score" type="number" min="0" max="100" required></label><label class="full">Catatan<input name="note"></label><button class="btn btn-primary full">Simpan Nilai</button></form>`);
-  $('#grade-modal-form').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.target); state.grades.unshift({ id: `GR-${Date.now()}`, studentId: form.get('studentId'), subject: form.get('subject'), score: Number(form.get('score')), note: form.get('note') }); persist(); closeModal(); render(); });
+  if (!['mahad', 'admin', 'kepsek', 'guru', 'guru_tahfizh'].includes(effectiveRole())) return;
+  const subjects = effectiveRole() === 'guru' ? teacherSubjects() : [...new Set(state.grades.map((item) => item.subject).filter(Boolean))];
+  const filter = state.teacherAcademicFilter || {};
+  openModal('Input Nilai Pelajaran', `<form id="grade-modal-form" class="form-grid"><label>Santri<select name="studentId">${teacherScopedStudents().map((student) => `<option value="${student.id}">${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`).join('')}</select></label><label>Mata Pelajaran<select name="subject">${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${filter.subject === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Nilai<input name="score" type="number" min="0" max="100" required></label><label class="full">Catatan<input name="note"></label><button class="btn btn-primary full">Simpan Nilai</button></form>`);
+  $('#grade-modal-form').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.target); const student = studentById(form.get('studentId')); state.grades.unshift({ id: `GR-${Date.now()}`, studentId: form.get('studentId'), className: student.className || '', subject: form.get('subject'), score: Number(form.get('score')), note: form.get('note'), teacher: currentAccount()?.name || currentAccount()?.nama || '' }); persist(); closeModal(); render(); });
+}
+function openTeacherStudentAttendanceModal() {
+  if (!['guru', 'guru_tahfizh'].includes(effectiveRole())) return;
+  const subjects = teacherSubjects();
+  const filter = state.teacherAcademicFilter || {};
+  openModal('Input Presensi Siswa', `<form id="teacher-student-attendance-form" class="form-grid"><label>Santri<select name="studentId">${teacherScopedStudents().map((student) => `<option value="${student.id}">${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`).join('')}</select></label><label>Mata Pelajaran<select name="subject">${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${filter.subject === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Tanggal<input name="date" type="date" value="${today}" required></label><label>Status<select name="status"><option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option></select></label><label class="full">Catatan<input name="note"></label><button class="btn btn-primary full">Simpan Presensi</button></form>`);
+  $('#teacher-student-attendance-form').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.target); const student = studentById(form.get('studentId')); state.attendance.unshift({ id: `ATT-${Date.now()}`, type: 'kelas', studentId: form.get('studentId'), className: student.className || '', subject: form.get('subject'), date: form.get('date'), status: form.get('status'), by: currentAccount()?.name || currentAccount()?.nama || roles.guru.demoName, note: form.get('note') || '' }); persist(); closeModal(); render(); });
 }
 function openTahfizhModal(record) {
   if (!hasTahfizhAccess()) return;
   const editing = Boolean(record);
   const value = (key, fallback = '') => record && record[key] !== undefined ? record[key] : fallback;
-  openModal(editing ? 'Edit Setoran Tahfizh' : 'Input Setoran Tahfizh', `<form id="tahfizh-modal-form" class="form-grid"><label>Santri<select name="studentId">${state.students.map((student) => `<option value="${student.id}" ${value('studentId') === student.id ? 'selected' : ''}>${student.name}</option>`).join('')}</select></label><label>Jenis<select name="type"><option ${value('type') === 'Ziyadah' ? 'selected' : ''}>Ziyadah</option><option ${value('type') === 'Murajaah' ? 'selected' : ''}>Murajaah</option></select></label><label>Predikat<select name="predikat"><option>Mutqin</option><option>Ziyadah</option></select></label><label>Juz<input name="juz" type="number" min="1" value="${value('juz')}" required></label><label>Surah<input name="surah" value="${escapeHtml(value('surah'))}" required></label><label class="full">Ayat<input name="ayat" value="${escapeHtml(value('ayat'))}" required></label><button type="submit" class="btn btn-primary full">${editing ? 'Simpan Perubahan' : 'Simpan Setoran'}</button></form>`);
-  $('#tahfizh-modal-form').addEventListener('submit', (event) => { event.preventDefault(); if (!(currentRoleIsAdmin() || hasTahfizhAccess())) return; const form = new FormData(event.target); const values = { studentId: form.get('studentId'), juz: Number(form.get('juz')), surah: form.get('surah'), ayat: form.get('ayat'), type: form.get('type'), predikat: form.get('predikat') }; if (editing) Object.assign(record, values); else state.tahfizh.unshift({ id: `TH-${Date.now()}`, ...values, status: 'Menunggu', date: today }); persist(); closeModal(); render(); });
+  const scopedStudents = currentRoleIsAdmin() ? state.students : halaqohStudents();
+  openModal(editing ? 'Edit Setoran Tahfizh' : 'Input Setoran Tahfizh', `<form id="tahfizh-modal-form" class="form-grid"><label>Santri<select name="studentId">${scopedStudents.map((student) => `<option value="${student.id}" ${value('studentId') === student.id ? 'selected' : ''}>${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`).join('')}</select></label><label>Halaqoh<input value="${escapeHtml(halaqohLabel())}" disabled></label><label>Jenis<select name="type"><option ${value('type') === 'Ziyadah' ? 'selected' : ''}>Ziyadah</option><option ${value('type') === 'Murajaah' ? 'selected' : ''}>Murajaah</option></select></label><label>Predikat<select name="predikat"><option>Mutqin</option><option>Ziyadah</option></select></label><label>Juz<input name="juz" type="number" min="1" value="${value('juz')}" required></label><label>Surah<input name="surah" value="${escapeHtml(value('surah'))}" required></label><label class="full">Ayat<input name="ayat" value="${escapeHtml(value('ayat'))}" required></label><button type="submit" class="btn btn-primary full">${editing ? 'Simpan Perubahan' : 'Simpan Setoran'}</button></form>`);
+  $('#tahfizh-modal-form').addEventListener('submit', (event) => { event.preventDefault(); if (!(currentRoleIsAdmin() || hasTahfizhAccess())) return; const form = new FormData(event.target); const values = { studentId: form.get('studentId'), halaqohId: activeHalaqohId() || studentById(form.get('studentId')).halaqohId || '', juz: Number(form.get('juz')), surah: form.get('surah'), ayat: form.get('ayat'), type: form.get('type'), predikat: form.get('predikat') }; if (editing) Object.assign(record, values); else state.tahfizh.unshift({ id: `TH-${Date.now()}`, ...values, status: 'Menunggu', date: today }); persist(); closeModal(); render(); });
 }
 function openTahfizhAttendanceModal() {
   if (!hasTahfizhAccess()) return;
-  openModal('Input Absensi Jam Tahfizh', `<form id="tahfizh-attendance-form" class="form-grid"><label>Santri<select name="studentId">${state.students.map((student) => `<option value="${student.id}">${escapeHtml(student.name)}  -  ${escapeHtml(student.nis)}</option>`).join('')}</select></label><label>Tanggal<input name="date" type="date" value="${today}" required></label><label>Status<select name="status"><option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option></select></label><label class="full">Catatan<input name="note" placeholder="Catatan jam Tahfizh"></label><button class="btn btn-primary full">Simpan Absensi</button></form>`);
+  const scopedStudents = currentRoleIsAdmin() ? state.students : halaqohStudents();
+  openModal('Input Absensi Jam Tahfizh', `<form id="tahfizh-attendance-form" class="form-grid"><label>Santri<select name="studentId">${scopedStudents.map((student) => `<option value="${student.id}">${escapeHtml(student.name)} - ${escapeHtml(student.nis)}</option>`).join('')}</select></label><label>Halaqoh<input value="${escapeHtml(halaqohLabel())}" disabled></label><label>Tanggal<input name="date" type="date" value="${today}" required></label><label>Status<select name="status"><option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option></select></label><label class="full">Catatan<input name="note" placeholder="Catatan jam Tahfizh"></label><button class="btn btn-primary full">Simpan Absensi</button></form>`);
   $('#tahfizh-attendance-form').addEventListener('submit', (event) => {
     event.preventDefault();
     if (!hasTahfizhAccess()) return;
     const form = new FormData(event.target);
-    state.attendance.unshift({ id: `ATT-TH-${Date.now()}`, type: 'tahfizh', studentId: form.get('studentId'), date: form.get('date'), status: form.get('status'), by: roles[effectiveRole()]?.label || roles.mahad.label, note: form.get('note') || '' });
+    state.attendance.unshift({ id: `ATT-TH-${Date.now()}`, type: 'tahfizh', halaqohId: activeHalaqohId() || studentById(form.get('studentId')).halaqohId || '', studentId: form.get('studentId'), date: form.get('date'), status: form.get('status'), by: roles[effectiveRole()]?.label || roles.mahad.label, note: form.get('note') || '' });
     persist();
     closeModal();
     render();

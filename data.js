@@ -121,25 +121,31 @@ const paymentAccounts = {
     locked: false
   }
 };
+const halaqoh = [
+  { id: 'HAL-UST-SALMAN', name: 'Halaqoh Ust. Salman', teacher: 'Ust. Salman' },
+  { id: 'HAL-UST-TAHFIZH', name: 'Halaqoh Ustadz Tahfizh', teacher: 'Ustadz Tahfizh' }
+];
 
 const seedData = {
   internalAccounts: [
+    { id: 'ACC-ADMIN-DEFAULT', role: 'admin', username: 'admin', password: 'admin123', name: 'Administrator', nama: 'Administrator', passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
     { id: 'ACC-SUPER', role: 'master_admin', username: 'masteradmin', password: 'superadmin123', name: "Master Admin Ma'had", nama: "Master Admin Ma'had", passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
     { id: 'ACC-MASTER', role: 'master_admin', username: 'admin.stkis', password: 'StkIs#2026!Pro', name: "Master Admin Ma'had", nama: "Master Admin Ma'had", passwordChangeCount: 0, status: 'Aktif', active: true, master: true },
     { id: 'ACC-001', role: 'yayasan', username: 'yayasan.demo', password: 'demo123', name: 'Dr. H. Abdullah', nama: 'Dr. H. Abdullah', passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-002', role: 'maahad', username: 'admin.maahad', password: 'admin123', name: 'Ust. Hasyim', nama: 'Ust. Hasyim', passwordChangeCount: 0, status: 'Aktif', active: true },
-    { id: 'ACC-003', role: 'guru', username: 'guru.demo', password: 'demo123', name: 'Ustadzah Rahma', nama: 'Ustadzah Rahma', subject: 'Guru DLE', isTahfizhTeacher: false, passwordChangeCount: 0, status: 'Aktif', active: true },
-    { id: 'ACC-004', role: 'pembina', username: 'pembina.demo', password: 'demo123', name: 'Ust. Salman', nama: 'Ust. Salman', passwordChangeCount: 0, status: 'Aktif', active: true },
+    { id: 'ACC-003', role: 'guru', username: 'guru.demo', password: 'demo123', name: 'Ustadzah Rahma', nama: 'Ustadzah Rahma', subjects: ['Bahasa Arab', 'Fiqih'], subject: 'Bahasa Arab', isTahfizhTeacher: false, passwordChangeCount: 0, status: 'Aktif', active: true },
+    { id: 'ACC-004', role: 'pembina', username: 'pembina.demo', password: 'demo123', name: 'Ust. Salman', nama: 'Ust. Salman', subject: 'Tahfizh', halaqohId: 'HAL-UST-SALMAN', passwordChangeCount: 0, status: 'Aktif', active: true },
     { id: 'ACC-005', role: 'security', username: 'security.demo', password: 'demo123', name: 'Pak Joko', nama: 'Pak Joko', passwordChangeCount: 0, status: 'Aktif', active: true }
   ],
   programs,
+  halaqoh,
   majors,
   semesters,
   financeCategories,
   finance: financeCategories,
   paymentAccounts,
   students: [
-    { id: 'STD-001', name: 'Ahmad Fauzan', nis: '240101', gender: 'L', program: 'SMK', major: 'TKJ', grade: 11, semester: 2, className: 'XI TKJ', parent: 'Bpk. Muhammad Fauzi', phone: '081234567890', attendance: 96, points: 18, tahfizh: 12, spp: 'Lunas', status: 'Aktif' },
+    { id: 'STD-001', name: 'Ahmad Fauzan', nis: '240101', gender: 'L', program: 'SMK', major: 'TKJ', grade: 11, semester: 2, className: 'XI TKJ', halaqohId: 'HAL-UST-SALMAN', parent: 'Bpk. Muhammad Fauzi', phone: '081234567890', attendance: 96, points: 18, tahfizh: 12, spp: 'Lunas', status: 'Aktif' },
     { id: 'STD-002', name: 'Fatimah Zahra', nis: '240102', gender: 'P', program: 'PPTAK', major: '', grade: 10, semester: 1, className: 'Kelas PPTAK', parent: 'Ibu Siti Aminah', phone: '081298765432', attendance: 98, points: 27, tahfizh: 15, spp: 'Lunas', status: 'Aktif' },
     { id: 'STD-003', name: 'Abdullah Rizky', nis: '240103', gender: 'L', program: 'KWNQ', major: '', grade: 7, semester: 1, className: 'Kelas KWNQ', parent: 'Bpk. Rizky Hidayat', phone: '082112223333', attendance: 91, points: -6, tahfizh: 8, spp: 'Menunggak', status: 'Aktif' },
     { id: 'STD-004', name: 'Aisyah Nabila', nis: '240104', gender: 'P', program: 'SMK', major: 'RPL', grade: 12, semester: 1, className: 'XII RPL', parent: 'Bpk. Ahmad Nabil', phone: '082233445566', attendance: 94, points: 34, tahfizh: 20, spp: 'Lunas', status: 'Aktif' },
