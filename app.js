@@ -1006,7 +1006,8 @@ function metricValueIsActive(value) {
 }
 function statCard(label, value, helper, iconName, color = 'blue') {
   const hasValue = metricValueIsActive(value);
-  const trend = hasValue && helper ? `<span class="trend-up">${icon('trending-up', 14)} ${helper}</span>` : '';
+  const hasTrend = hasValue && helper && !/%/.test(String(helper));
+  const trend = hasTrend ? `<span class="trend-up">${icon('trending-up', 14)} ${helper}</span>` : '';
   return `<div class="stat-card"><div class="stat-top"><span class="stat-icon ${color}">${icon(iconName)}</span>${trend}</div><div class="stat-value">${value ?? 0}</div><div class="stat-label">${label}</div></div>`;
 }
 function metricNote(value, text) {
@@ -1018,8 +1019,9 @@ function updateLiveDashboardDate() {
   });
 }
 function updateCopyrightYear() {
-  const year = document.querySelector('#copyright-year');
-  if (year) year.textContent = String(new Date().getFullYear());
+  document.querySelectorAll('.copyright-year').forEach((year) => {
+    year.textContent = String(new Date().getFullYear());
+  });
 }
 function table(headers, rows, empty = 'Belum ada data') {
   return `<div class="table-wrap"><table><thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="${headers.length}" class="empty">${empty}</td></tr>`}</tbody></table></div>`;
@@ -1144,8 +1146,8 @@ function unifiedDashboard() {
   const balance = state.pocketBalances.find((item) => item.studentId === student.id)?.balance || 0;
   const transactions = state.pocketTransactions.filter((item) => item.studentId === student.id).slice(0, 4);
   const stats = canViewFinance()
-    ? `${statCard('Total Santri', state.students.length, '+8,2% tahun ini', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '+2,4% bulan ini', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '92,4% target', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}`
-    : `${statCard('Total Santri', state.students.length, 'Data aktif', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '+2,4% bulan ini', 'calendar-check', 'green')}${statCard('Setoran Tahfizh', state.tahfizh.length, 'Rekaman terbaru', 'book-open-check', 'purple')}${statCard('Agenda Hari Ini', state.schedules.length, 'Kegiatan terjadwal', 'calendar-days', 'orange')}`;
+    ? `${statCard('Total Santri', state.students.length, '', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}`
+    : `${statCard('Total Santri', state.students.length, 'Data aktif', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '', 'calendar-check', 'green')}${statCard('Setoran Tahfizh', state.tahfizh.length, 'Rekaman terbaru', 'book-open-check', 'purple')}${statCard('Agenda Hari Ini', state.schedules.length, 'Kegiatan terjadwal', 'calendar-days', 'orange')}`;
   const announcementRows = announcements.map((item) => `<div class="activity"><span class="activity-icon green">${icon('megaphone')}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div><time>${formatDate(item.date)}</time></div>`).join('');
   const pocketSection = canViewFinance() ? section('Uang Saku Santri', 'Saldo dan mutasi sesuai hak akses role', `<div class="finance-grid"><div class="finance-tile"><span>Saldo ${escapeHtml(student.name)}</span><b>${money(balance)}</b></div><div class="finance-tile"><span>Top up bulan ini</span><b>${money(transactions.filter((item) => item.type === 'Top Up').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div><div class="finance-tile"><span>Transaksi terbaru</span><b>${transactions.length}</b></div></div>${table(['Tanggal','Jenis','Nominal','Catatan'], transactions.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${item.type}</td><td>${money(item.amount)}</td><td>${escapeHtml(item.note)}</td></tr>`).join(''), 'Belum ada mutasi uang saku')}`) : '';
   const financeSection = canViewFinance() ? section('Keuangan & Invoice', 'SPP, non-SPP, beasiswa, laundry, dan dokumen pembayaran', `${billingTable(4)}<div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-view="finance">Buka pusat keuangan</button></div>`) : '';
@@ -1162,7 +1164,7 @@ function yayasanDashboard() {
   const verified = state.payments.filter((payment) => payment.status === 'Verified').reduce((sum, payment) => sum + payment.amount, 0);
   const pending = state.payments.filter((payment) => payment.status === 'Pending').length;
   return `${welcome('EXECUTIVE OVERVIEW', "Assalamu'alaikum, Pengelola ", `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  Ringkasan kinerja dan kesehatan keuangan BoardingPro STKIS.`, `<button class="btn btn-primary" data-action="export">${icon('download')} Export Laporan</button>`)}
-    <div class="stats-grid">${statCard('Total Santri', state.students.length, '+8.2% tahun ini', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '+2.4% bulan ini', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '92,4% target', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}</div>
+    <div class="stats-grid">${statCard('Total Santri', state.students.length, '', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}</div>
     <div class="finance-grid"><div class="finance-tile"><span>SPP bulanan</span><b>${money(verified * .72)}</b>${metricNote(verified, '78% dari penerimaan')}</div><div class="finance-tile"><span>Dana Yayasan</span><b>${money(verified * .12)}</b>${metricNote(verified, 'Operasional & beasiswa')}</div><div class="finance-tile"><span>Non-SPP & uang saku</span><b>${money(verified * .16)}</b>${metricNote(verified, 'Asrama, makan, saku')}</div></div>
     <div class="grid-2">${section('Rekapitulasi Penerimaan Kas per Program', 'Laporan kas masuk dan penerimaan terverifikasi', financeProgramTable())}${section('Aktivitas Terbaru', 'Pembaruan data secara real-time', activityList())}</div>
     ${section('Monitoring Yayasan - Tahfizh', 'Program, kelas, dan santri dengan target dan capaian', yayasanAccordion())}`;
@@ -1201,7 +1203,7 @@ function managementView() {
 function academicView() {
   const canEdit = ['mahad', 'admin', 'kepsek', 'guru'].includes(effectiveRole());
   return `${welcome('AKADEMIK & TAHFIZH TERINTEGRASI', 'Rekap pembelajaran dan hafalan', 'Nilai akademik dan capaian tahfizh santri dalam satu laporan.', canEdit ? `<button type="button" class="btn btn-primary" data-action="add-grade">${icon('plus')} Input Nilai</button>` : '')}
-    <div class="stats-grid">${statCard('Rata-rata Nilai', '86,4', '+3.2%', 'chart-no-axes-combined', 'blue')}${statCard('Kehadiran Kelas', '96,1%', '+1.8%', 'calendar-check', 'green')}${statCard('Peserta PKL', state.pklReports.length, 'SMK aktif', 'briefcase-business', 'purple')}${statCard('Catatan Aktif', '12', 'Minggu ini', 'notebook-pen', 'orange')}</div>
+    <div class="stats-grid">${statCard('Rata-rata Nilai', '86,4', '', 'chart-no-axes-combined', 'blue')}${statCard('Kehadiran Kelas', '96,1%', '', 'calendar-check', 'green')}${statCard('Peserta PKL', state.pklReports.length, 'SMK aktif', 'briefcase-business', 'purple')}${statCard('Catatan Aktif', '12', 'Minggu ini', 'notebook-pen', 'orange')}</div>
     ${section('Rekap Terintegrasi Santri', 'Akademik formal dan target/capaian tahfizh', integratedAcademicTable())}
     <div class="grid-2">${section('Rekap Nilai Terbaru', 'Input guru dan hasil belajar', gradeTable())}${section('Rekap PKL', 'Monitoring peserta praktik', pklTable())}</div>`;
 }
@@ -1267,7 +1269,7 @@ function openTeacherAttendanceDetail(teacherName) {
 }
 function pembinaView() {
   return `${welcome('PENGAWASAN ASRAMA & TAHFIZH', 'Dashboard Pembina', 'Pantau kedisiplinan, presensi jamaah, dan hafalan santri binaan.', canManageDormitory() ? `<button class="btn btn-primary" data-action="add-point">${icon('plus')} Input Poin</button><button class="btn btn-primary" data-action="add-tahfizh-attendance">${icon('plus')} Absensi Tahfizh</button>` : '')}
-    <div class="stats-grid">${statCard('Presensi Jamaah', '93,6%', '+2.1%', 'mosque', 'green')}${statCard('Setoran Menunggu', state.tahfizh.filter((item) => item.status === 'Menunggu').length, 'Perlu verifikasi', 'book-open-check', 'orange')}${statCard('Poin Hari Ini', '+25', '+14.6%', 'award', 'purple')}</div>
+    <div class="stats-grid">${statCard('Presensi Jamaah', '93,6%', '', 'mosque', 'green')}${statCard('Setoran Menunggu', state.tahfizh.filter((item) => item.status === 'Menunggu').length, 'Perlu verifikasi', 'book-open-check', 'orange')}${statCard('Poin Hari Ini', '+25', '', 'award', 'purple')}</div>
     <div class="grid-2">${section('Setoran Terbaru', 'Verifikasi capaian hafalan', tahfizhTable())}${section('Izin Menunggu', 'Persetujuan pengajuan outing', permitTable(true))}</div>`;
 }
 function parentView() {
@@ -1279,7 +1281,7 @@ function parentView() {
   const compactSummary = `<div class="grid grid-cols-3 gap-3">${[['Kehadiran', `${summary.attendance}%`], ['Hafalan Baru', `${summary.tahfizh} Juz`], ['Poin', `${summary.points > 0 ? '+' : ''}${summary.points}`]].map(([label, value]) => `<div class="p-3 rounded-lg border border-emerald-100 bg-white shadow-sm"><span class="text-xs text-slate-500">${label}</span><b class="block text-base font-bold text-emerald-900">${value}</b></div>`).join('')}</div><div class="flex flex-wrap gap-2 mt-3 text-xs"><span class="badge badge-success">Sudah dibayar ${money(summary.paid)}</span><span class="badge badge-warning">Sisa tagihan ${money(summary.outstanding)}</span></div>`;
   const pocketTable = `<div style="max-height:350px;overflow-y:auto;overflow-x:auto"><table class="w-full table-auto text-xs" style="white-space:nowrap"><thead><tr><th class="py-2 px-2">Waktu</th><th class="py-2 px-2">Jenis</th><th class="py-2 px-2">Nominal</th><th class="py-2 px-2">Catatan</th></tr></thead><tbody>${transactions.map((item) => `<tr><td class="py-2 px-2">${formatDate(item.date)}</td><td class="py-2 px-2">${item.type}</td><td class="py-2 px-2">${money(item.amount)}</td><td class="py-2 px-2">${escapeHtml(item.note)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Belum ada transaksi hari ini</td></tr>'}</tbody></table></div>`;
   return `<div class="child-hero"><div class="avatar xl">${initials(child.name)}</div><div><span class="eyebrow">PORTAL ORANG TUA / WALI</span><h1>${child.name}</h1><p>${child.className}  -  ${child.room}  -  ${child.program}  -  NIS ${child.nis}</p></div><span class="badge badge-success">Santri Aktif</span></div>
-    <div class="stats-grid">${statCard('Progress Tahfizh', `${child.tahfizh} Juz`, '+1 juz semester ini', 'book-open-check', 'green')}${statCard('Poin Kedisiplinan', `+${child.points}`, '+4 bulan ini', 'award', 'purple')}${statCard('Kehadiran', `${child.attendance}%`, 'Sangat baik', 'calendar-check', 'blue')}${statCard('Status SPP', child.spp, 'September 2026', 'wallet-cards', 'orange')}</div>
+    <div class="stats-grid">${statCard('Progress Tahfizh', `${child.tahfizh} Juz`, '', 'book-open-check', 'green')}${statCard('Poin Kedisiplinan', `+${child.points}`, '', 'award', 'purple')}${statCard('Kehadiran', `${child.attendance}%`, 'Sangat baik', 'calendar-check', 'blue')}${statCard('Status SPP', child.spp, 'September 2026', 'wallet-cards', 'orange')}</div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section(`Pengumuman  -  ${formatDate(today)}`, 'Informasi kegiatan dan perkembangan anak', `<div class="h-full flex flex-col justify-between p-5">${feed.length ? `<div class="activity-list">${feed.map((item) => `<div class="activity"><span class="activity-icon green">${icon(item.type === 'tahfizh' ? 'book-open-check' : 'bell')}</span><div><b>${item.title}</b><p>${item.detail}</p></div><time>${formatDate(item.date)}</time></div>`).join('')}</div>` : '<div class="empty">Belum ada pengumuman hari ini.</div>'}</div>`)}${section('Uang Saku Hari Ini', 'Saldo dan mutasi transaksi anak', `<div class="h-full flex flex-col justify-between p-5"style="max-height: 250px; overflow-y: auto; overflow-x: auto; white-space: nowrap;"><div class="finance-tile"><span>Saldo saat ini</span><b>${money(balance)}</b></div>${pocketTable}</div>`)}</div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section('Ringkasan Bulanan', summary.month || 'September 2026', compactSummary)}${section('Setoran Hafalan Terakhir', 'Riwayat capaian tahfizh', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${tahfizhTable(child.id)}</div><h3 style="margin-top:16px">Presensi Jam Tahfizh</h3><div style="max-height:350px;overflow-y:auto;overflow-x:auto">${attendanceTable('tahfizh')}</div>`)}</div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section('Riwayat Poin', 'Perkembangan karakter', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${pointsTable(child.id)}</div>`)}${compactSection('Tagihan & Kuitansi', 'Rincian pembayaran santri', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${renderWaliInvoices(child.nis)}</div>`)}</div>${renderPaymentDestinationDetails()}`;
@@ -1287,7 +1289,7 @@ function parentView() {
 function studentView() {
   const student = currentStudent();
   return `${welcome('PORTAL SANTRI  -  PERSONAL DASHBOARD', `Assalamu'alaikum, ${student.name.split(' ')[0]}! `, 'Semangat menjalani aktivitas hari ini.', '')}
-    <div class="stats-grid">${statCard('Total Poin Saya', `${student.points > 0 ? '+' : ''}${student.points}`, '+4 minggu ini', 'award', 'purple')}${statCard('Hafalan', `${student.tahfizh} Juz`, 'Terus bertumbuh', 'book-open-check', 'green')}${statCard('Kehadiran', `${student.attendance}%`, 'Bulan ini', 'calendar-check', 'blue')}${statCard('Program', student.program, student.className, 'graduation-cap', 'orange')}</div>
+    <div class="stats-grid">${statCard('Total Poin Saya', `${student.points > 0 ? '+' : ''}${student.points}`, '', 'award', 'purple')}${statCard('Hafalan', `${student.tahfizh} Juz`, 'Terus bertumbuh', 'book-open-check', 'green')}${statCard('Kehadiran', `${student.attendance}%`, 'Bulan ini', 'calendar-check', 'blue')}${statCard('Program', student.program, student.className, 'graduation-cap', 'orange')}</div>
     <div class="grid-2">${section('Jadwal Kegiatan Hari Ini', 'Jaga semangat dan kedisiplinan', activityTimeline())}</div>
     ${section('Tahfizh Saya', 'Ziyadah, Murajaah, catatan, dan presensi jam Tahfizh pribadi', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${tahfizhTable(student.id)}${attendanceTable('tahfizh')}</div>`)}`;
 }
