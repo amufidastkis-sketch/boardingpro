@@ -327,6 +327,27 @@ const initials = (name) => name.split(' ').map((part) => part[0]).slice(0, 2).jo
 const studentById = (id) => state.students.find((student) => student.id === id) || { name: 'Tidak diketahui', className: '', room: '', nis: '' };
 const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 const formatLocalLongDate = (date = new Date()) => new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+const hijriMonthNames = ['Muharram', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban', 'Ramadan', 'Syawal', 'Zulkaidah', 'Zulhijah'];
+const hijriConversionOffsetDays = -1;
+function localMaghribHour(date = new Date()) {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  if (/Makassar|Singapore|Kuala_Lumpur|WITA/i.test(timeZone)) return 18 + 10 / 60;
+  if (/Jayapura|WIT|Dili/i.test(timeZone)) return 18 + 20 / 60;
+  return 18;
+}
+function hijriDateParts(date = new Date()) {
+  const adjusted = new Date(date);
+  const sunset = localMaghribHour(adjusted);
+  if (adjusted.getHours() + adjusted.getMinutes() / 60 + adjusted.getSeconds() / 3600 >= sunset) adjusted.setDate(adjusted.getDate() + 1);
+  adjusted.setDate(adjusted.getDate() + hijriConversionOffsetDays);
+  const parts = new Intl.DateTimeFormat('en-US-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric', year: 'numeric' }).formatToParts(adjusted);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return { day: values.day, month: hijriMonthNames[Number(values.month) - 1] || values.month, year: values.year };
+}
+function formatDashboardDate(date = new Date()) {
+  const hijri = hijriDateParts(date);
+  return `${formatLocalLongDate(date)} M / ${hijri.day} ${hijri.month} ${hijri.year} H`;
+}
 const money = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const qrSignatureUrl = (payload) => `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(JSON.stringify(payload))}`;
 const documentActionRoles = ['orang_tua', 'parent', 'kepala_sekolah', 'kepsek', 'admin_mahad', 'mahad', 'maahad', 'admin', 'yayasan', 'pengurus_yayasan', 'guru', 'guru_tahfizh'];
@@ -974,8 +995,31 @@ function renderShell() {
   };
 }
 
+function metricValueIsActive(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return false;
+  const normalized = String(value).trim().replace(/\s/g, '').replace(/[^\d,.-]/g, '');
+  if (!normalized || /^[-.,]+$/.test(normalized)) return false;
+  const numericValue = Number(normalized.includes(',') && normalized.includes('.')
+    ? normalized.replace(/\./g, '').replace(',', '.')
+    : normalized.replace(',', '.'));
+  return Number.isFinite(numericValue) && numericValue !== 0;
+}
 function statCard(label, value, helper, iconName, color = 'blue') {
-  return `<div class="stat-card"><div class="stat-top"><span class="stat-icon ${color}">${icon(iconName)}</span><span class="trend-up">${icon('trending-up', 14)} ${helper}</span></div><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`;
+  const hasValue = metricValueIsActive(value);
+  const trend = hasValue && helper ? `<span class="trend-up">${icon('trending-up', 14)} ${helper}</span>` : '';
+  return `<div class="stat-card"><div class="stat-top"><span class="stat-icon ${color}">${icon(iconName)}</span>${trend}</div><div class="stat-value">${value ?? 0}</div><div class="stat-label">${label}</div></div>`;
+}
+function metricNote(value, text) {
+  return metricValueIsActive(value) ? `<div class="metric-note">${text}</div>` : '';
+}
+function updateLiveDashboardDate() {
+  document.querySelectorAll('[data-live-dashboard-date]').forEach((element) => {
+    element.textContent = formatDashboardDate();
+  });
+}
+function updateCopyrightYear() {
+  const year = document.querySelector('#copyright-year');
+  if (year) year.textContent = String(new Date().getFullYear());
 }
 function table(headers, rows, empty = 'Belum ada data') {
   return `<div class="table-wrap"><table><thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="${headers.length}" class="empty">${empty}</td></tr>`}</tbody></table></div>`;
@@ -1031,7 +1075,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, description, '')}${educationalQuoteWidget()}${launchPoster()}${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}${educationalQuoteWidget()}${launchPoster()}${extra}`;
 }
 
 function adminDashboard() {
@@ -1105,7 +1149,7 @@ function unifiedDashboard() {
   const announcementRows = announcements.map((item) => `<div class="activity"><span class="activity-icon green">${icon('megaphone')}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div><time>${formatDate(item.date)}</time></div>`).join('');
   const pocketSection = canViewFinance() ? section('Uang Saku Santri', 'Saldo dan mutasi sesuai hak akses role', `<div class="finance-grid"><div class="finance-tile"><span>Saldo ${escapeHtml(student.name)}</span><b>${money(balance)}</b></div><div class="finance-tile"><span>Top up bulan ini</span><b>${money(transactions.filter((item) => item.type === 'Top Up').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div><div class="finance-tile"><span>Transaksi terbaru</span><b>${transactions.length}</b></div></div>${table(['Tanggal','Jenis','Nominal','Catatan'], transactions.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${item.type}</td><td>${money(item.amount)}</td><td>${escapeHtml(item.note)}</td></tr>`).join(''), 'Belum ada mutasi uang saku')}`) : '';
   const financeSection = canViewFinance() ? section('Keuangan & Invoice', 'SPP, non-SPP, beasiswa, laundry, dan dokumen pembayaran', `${billingTable(4)}<div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-view="finance">Buka pusat keuangan</button></div>`) : '';
-  return `${welcome(`BOARDINGPRO STKIS  -  ${role.label.toUpperCase()}`, `Assalamu'alaikum, ${role.demoName.split(' ')[0]} `, `${formatLocalLongDate()}  -  Satu ruang kendali untuk menjaga amanah.`, canManageAnnouncements() ? `<button class="btn btn-primary" data-action="add-announcement">${icon('plus')} Pengumuman</button>` : '')}
+  return `${welcome(`BOARDINGPRO STKIS  -  ${role.label.toUpperCase()}`, `Assalamu'alaikum, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  Satu ruang kendali untuk menjaga amanah.`, canManageAnnouncements() ? `<button class="btn btn-primary" data-action="add-announcement">${icon('plus')} Pengumuman</button>` : '')}
     <div class="stats-grid">${stats}</div>
     <div class="grid-2">${section('Pengumuman & Feed Harian', "Kabar terbaru ma'had dan perkembangan santri", `<div class="activity-list">${announcementRows || '<div class="empty">Belum ada pengumuman.</div>'}${feed.map((item) => `<div class="activity"><span class="activity-icon green">${icon(item.type === 'tahfizh' ? 'book-open-check' : 'bell')}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div><time>${formatDate(item.date)}</time></div>`).join('')}</div>`, `<button class="btn btn-ghost btn-small" data-view="announcements">Lihat semua</button>`)}
       ${section('Jadwal & Event', 'Agenda kegiatan boarding school', `${activityTimeline()}<div class="panel-head" style="margin-top:15px"><div><h2>Event mendatang</h2><p>Agenda resmi sekolah</p></div><button class="btn btn-ghost btn-small" data-view="schedule">Buka agenda</button></div>${eventsTable()}`)}</div>
@@ -1117,9 +1161,9 @@ function unifiedDashboard() {
 function yayasanDashboard() {
   const verified = state.payments.filter((payment) => payment.status === 'Verified').reduce((sum, payment) => sum + payment.amount, 0);
   const pending = state.payments.filter((payment) => payment.status === 'Pending').length;
-  return `${welcome(`EXECUTIVE OVERVIEW  -  ${formatLocalLongDate()}`, "Assalamu'alaikum, Pengelola ", 'Ringkasan kinerja dan kesehatan keuangan BoardingPro STKIS.', `<button class="btn btn-primary" data-action="export">${icon('download')} Export Laporan</button>`)}
+  return `${welcome('EXECUTIVE OVERVIEW', "Assalamu'alaikum, Pengelola ", `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  Ringkasan kinerja dan kesehatan keuangan BoardingPro STKIS.`, `<button class="btn btn-primary" data-action="export">${icon('download')} Export Laporan</button>`)}
     <div class="stats-grid">${statCard('Total Santri', state.students.length, '+8.2% tahun ini', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '+2.4% bulan ini', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '92,4% target', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}</div>
-    <div class="finance-grid"><div class="finance-tile"><span>SPP bulanan</span><b>${money(verified * .72)}</b><div class="metric-note">78% dari penerimaan</div></div><div class="finance-tile"><span>Dana Yayasan</span><b>${money(verified * .12)}</b><div class="metric-note">Operasional & beasiswa</div></div><div class="finance-tile"><span>Non-SPP & uang saku</span><b>${money(verified * .16)}</b><div class="metric-note">Asrama, makan, saku</div></div></div>
+    <div class="finance-grid"><div class="finance-tile"><span>SPP bulanan</span><b>${money(verified * .72)}</b>${metricNote(verified, '78% dari penerimaan')}</div><div class="finance-tile"><span>Dana Yayasan</span><b>${money(verified * .12)}</b>${metricNote(verified, 'Operasional & beasiswa')}</div><div class="finance-tile"><span>Non-SPP & uang saku</span><b>${money(verified * .16)}</b>${metricNote(verified, 'Asrama, makan, saku')}</div></div>
     <div class="grid-2">${section('Rekapitulasi Penerimaan Kas per Program', 'Laporan kas masuk dan penerimaan terverifikasi', financeProgramTable())}${section('Aktivitas Terbaru', 'Pembaruan data secara real-time', activityList())}</div>
     ${section('Monitoring Yayasan - Tahfizh', 'Program, kelas, dan santri dengan target dan capaian', yayasanAccordion())}`;
 }
@@ -2698,6 +2742,7 @@ function showDashboard() {
   }
   landing.hidden = true;
   shell.hidden = false;
+  updateCopyrightYear();
   renderDashboard();
   startInactivityTimer();
   offerInstallPrompt().catch((error) => console.error('[BoardingPro] Prompt instalasi PWA gagal:', error));
@@ -2710,6 +2755,7 @@ function showLanding() {
   if (!landing || !shell) return;
   landing.hidden = false;
   shell.hidden = true;
+  updateCopyrightYear();
   const selector = $('#demo-role');
   const preview = $('#demo-role-preview');
   if (!selector || !preview) return;
@@ -2990,6 +3036,8 @@ document.addEventListener('click', (e) => {
 // Jalankan inisialisasi awal
 document.addEventListener('DOMContentLoaded', updateBellBadge);
 setTimeout(updateBellBadge, 1000);
+window.setInterval(updateLiveDashboardDate, 30000);
+updateLiveDashboardDate();
 
 
 // --- FIX EVENT KLIK LONCENG NOTIFIKASI ---
