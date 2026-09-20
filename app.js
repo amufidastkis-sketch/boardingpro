@@ -134,6 +134,7 @@ function kopSuratHtml() {
   return `<header class="kop-container kop-surat"><div class="logo-wrapper" aria-label="Logo Yayasan"><img src="${KOP_SURAT_LOGO}" alt="Logo"></div><div class="kop-text"><b>SEKOLAH TAHFIDZ KEJURUAN</b><h1>IRMAN SOFRAN</h1><p>Kp. Eurih RT. 004 RW.03 Kel. Tambang Ayam, Kec. Anyar, Kab. Serang, Prov. Banten, 42166, Indonesia | Telp: ${SecurityMasker.phone('0877-7120-0615')}</p><small>admin@tahfidzkejuruan.org | www.tahfidzkejuruan.org</small></div></header>`;
 }
 const stateCollectionKeys = ['students', 'internalAccounts', 'classes', 'halaqoh', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords', 'pklReports', 'tahfizhSemesterRecords', 'attendance', 'schedules', 'events', 'payments', 'permits', 'tahfizh', 'grades', 'points', 'teacherAttendance', 'dormAttendance', 'gateEvents', 'activities'];
+const resettableDataKeys = stateCollectionKeys.filter((key) => key !== 'internalAccounts');
 const STATE_SYNC_STORAGE_KEY = 'boardingpro-state-sync';
 const savedState = localStorage.getItem('boardingpro-state');
 const emptyInitialData = clone(seedDataSource);
@@ -157,6 +158,17 @@ function normalizeStateCollections() {
   state.users = state.internalAccounts;
   state.currentUser = state.currentUser && typeof state.currentUser === 'object' ? state.currentUser : null;
   if (typeof ensurePrimaryAdminAccounts === 'function') ensurePrimaryAdminAccounts();
+}
+function resetTransactionalData() {
+  if (!currentRoleIsAdmin()) throw new Error('Hanya Admin atau Ma\'had yang dapat mereset data.');
+  resettableDataKeys.forEach((key) => { state[key] = []; });
+  state.billingNotifications = [];
+  state.users = state.internalAccounts;
+  state.currentUser = state.internalAccounts.find((account) => account.username === state.username) || state.currentUser;
+  state.view = 'dashboard';
+  ['boardingpro-state-sync', 'boardingpro_santri'].forEach((key) => localStorage.removeItem(key));
+  normalizeStateCollections();
+  persist();
 }
 normalizeStateCollections();
 secureStorage.get('boardingpro-state').then((storedState) => {
@@ -338,6 +350,7 @@ const documentLayoutStyles = `
   @media print{@page{size:A4 portrait;margin:0}.document-container{page-break-after:avoid!important;break-after:avoid-page!important;page-break-inside:avoid}}
 `;
 function normalizeDocumentVisibility(root) {
+  if (!root) throw new Error('Konten dokumen tidak tersedia.');
   root.hidden = false;
   root.classList.remove('d-none', 'hidden');
   root.style.removeProperty('display');
@@ -351,6 +364,9 @@ function normalizeDocumentVisibility(root) {
   });
 }
 function waitForDocumentReady(root) {
+  if (!root || !(root.querySelector?.('.document-container, .permit-letter') || root.matches?.('.document-container, .permit-letter'))) {
+    return Promise.reject(new Error('Target dokumen kosong atau belum selesai dirender.'));
+  }
   normalizeDocumentVisibility(root);
   const images = Array.from(root.querySelectorAll('img'));
   const imageReady = images.map((image) => {
@@ -368,11 +384,15 @@ function waitForDocumentReady(root) {
   return Promise.all([fontsReady, ...imageReady]).then(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 function printDocumentInFrame(html, title, pageStyle = '') {
+  if (!String(html || '').match(/<(?:article|main|section|div)[^>]*class=["'][^"']*(?:document-container|permit-letter)/i)) {
+    alert('Dokumen belum siap dicetak karena kontennya kosong. Silakan buka ulang preview lalu coba lagi.');
+    return false;
+  }
   const frame = document.createElement('iframe');
   frame.className = 'document-print-frame';
   frame.setAttribute('title', `Print ${title}`);
   frame.setAttribute('aria-hidden', 'true');
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;';
   document.body.appendChild(frame);
   const frameDocument = frame.contentDocument;
   if (!frameDocument) {
@@ -386,7 +406,7 @@ function printDocumentInFrame(html, title, pageStyle = '') {
   const print = async () => {
     if (printed) return;
     printed = true;
-    await waitForDocumentReady(frameDocument);
+    await waitForDocumentReady(frameDocument.body);
     frame.contentWindow.focus();
     frame.contentWindow.print();
     window.setTimeout(() => frame.remove(), 1000);
@@ -395,12 +415,13 @@ function printDocumentInFrame(html, title, pageStyle = '') {
   window.setTimeout(() => {
     if (document.body.contains(frame)) print();
   }, 1000);
+  return true;
 }
 async function downloadDocumentPdf(html, title, pageStyle = '') {
   const container = document.createElement('div');
   container.innerHTML = html;
   const documentNode = container.querySelector('.document-container, .permit-letter') || container.firstElementChild;
-  if (!documentNode) throw new Error('Konten dokumen tidak ditemukan.');
+  if (!documentNode || !documentNode.textContent.trim()) throw new Error('Konten dokumen kosong atau belum selesai dirender.');
   if (typeof window.html2pdf !== 'function') {
     throw new Error('Generator PDF belum siap. Muat ulang halaman lalu coba lagi.');
   }
@@ -466,7 +487,14 @@ function bindDocumentActions(root, title, pageStyle = '') {
       button.disabled = false;
     }
   });
-  actions.querySelector('[data-document-print]')?.addEventListener('click', () => printDocumentInFrame(documentNode.outerHTML, title, pageStyle));
+  actions.querySelector('[data-document-print]')?.addEventListener('click', () => {
+    try {
+      if (!printDocumentInFrame(documentNode.outerHTML, title, pageStyle)) showToast('Dokumen belum siap dicetak.', 'error');
+    } catch (error) {
+      console.error('[BoardingPro] Gagal mencetak dokumen:', error);
+      showToast('Dokumen gagal dicetak. Silakan buka ulang preview.', 'error');
+    }
+  });
 }
 function signatureQrHtml(label, name, timestamp, payload) {
   const safeTimestamp = timestamp || new Date().toISOString();
@@ -961,6 +989,24 @@ function compactSection(title, subtitle, content, action = '') {
 function welcome(eyebrow, title, description, action = '') {
   return `<div class="welcome"><div><span class="eyebrow">${eyebrow}</span><h1>${title}</h1><p>${description}</p></div>${action}</div>`;
 }
+const dailyEducationalQuotes = [
+  { arabic: 'وَقُلْ رَبِّ زِدْنِي عِلْمًا', translation: 'Ya Rabbku, tambahkanlah ilmu kepadaku.', reference: 'QS. Taha: 114' },
+  { arabic: 'هَلْ يَسْتَوِي الَّذِينَ يَعْلَمُونَ وَالَّذِينَ لَا يَعْلَمُونَ', translation: 'Adakah sama orang-orang yang mengetahui dengan orang-orang yang tidak mengetahui?', reference: 'QS. Az-Zumar: 9' },
+  { arabic: 'يَرْفَعِ اللَّهُ الَّذِينَ آمَنُوا مِنكُمْ وَالَّذِينَ أُوتُوا الْعِلْمَ دَرَجَاتٍ', translation: 'Allah meninggikan orang-orang yang beriman dan yang diberi ilmu beberapa derajat.', reference: 'QS. Al-Mujadilah: 11' },
+  { arabic: 'مَنْ سَلَكَ طَرِيقًا يَلْتَمِسُ فِيهِ عِلْمًا سَهَّلَ اللَّهُ لَهُ بِهِ طَرِيقًا إِلَى الْجَنَّةِ', translation: 'Barang siapa menempuh jalan untuk mencari ilmu, Allah akan mudahkan baginya jalan menuju surga.', reference: 'HR. Muslim No. 2699' },
+  { arabic: 'إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ', translation: 'Sesungguhnya setiap amal bergantung pada niatnya.', reference: 'HR. Bukhari No. 1 dan Muslim No. 1907' },
+  { arabic: 'مَنْ خَرَجَ فِي طَلَبِ الْعِلْمِ فَهُوَ فِي سَبِيلِ اللَّهِ حَتَّى يَرْجِعَ', translation: 'Barang siapa keluar untuk mencari ilmu, ia berada di jalan Allah hingga ia kembali.', reference: 'HR. Tirmidzi No. 2647' },
+  { arabic: 'مَّن ذَا الَّذِي يُقْرِضُ اللَّهَ قَرْضًا حَسَنًا فَيُضَاعِفَهُ لَهُ أَضْعَافًا كَثِيرَةً', translation: 'Siapakah yang mau memberi pinjaman kepada Allah sebagai pinjaman yang baik, maka Dia akan melipatgandakannya dengan banyak.', reference: 'QS. Al-Baqarah: 245' }
+];
+function dailyEducationalQuote(date = new Date()) {
+  const start = new Date(date.getFullYear(), 0, 1);
+  const dayOfYear = Math.floor((date - start) / 86400000);
+  return dailyEducationalQuotes[((dayOfYear % dailyEducationalQuotes.length) + dailyEducationalQuotes.length) % dailyEducationalQuotes.length];
+}
+function educationalQuoteWidget() {
+  const quote = dailyEducationalQuote();
+  return `<section class="quote-widget" aria-label="Kutipan pendidikan Islam hari ini"><span class="quote-widget-label">Kutipan Pendidikan Islam Hari Ini</span><p class="quote-widget-arabic" lang="ar" dir="rtl">${quote.arabic}</p><p class="quote-widget-translation"><b>Artinya:</b> ${quote.translation}</p><small class="quote-widget-reference">${quote.reference}</small></section>`;
+}
 
 function dashboard() {
   const role = effectiveRole();
@@ -980,12 +1026,12 @@ function dashboard() {
 }
 
 function launchPoster() {
-  return `<section class="launch-poster"><div class="poster-copy"><span class="poster-kicker">SMART BOARDING SCHOOL  -  MA'HAD</span><h2>Siap-Siap Peluncuran!</h2><p class="poster-subtitle">BoardingPro STKIS ✓  Sistem Informasi Smart Boarding</p><p class="poster-tagline">Satu ruang kendali untuk amanah pendidikan, pengasuhan, dan keuangan.</p><div class="poster-features"><span><i class="fa-solid fa-grid-2"></i> Dashboard Terpadu</span><span><i class="fa-solid fa-calendar-days"></i> Jadwal & Event Real-time</span><span><i class="fa-solid fa-bullhorn"></i> Pengumuman & Feed Harian</span><span><i class="fa-solid fa-chart-line"></i> Rekap Nilai & Kehadiran</span></div><strong>Segera Hadir untuk Memudahkan Operasional Ma'had Anda!</strong></div><div class="poster-art" aria-hidden="true"><i class="fa-solid fa-layer-group"></i><span>BOARDING<br>PRO</span></div></section>`;
+  return `<section class="launch-poster"><div class="poster-copy"><span class="poster-kicker">SMART BOARDING SCHOOL  -  MA'HAD</span><h2>Siap-Siap Peluncuran!</h2><p class="poster-subtitle">BoardingPro STKIS ✓  Sistem Informasi Smart Boarding</p><p class="poster-tagline">Satu ruang kendali untuk amanah pendidikan, pengasuhan, dan keuangan.</p><div class="poster-features"><span><i class="fa-solid fa-grid-2"></i> Dashboard Terpadu</span><span><i class="fa-solid fa-calendar-days"></i> Jadwal & Event Real-time</span><span><i class="fa-solid fa-bullhorn"></i> Pengumuman & Feed Harian</span><span><i class="fa-solid fa-chart-line"></i> Rekap Nilai & Kehadiran</span></div><strong>Segera Hadir untuk Memudahkan Operasional Ma'had Anda!</strong></div><div class="poster-art" aria-hidden="true"><img src="./assets/logo-removebg-preview.png" alt=""><span>BOARDING<br>PRO</span></div></section>`;
 }
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, description, '')}${launchPoster()}${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, description, '')}${educationalQuoteWidget()}${launchPoster()}${extra}`;
 }
 
 function adminDashboard() {
@@ -1204,7 +1250,7 @@ function studentView() {
 function gateView() {
   const active = state.permits.filter((permit) => permit.status === 'Approved' && permit.date === today && permit.checkout && !permit.checkin).length;
   const requestForm = effectiveRole() === 'security' && canManageSecurity() ? `<form id="security-permit-form" class="form-grid"><label>Santri<select name="studentId">${state.students.map((student) => `<option value="${student.id}">${escapeHtml(student.name)}  -  ${escapeHtml(student.nis)}</option>`).join('')}</select></label><label>Jenis Izin<select name="type"><option value="Keluar Kompleks">Keluar Kompleks</option><option value="Pulang / Mudik">Pulang / Mudik</option></select></label><label>Tanggal<input name="date" type="date" value="${today}" required></label><label class="full">Alasan<textarea name="reason" required></textarea></label><button type="submit" class="btn btn-primary full">Catat Pengajuan di Pos</button></form>` : '';
-  return `${welcome(`POS JAGA UTAMA  -  ${today}`, 'Kontrol Gerbang œ', 'Catat pergerakan santri secara realtime dan aman.')}
+  return `${welcome(`POS JAGA UTAMA  -  ${today}`, 'Kontrol Gerbang Utama', 'Catat pergerakan santri secara realtime dan aman.')}
     <div class="stats-grid">${statCard('Sedang di Luar', active, 'Aktif di luar', 'log-out', 'blue')}${statCard('Total Checkout', state.permits.filter((permit) => permit.checkout && permit.date === today).length, 'Hari ini', 'scan-line', 'green')}${statCard('Izin Pending', state.permits.filter((permit) => permit.status === 'Pending').length, 'Hubungi pembina', 'alarm-clock', 'orange')}</div>
     ${requestForm ? section('Pengajuan Izin di Pos', 'Security mencatat pengajuan; persetujuan dilakukan pihak berwenang.', requestForm) : ''}${section('Log Keluar-Masuk', 'Hanya izin yang telah disetujui pihak berwenang', gateTable())}${section('Aktivitas Realtime', 'Perubahan terakhir di pos jaga', gateEventsTable())}`;
 }
@@ -1418,8 +1464,10 @@ function financeView() {
   const studentId = effectiveRole() === 'parent' || effectiveRole() === 'student' ? currentStudent().id : undefined;
   const visibleBills = state.financeBills.filter((bill) => !studentId || bill.studentId === studentId);
   const outstanding = visibleBills.filter((bill) => bill.status !== 'Paid').reduce((sum, bill) => sum + billNet(bill), 0);
+  const resetAction = currentRoleIsAdmin() ? `<button type="button" class="btn btn-danger" data-action="reset-data">${icon('trash-2')} Reset Data Transaksional</button>` : '';
   return `${welcome('KEUANGAN YAYASAN', 'Billing, Beasiswa & Invoice', 'Komponen SPP dan non-SPP dikelola transparan dengan nominal fleksibel.', currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-billing">${icon('plus')} Tambah Komponen</button>` : '')}
     ${renderPaymentDestinationDetails({ adminPanel: currentRoleIsAdmin() })}
+    ${currentRoleIsAdmin() ? section('Reset Data untuk Operasional Baru', 'Hapus seluruh data santri dan transaksi, tetapi akun serta konfigurasi rekening tetap dipertahankan.', `<div class="notice"><b>Perhatian:</b> tindakan ini menghapus santri, presensi, nilai, Tahfizh, izin, tagihan, pembayaran, invoice, dan aktivitas secara permanen dari penyimpanan lokal.</div>`, resetAction) : ''}
     <div class="stats-grid">${statCard('Tagihan Aktif', state.financeBills.filter((bill) => bill.status !== 'Paid').length, 'Perlu ditindaklanjuti', 'receipt', 'orange')}${statCard('Piutang Bersih', money(outstanding), 'Setelah beasiswa & diskon', 'wallet-cards', 'purple')}${statCard('Beasiswa Aktif', state.scholarships.filter((item) => item.active).length, 'Program bantuan', 'heart-handshake', 'green')}${statCard('Invoice Terbit', state.invoices.length, 'Dapat dicetak', 'file-check-2', 'blue')}</div>
     ${section('Daftar Tagihan', 'Rincian nominal yang harus dibayar', billingTable(undefined, studentId))}
     ${section('Pembayaran & Invoice', 'Persetujuan otomatis menerbitkan invoice dan kuitansi', paymentTable(currentRoleIsAdmin(), studentId))}
@@ -1446,7 +1494,9 @@ function gateEventsTable() {
 }
 function activityTimeline() {
   const items = state.schedules.length ? state.schedules : state.activities.map((item) => ({ time: item.time, title: item.title, type: 'Kegiatan' }));
-  return `<div class="timeline">${items.map((item) => `<div class="timeline-item"><div class="time">${item.time}</div><div class="timeline-dot">${icon(item.type === 'Tahfizh' ? 'book-open' : 'calendar-days', 16)}</div><div><b>${item.title}</b><p>${item.room || 'Agenda BoardingPro STKIS'}  -  ${item.teacher || ''}</p></div></div>`).join('')}</div>`;
+  return items.length
+    ? `<div class="timeline">${items.map((item) => `<div class="timeline-item"><div class="time">${item.time}</div><div class="timeline-dot">${icon(item.type === 'Tahfizh' ? 'book-open' : 'calendar-days', 16)}</div><div><b>${item.title}</b><p>${item.room || 'Agenda BoardingPro STKIS'}  -  ${item.teacher || ''}</p></div></div>`).join('')}</div>`
+    : '<div class="empty-state"><div class="empty-state-icon">' + icon('calendar-x', 28) + '</div><p>Belum ada jadwal atau aktivitas.</p></div>';
 }
 
 function disciplineLevelLabel(level) {
@@ -2125,8 +2175,6 @@ function bindActions() {
         permit.endDate = end.toISOString().slice(0, 10);
         permit.letterNumber = permit.letterNumber || generatePermitNumber(permit.id);
         permit.verifiedAt = permit.approvedAt;
-        permit.officialSignature = '[ TERVERIFIKASI DIGITAL MAHAD / PEMBINA ]';
-        permit.officialStamp = 'STEMPEL DIGITAL MAHAD';
       }
       persist();
       render();
@@ -2250,6 +2298,20 @@ function bindActions() {
   document.querySelectorAll('[data-action="add-major"], [data-edit-major]').forEach((button) => button.addEventListener('click', () => openMajorModal(button.dataset.editMajor && (state.majors || majors).find((item) => item.id === button.dataset.editMajor))));
   document.querySelectorAll('[data-action="add-teacher"], [data-edit-teacher]').forEach((button) => button.addEventListener('click', () => openTeacherModal(button.dataset.editTeacher && state.teachers.find((item) => item.id === button.dataset.editTeacher))));
   document.querySelectorAll('[data-action="add-account"]').forEach((button) => button.addEventListener('click', openAccountModal));
+  document.querySelectorAll('[data-action="reset-data"]').forEach((button) => button.addEventListener('click', () => {
+    if (!currentRoleIsAdmin()) return;
+    openConfirmModal('Reset Data Transaksional', 'Hapus seluruh data santri, presensi, nilai, Tahfizh, izin, tagihan, pembayaran, invoice, dan aktivitas? Akun serta konfigurasi sistem tetap dipertahankan.', () => {
+      try {
+        resetTransactionalData();
+        closeModal();
+        alert('Data transaksional berhasil dikosongkan. Akun dan konfigurasi sistem tetap aman.');
+        render();
+      } catch (error) {
+        console.error('[BoardingPro] Gagal mereset data:', error);
+        alert('Data gagal direset. Silakan coba lagi.');
+      }
+    });
+  }));
   document.querySelectorAll('[data-action="add-billing"]').forEach((button) => button.addEventListener('click', openBillingModal));
   document.querySelectorAll('[data-edit-billing]').forEach((button) => button.addEventListener('click', () => { if (canManageFinance()) openBillingModal(state.financeBills.find((bill) => bill.id === button.dataset.editBilling)); }));
   document.querySelectorAll('[data-action="export"]').forEach((button) => button.addEventListener('click', async () => {
@@ -2282,8 +2344,7 @@ function bindActions() {
     state.permits.unshift({
       id: permitId, studentId, type, reason: sanitizeInput(form.get('reason')), date, requestedDays,
       is_quota_deducted: isQuotaDeducted({ type }), approvedDays: null, endDate: null, status: 'Pending',
-      approvedBy: null, approvedAt: null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali',
-      applicantSignature: '[ TERVERIFIKASI DIGITAL WALI SANTRI ]', applicantSignedAt: submittedAt,
+      approvedBy: null, approvedAt: null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali', applicantSignedAt: submittedAt,
       applicantQrPayload: { documentId: permitId, documentType: 'permit', role: 'parent' }, checkout: null, checkin: null
     });
     persist();
@@ -2602,7 +2663,7 @@ function renderPermitLetter(permitId, print = false) {
   const securityHash = permit.securityHash || `STKIS-${btoa(`${permit.id}|${permit.letterNumber}|${student.nis}`).replace(/[^A-Z0-9]/gi, '').slice(0, 16).toUpperCase()}`;
   permit.securityHash = securityHash;
   const signatureBlock = `<div class="signature-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:28px;max-width:100%">${signatureQrHtml('Pemohon', permit.applicantName || student.parent || 'Orang Tua / Wali', permit.applicantSignedAt, permit.applicantQrPayload || { documentId: permit.id, documentType: 'permit', role: 'parent' })}${signatureQrHtml('Mengetahui & Menyetujui', permit.approvedBy || 'Belum diverifikasi', permit.approvedAt || permit.verifiedAt || new Date().toISOString(), permit.verifierQrPayload || { documentId: permit.id, documentType: 'permit', role: 'verifier' })}</div>`;
-  const html = `<article class="permit-letter document-container">${kopSuratHtml()}<div style="text-align:center;margin:24px 0 18px"><h1 style="font-size:16px;text-decoration:underline;margin:0">SURAT IZIN KELUAR / PULANG SANTRI</h1><p>Nomor: ${escapeHtml(permit.letterNumber)}</p></div><p>Yang bertanda tangan di bawah ini, Pengasuhan ${escapeHtml(institution.school)}, memberikan izin kepada santri berikut:</p><table style="width:100%;line-height:1.8"><tr><td>Nama Santri</td><td>: <b>${escapeHtml(student.name)}</b></td></tr><tr><td>NIS / NISN</td><td>: ${escapeHtml(student.nis || student.nisn || '-')}</td></tr><tr><td>Kelas / Program</td><td>: ${escapeHtml(student.className || '-')} / ${escapeHtml(student.program || 'Reguler')}</td></tr><tr><td>Orang Tua / Wali</td><td>: ${escapeHtml(student.parent || '-')}</td></tr></table><p>Dengan ketentuan izin sebagai berikut:</p><table style="width:100%;line-height:1.8"><tr><td>Alasan Keperluan</td><td>: ${escapeHtml(permit.reason || '-')}</td></tr><tr><td>Tanggal Berangkat</td><td>: ${formatDate(permit.date)}${permit.departureTime ? `, pukul ${escapeHtml(permit.departureTime)}` : ''}</td></tr><tr><td>Wajib Kembali</td><td>: ${formatDate(endDate)}${permit.returnTime ? `, paling lambat pukul ${escapeHtml(permit.returnTime)}` : ''}</td></tr><tr><td>Total Durasi</td><td>: <b>${permit.approvedDays || permit.requestedDays || 1} hari</b></td></tr></table><div style="border:1px solid #555;padding:10px;margin-top:18px"><b>Catatan:</b> Santri wajib kembali sesuai batas waktu yang ditetapkan.</div>${signatureBlock}<div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:42px;text-align:center"><div>Pemohon,<br><br>${escapeHtml(permit.applicantSignature || '[ TERVERIFIKASI DIGITAL WALI SANTRI ]')}<br><b>( ${escapeHtml(student.parent || 'Orang Tua / Wali')} )</b></div><div>Mengetahui & Menyetujui,<br>${escapeHtml(permit.approvedBy || 'Pembina Santri')}<br><span style="display:inline-block;margin:12px 0;border:1px dashed #555;padding:12px">${escapeHtml(permit.officialStamp || 'STEMPEL DIGITAL MAHAD')}</span><br>Verifikasi: ${formatDate(permit.verifiedAt || today)}</div></div><div style="margin-top:38px;text-align:center;font-size:9px">Security Hash: ${escapeHtml(securityHash)}</div></article>${documentActionButtons('permit', permit.id, 'Print Surat')}`;
+  const html = `<article class="permit-letter document-container">${kopSuratHtml()}<div style="text-align:center;margin:24px 0 18px"><h1 style="font-size:16px;text-decoration:underline;margin:0">SURAT IZIN KELUAR / PULANG SANTRI</h1><p>Nomor: ${escapeHtml(permit.letterNumber)}</p></div><p>Yang bertanda tangan di bawah ini, Pengasuhan ${escapeHtml(institution.school)}, memberikan izin kepada santri berikut:</p><table style="width:100%;line-height:1.8"><tr><td>Nama Santri</td><td>: <b>${escapeHtml(student.name)}</b></td></tr><tr><td>NIS / NISN</td><td>: ${escapeHtml(student.nis || student.nisn || '-')}</td></tr><tr><td>Kelas / Program</td><td>: ${escapeHtml(student.className || '-')} / ${escapeHtml(student.program || 'Reguler')}</td></tr><tr><td>Orang Tua / Wali</td><td>: ${escapeHtml(student.parent || '-')}</td></tr></table><p>Dengan ketentuan izin sebagai berikut:</p><table style="width:100%;line-height:1.8"><tr><td>Alasan Keperluan</td><td>: ${escapeHtml(permit.reason || '-')}</td></tr><tr><td>Tanggal Berangkat</td><td>: ${formatDate(permit.date)}${permit.departureTime ? `, pukul ${escapeHtml(permit.departureTime)}` : ''}</td></tr><tr><td>Wajib Kembali</td><td>: ${formatDate(endDate)}${permit.returnTime ? `, paling lambat pukul ${escapeHtml(permit.returnTime)}` : ''}</td></tr><tr><td>Total Durasi</td><td>: <b>${permit.approvedDays || permit.requestedDays || 1} hari</b></td></tr></table><div style="border:1px solid #555;padding:10px;margin-top:18px"><b>Catatan:</b> Santri wajib kembali sesuai batas waktu yang ditetapkan.</div>${signatureBlock}<div style="margin-top:38px;text-align:center;font-size:9px">Security Hash: ${escapeHtml(securityHash)}</div></article>${documentActionButtons('permit', permit.id, 'Print Surat')}`;
   if (print) {
     printDocumentInFrame(html, `Surat Izin - ${permit.letterNumber}`, '@page{size:A4 portrait;margin:15mm}');
     return;
