@@ -1,4 +1,4 @@
-﻿/* Application behaviour. Shared catalogues and seed data live only in data.js?v=6000. */
+/* Application behaviour. Shared catalogues and seed data live only in data.js?v=6000. */
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const today = new Date().toISOString().slice(0, 10);
 const KOP_SURAT_LOGO = './assets/logo-removebg-preview.png';
@@ -860,8 +860,6 @@ async function initializeFirebase() {
   const firebaseApp = window.firebase.apps.length ? window.firebase.app() : window.firebase.initializeApp(firebaseConfig);
   firebaseState.database = firebaseApp.database();
   firebaseState.ready = true;
-  const paymentsRef = firebaseState.database.ref('boardingpro/payments');
-  const invoicesRef = firebaseState.database.ref('boardingpro/invoices');
   const stateRef = firebaseState.database.ref('boardingpro/state');
   stateRef.on('value', (snapshot) => {
     if (firebaseState.syncing) return;
@@ -874,18 +872,22 @@ async function initializeFirebase() {
     }
     render();
   }, (error) => console.error('[BoardingPro] Sinkronisasi state realtime gagal:', error));
-  paymentsRef.on('value', (snapshot) => {
+  stateCollectionKeys.forEach((key) => {
+    firebaseState.database.ref(`boardingpro/state/${key}`).on('value', (snapshot) => {
+      if (firebaseState.syncing) return;
+      const remote = snapshot.val();
+      state[key] = Array.isArray(remote) ? remote.filter(Boolean) : remote && typeof remote === 'object' ? Object.values(remote) : [];
+      normalizeStateCollections();
+      render();
+    }, (error) => console.error(`[BoardingPro] Sinkronisasi koleksi ${key} gagal:`, error));
+  });
+  firebaseState.database.ref('boardingpro/state/config').on('value', (snapshot) => {
     if (firebaseState.syncing) return;
     const remote = snapshot.val();
-    state.payments = remote && typeof remote === 'object' ? Object.values(remote) : [];
+    if (remote && typeof remote === 'object') state.config = remote;
+    normalizeStateCollections();
     render();
-  }, (error) => console.error('[BoardingPro] Sinkronisasi pembayaran gagal:', error));
-  invoicesRef.on('value', (snapshot) => {
-    if (firebaseState.syncing) return;
-    const remote = snapshot.val();
-    state.invoices = remote && typeof remote === 'object' ? Object.values(remote) : [];
-    render();
-  }, (error) => console.error('[BoardingPro] Sinkronisasi invoice gagal:', error));
+  }, (error) => console.error('[BoardingPro] Sinkronisasi konfigurasi gagal:', error));
 }
 
 function syncFirebaseFinance() {
@@ -894,11 +896,16 @@ function syncFirebaseFinance() {
   const snapshot = {};
   stateCollectionKeys.forEach((key) => { snapshot[key] = state[key]; });
   snapshot.config = state.config;
-  Promise.all([
+  const writes = [
     firebaseState.database.ref('boardingpro/state').set(snapshot),
-    firebaseState.database.ref('boardingpro/payments').set(Object.fromEntries(state.payments.map((item) => [item.id, item]))),
-    firebaseState.database.ref('boardingpro/invoices').set(Object.fromEntries(state.invoices.map((item) => [item.id, item])))
-  ]).catch((error) => console.error('[BoardingPro] Gagal menyimpan pembayaran/invoice ke Firebase:', error)).finally(() => {
+    firebaseState.database.ref('boardingpro/state/config').set(state.config)
+  ];
+  stateCollectionKeys.forEach((key) => {
+    const collection = Array.isArray(state[key]) ? state[key] : [];
+    const keyedCollection = Object.fromEntries(collection.map((item, index) => [item?.id || String(index), item]));
+    writes.push(firebaseState.database.ref(`boardingpro/state/${key}`).set(keyedCollection));
+  });
+  Promise.all(writes).catch((error) => console.error('[BoardingPro] Gagal menyimpan state realtime ke Firebase:', error)).finally(() => {
     firebaseState.syncing = false;
   });
 }
@@ -1094,13 +1101,13 @@ function welcome(eyebrow, title, description, action = '') {
   return `<div class="welcome"><div><span class="eyebrow">${eyebrow}</span><h1>${title}</h1><p>${description}</p></div>${action}</div>`;
 }
 const dailyEducationalQuotes = [
-  { arabic: 'ÙˆÙŽÙ‚ÙÙ„Ù’ Ø±ÙŽØ¨ÙÙ‘ Ø²ÙØ¯Ù’Ù†ÙÙŠ Ø¹ÙÙ„Ù’Ù…Ù‹Ø§', translation: 'Ya Rabbku, tambahkanlah ilmu kepadaku.', reference: 'QS. Taha: 114' },
-  { arabic: 'Ù‡ÙŽÙ„Ù’ ÙŠÙŽØ³Ù’ØªÙŽÙˆÙÙŠ Ø§Ù„ÙŽÙ‘Ø°ÙÙŠÙ†ÙŽ ÙŠÙŽØ¹Ù’Ù„ÙŽÙ…ÙÙˆÙ†ÙŽ ÙˆÙŽØ§Ù„ÙŽÙ‘Ø°ÙÙŠÙ†ÙŽ Ù„ÙŽØ§ ÙŠÙŽØ¹Ù’Ù„ÙŽÙ…ÙÙˆÙ†ÙŽ', translation: 'Adakah sama orang-orang yang mengetahui dengan orang-orang yang tidak mengetahui?', reference: 'QS. Az-Zumar: 9' },
-  { arabic: 'ÙŠÙŽØ±Ù’ÙÙŽØ¹Ù Ø§Ù„Ù„ÙŽÙ‘Ù‡Ù Ø§Ù„ÙŽÙ‘Ø°ÙÙŠÙ†ÙŽ Ø¢Ù…ÙŽÙ†ÙÙˆØ§ Ù…ÙÙ†ÙƒÙÙ…Ù’ ÙˆÙŽØ§Ù„ÙŽÙ‘Ø°ÙÙŠÙ†ÙŽ Ø£ÙÙˆØªÙÙˆØ§ Ø§Ù„Ù’Ø¹ÙÙ„Ù’Ù…ÙŽ Ø¯ÙŽØ±ÙŽØ¬ÙŽØ§ØªÙ', translation: 'Allah meninggikan orang-orang yang beriman dan yang diberi ilmu beberapa derajat.', reference: 'QS. Al-Mujadilah: 11' },
-  { arabic: 'Ù…ÙŽÙ†Ù’ Ø³ÙŽÙ„ÙŽÙƒÙŽ Ø·ÙŽØ±ÙÙŠÙ‚Ù‹Ø§ ÙŠÙŽÙ„Ù’ØªÙŽÙ…ÙØ³Ù ÙÙÙŠÙ‡Ù Ø¹ÙÙ„Ù’Ù…Ù‹Ø§ Ø³ÙŽÙ‡ÙŽÙ‘Ù„ÙŽ Ø§Ù„Ù„ÙŽÙ‘Ù‡Ù Ù„ÙŽÙ‡Ù Ø¨ÙÙ‡Ù Ø·ÙŽØ±ÙÙŠÙ‚Ù‹Ø§ Ø¥ÙÙ„ÙŽÙ‰ Ø§Ù„Ù’Ø¬ÙŽÙ†ÙŽÙ‘Ø©Ù', translation: 'Barang siapa menempuh jalan untuk mencari ilmu, Allah akan mudahkan baginya jalan menuju surga.', reference: 'HR. Muslim No. 2699' },
-  { arabic: 'Ø¥ÙÙ†ÙŽÙ‘Ù…ÙŽØ§ Ø§Ù„Ù’Ø£ÙŽØ¹Ù’Ù…ÙŽØ§Ù„Ù Ø¨ÙØ§Ù„Ù†ÙÙ‘ÙŠÙŽÙ‘Ø§ØªÙ', translation: 'Sesungguhnya setiap amal bergantung pada niatnya.', reference: 'HR. Bukhari No. 1 dan Muslim No. 1907' },
-  { arabic: 'Ù…ÙŽÙ†Ù’ Ø®ÙŽØ±ÙŽØ¬ÙŽ ÙÙÙŠ Ø·ÙŽÙ„ÙŽØ¨Ù Ø§Ù„Ù’Ø¹ÙÙ„Ù’Ù…Ù ÙÙŽÙ‡ÙÙˆÙŽ ÙÙÙŠ Ø³ÙŽØ¨ÙÙŠÙ„Ù Ø§Ù„Ù„ÙŽÙ‘Ù‡Ù Ø­ÙŽØªÙŽÙ‘Ù‰ ÙŠÙŽØ±Ù’Ø¬ÙØ¹ÙŽ', translation: 'Barang siapa keluar untuk mencari ilmu, ia berada di jalan Allah hingga ia kembali.', reference: 'HR. Tirmidzi No. 2647' },
-  { arabic: 'Ù…ÙŽÙ‘Ù† Ø°ÙŽØ§ Ø§Ù„ÙŽÙ‘Ø°ÙÙŠ ÙŠÙÙ‚Ù’Ø±ÙØ¶Ù Ø§Ù„Ù„ÙŽÙ‘Ù‡ÙŽ Ù‚ÙŽØ±Ù’Ø¶Ù‹Ø§ Ø­ÙŽØ³ÙŽÙ†Ù‹Ø§ ÙÙŽÙŠÙØ¶ÙŽØ§Ø¹ÙÙÙŽÙ‡Ù Ù„ÙŽÙ‡Ù Ø£ÙŽØ¶Ù’Ø¹ÙŽØ§ÙÙ‹Ø§ ÙƒÙŽØ«ÙÙŠØ±ÙŽØ©Ù‹', translation: 'Siapakah yang mau memberi pinjaman kepada Allah sebagai pinjaman yang baik, maka Dia akan melipatgandakannya dengan banyak.', reference: 'QS. Al-Baqarah: 245' }
+  { arabic: 'وَقُلْ رَبِّ زِدْنِي عِلْمًا', translation: 'Ya Rabbku, tambahkanlah ilmu kepadaku.', reference: 'QS. Taha: 114' },
+  { arabic: 'هَلْ يَسْتَوِي الَّذِينَ يَعْلَمُونَ وَالَّذِينَ لَا يَعْلَمُونَ', translation: 'Adakah sama orang-orang yang mengetahui dengan orang-orang yang tidak mengetahui?', reference: 'QS. Az-Zumar: 9' },
+  { arabic: 'يَرْفَعِ اللَّهُ الَّذِينَ آمَنُوا مِنكُمْ وَالَّذِينَ أُوتُوا الْعِلْمَ دَرَجَاتٍ', translation: 'Allah meninggikan orang-orang yang beriman dan yang diberi ilmu beberapa derajat.', reference: 'QS. Al-Mujadilah: 11' },
+  { arabic: 'مَنْ سَلَكَ طَرِيقًا يَلْتَمِسُ فِيهِ عِلْمًا سَهَّلَ اللَّهُ لَهُ بِهِ طَرِيقًا إِلَى الْجَنَّةِ', translation: 'Barang siapa menempuh jalan untuk mencari ilmu, Allah akan mudahkan baginya jalan menuju surga.', reference: 'HR. Muslim No. 2699' },
+  { arabic: 'إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ', translation: 'Sesungguhnya setiap amal bergantung pada niatnya.', reference: 'HR. Bukhari No. 1 dan Muslim No. 1907' },
+  { arabic: 'مَنْ خَرَجَ فِي طَلَبِ الْعِلْمِ فَهُوَ فِي سَبِيلِ اللَّهِ حَتَّى يَرْجِعَ', translation: 'Barang siapa keluar untuk mencari ilmu, ia berada di jalan Allah hingga ia kembali.', reference: 'HR. Tirmidzi No. 2647' },
+  { arabic: 'مَّن ذَا الَّذِي يُقْرِضُ اللَّهَ قَرْضًا حَسَنًا فَيُضَاعِفَهُ لَهُ أَضْعَافًا كَثِيرَةً', translation: 'Siapakah yang mau memberi pinjaman kepada Allah sebagai pinjaman yang baik, maka Dia akan melipatgandakannya dengan banyak.', reference: 'QS. Al-Baqarah: 245' }
 ];
 function dailyEducationalQuote(date = new Date()) {
   const start = new Date(date.getFullYear(), 0, 1);
@@ -2070,7 +2077,7 @@ function scanTransferReceipt(file) {
 let modalEscapeHandler = null;
 function openModal(title, content) {
   closeModal();
-  $('#modal-root').innerHTML = `<div class="modal-backdrop modal-overlay" data-modal-backdrop><div class="modal modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-head modal-card-header no-print"><h2 id="modal-title" style="font-size:1rem;font-weight:600">${escapeHtml(title)}</h2><button type="button" class="btn btn-ghost modal-close" data-close-modal aria-label="Tutup" onclick="closeModal()"><span aria-hidden="true" style="font-size:1.35rem;line-height:1">Ã—</span> Tutup</button></div><div class="modal-body">${content}</div></div></div>`;
+  $('#modal-root').innerHTML = `<div class="modal-backdrop modal-overlay" data-modal-backdrop><div class="modal modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-head modal-card-header no-print"><h2 id="modal-title" style="font-size:1rem;font-weight:600">${escapeHtml(title)}</h2><button type="button" class="btn btn-ghost modal-close" data-close-modal aria-label="Tutup" onclick="closeModal()"><span aria-hidden="true" style="font-size:1.35rem;line-height:1">x</span> Tutup</button></div><div class="modal-body">${content}</div></div></div>`;
   const root = $('#modal-root');
   root.querySelector('[data-close-modal]').addEventListener('click', closeModal);
   root.querySelector('[data-modal-backdrop]').addEventListener('click', (event) => {
@@ -3257,4 +3264,3 @@ function showUnreadCriticalNotifications() {
   playCriticalAlert();
   openModal('Notifikasi Penting', `<div class="notice" style="margin-bottom:12px"><b>${unread.length} notifikasi kedisiplinan membutuhkan perhatian.</b></div><div class="activity-list">${unread.map((item) => `<div class="activity"><span class="activity-icon red">${icon('triangle-alert', 16)}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.description)}</p></div></div>`).join('')}</div>`);
 }
-
