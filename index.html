@@ -20,6 +20,7 @@
   <style>
     :root{--emerald:#0d9488;--emerald-dark:#0f766e;--emerald-deep:#134e4a;--gold:#0d9488;--gold-light:#99f6e4;--ink:#0f172a;--muted:#334155;--line:#ccfbf1;--bg:#f0fdf4}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;color:#0f172a;font-family:'Plus Jakarta Sans',sans-serif;background-color:#f0f7f4;background:linear-gradient(135deg,#f0f7f4 0%,#f0fdf4 50%,#f8fafc 100%);background-attachment:fixed}
+    #splash-screen,.splash-screen,.loading-screen,[data-splash-screen]{background-color:#ffffff !important;background-image:none !important}
     h1,h2,h3,p{margin:0}h1,h2,h3{font-weight:800}.hidden,[hidden]{display:none!important}
     .app{min-height:100vh}.main{display:flex;flex-direction:column;min-height:100vh;width:100%}.topbar{position:sticky;top:0;z-index:8;display:flex;align-items:center;justify-content:space-between;gap:18px;min-height:78px;padding:14px clamp(18px,4vw,56px);color:#fff;background-color:var(--emerald-deep);background-image:linear-gradient(135deg,#064e3bee,#087f5bee),repeating-linear-gradient(45deg,transparent 0 12px,#ffffff0a 12px 13px),repeating-linear-gradient(-45deg,transparent 0 18px,#14b8a60b 18px 19px);box-shadow:0 4px 24px #064e3b2b}
     .topbar-left,.topbar-right,.brand,.user,.quick-nav,.actions-inline{display:flex;align-items:center}.topbar-left,.topbar-right{gap:14px}.brand{gap:11px;color:#fff}.brand b{display:block;font-size:15px}    .app-logo{display:block;width:38px;height:38px;padding:3px;object-fit:contain;border-radius:50%;background:#ffffff !important;box-shadow:0 1px 5px #022c2240}.brand small{display:block;color:#c6e5d2;font-size:9px;letter-spacing:1px;margin-top:2px}.brand-mark,.login-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:13px;color:#064e3b;background:#d1fae5;box-shadow:none;font-size:18px}.topbar .brand-mark{width:38px;height:38px;color:#0f766e;background:#ccfbf1;filter:none}.topbar .brand-mark svg,.topbar .brand-mark i{color:#0f766e;filter:none}.role-select option{color:var(--ink);background:#fff}.role-switch-label{position:relative;z-index:20;display:flex;align-items:center;gap:7px;color:#e6fff2;font-size:10px;font-weight:700;white-space:nowrap}.role-switch-label select{min-width:145px;border:1px solid #ffffff45;border-radius:9px;padding:8px 28px 8px 10px;color:#0f172a;background:#fff;font:600 10px inherit;outline:0;box-shadow:0 4px 12px #0002}.role-switch-label select:hover,.role-switch-label select:focus{background:#f0fdf4;border-color:#99f6e4}.role-switch-label option{padding:8px;color:#0f172a;background:#fff}.icon-btn{display:inline-grid;place-items:center;width:32px;height:32px;border:1px solid #ffffff30;border-radius:9px;color:inherit;background:#ffffff12;cursor:pointer}.icon-btn:hover{background:#ffffff2b}.user{gap:9px}.user b{display:block;font-size:11px}.user small{display:block;color:#b7d7c5;font-size:9px}.avatar{display:inline-grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;color:var(--emerald);background:#dff3e7;font-weight:800;font-size:10px}.avatar.xl{width:58px;height:58px;font-size:17px}
@@ -279,8 +280,25 @@
     </main>
   </div>
   <div id="modal-root"></div>
-  <script src="data.js?v=6001"></script>
-  <script src="app.js?v=6001"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyBdihFIGtHf_tnyEMxL2PrryotpA6hCgVw",
+    authDomain: "boardingpro-web.firebaseapp.com",
+    databaseURL: "https://boardingpro-web-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "boardingpro-web",
+    storageBucket: "boardingpro-web.firebasestorage.app",
+    messagingSenderId: "218729877835",
+    appId: "1:218729877835:web:9222e0ed4899dd9a6c18ce"
+  };
+  if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+  }
+</script>
+  <script src="data.js?v=6002"></script>
+  <script src="app.js?v=6002"></script>
 
 <!-- Modal Rincian Kehadiran Guru -->
 <div id="modal-detail-guru" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">

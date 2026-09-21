@@ -10,3 +10,11 @@
 .app-logo {
   background: #ffffff !important;
 }
+
+#splash-screen,
+.splash-screen,
+.loading-screen,
+[data-splash-screen] {
+  background-color: #ffffff !important;
+  background-image: none !important;
+}

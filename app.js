@@ -172,7 +172,7 @@ function resetTransactionalData() {
 }
 normalizeStateCollections();
 secureStorage.get('boardingpro-state').then((storedState) => {
-  if (storedState && typeof storedState === 'object') {
+  if (!firebaseState.ready && !firebaseState.remoteLoaded && storedState && typeof storedState === 'object') {
     state = { ...state, ...storedState };
     normalizeStateCollections();
     window.appData.state = state;
@@ -607,30 +607,50 @@ const statusBadge = (status) => {
   const styles = { Approved: 'badge-success', Verified: 'badge-success', Terverifikasi: 'badge-success', Lunas: 'badge-success', Hadir: 'badge-success', Published: 'badge-success', Pending: 'badge-warning', pending_verification: 'badge-warning', Menunggu: 'badge-warning', 'Menunggu Verifikasi': 'badge-warning', Menunggak: 'badge-danger', Rejected: 'badge-danger', Alpa: 'badge-danger', Draft: 'badge-neutral' };
   return `<span class="badge ${styles[status] || 'badge-neutral'}">${status}</span>`;
 };
+function collectionFromRemote(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return value && typeof value === 'object' ? Object.values(value).filter(Boolean) : [];
+}
+let runtimeRenderQueued = false;
+function requestRuntimeRender() {
+  if (runtimeRenderQueued) return;
+  runtimeRenderQueued = true;
+  const refresh = () => {
+    runtimeRenderQueued = false;
+    if (document.body) render();
+  };
+  if (window.requestAnimationFrame) window.requestAnimationFrame(refresh);
+  else window.setTimeout(refresh, 0);
+}
 const persist = () => {
   normalizeStateCollections();
-  secureStorage.set('boardingpro-state', state).catch((error) => console.error('[BoardingPro] Gagal menyimpan state terenkripsi:', error));
+  if (!firebaseState.ready) {
+    secureStorage.set('boardingpro-state', state).catch((error) => console.error('[BoardingPro] Gagal menyimpan state fallback terenkripsi:', error));
+  }
   secureStorage.set('boardingpro-role', state.role).catch((error) => console.error('[BoardingPro] Gagal menyimpan role terenkripsi:', error));
   try {
-    localStorage.setItem('boardingpro_users', JSON.stringify(state.internalAccounts));
-    localStorage.setItem('boardingpro_santri', JSON.stringify(state.students));
-    localStorage.setItem(PAYMENT_ACCOUNTS_STORAGE_KEY, JSON.stringify(state.config?.paymentAccounts || {}));
-    const syncSnapshot = { revision: Date.now(), data: {} };
-    stateCollectionKeys.forEach((key) => { syncSnapshot.data[key] = state[key]; });
-    syncSnapshot.data.config = state.config;
-    localStorage.setItem(STATE_SYNC_STORAGE_KEY, JSON.stringify(syncSnapshot));
-    if (window.boardingProSyncChannel) window.boardingProSyncChannel.postMessage(syncSnapshot);
+    if (!firebaseState.ready) {
+      localStorage.setItem('boardingpro_users', JSON.stringify(state.internalAccounts));
+      localStorage.setItem('boardingpro_santri', JSON.stringify(state.students));
+      localStorage.setItem(PAYMENT_ACCOUNTS_STORAGE_KEY, JSON.stringify(state.config?.paymentAccounts || {}));
+      const syncSnapshot = { revision: Date.now(), data: {} };
+      stateCollectionKeys.forEach((key) => { syncSnapshot.data[key] = state[key]; });
+      syncSnapshot.data.config = state.config;
+      localStorage.setItem(STATE_SYNC_STORAGE_KEY, JSON.stringify(syncSnapshot));
+      if (window.boardingProSyncChannel) window.boardingProSyncChannel.postMessage(syncSnapshot);
+    }
   } catch (error) {
     console.error('[BoardingPro] Gagal menyimpan akun ke localStorage:', error);
   }
   window.appData.state = state;
   window.appData.currentSantri = currentStudent();
   syncFirebaseFinance();
+  requestRuntimeRender();
 };
 function applySynchronizedState(snapshot) {
   if (!snapshot?.data || typeof snapshot.data !== 'object') return false;
   stateCollectionKeys.forEach((key) => {
-    if (Object.prototype.hasOwnProperty.call(snapshot.data, key)) state[key] = Array.isArray(snapshot.data[key]) ? snapshot.data[key] : [];
+    if (Object.prototype.hasOwnProperty.call(snapshot.data, key)) state[key] = collectionFromRemote(snapshot.data[key]);
   });
   if (snapshot.data.config && typeof snapshot.data.config === 'object') state.config = snapshot.data.config;
   normalizeStateCollections();
@@ -834,7 +854,7 @@ async function offerInstallPrompt() {
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
 }
-const firebaseState = { database: null, syncing: false, ready: false };
+const firebaseState = { database: null, syncing: false, ready: false, remoteLoaded: false };
 const firebaseConfig = window.BOARDINGPRO_FIREBASE_CONFIG || null;
 window.appData = window.appData || {};
 window.appData.state = state;
@@ -852,7 +872,10 @@ function loadFirebaseScript(source) {
 }
 
 async function initializeFirebase() {
-  if (!firebaseConfig || !firebaseConfig.databaseURL) return;
+  if (!firebaseConfig || !firebaseConfig.databaseURL) {
+    console.warn('[BoardingPro] Firebase belum dikonfigurasi. Data operasional memakai fallback lokal sampai BOARDINGPRO_FIREBASE_CONFIG tersedia.');
+    return;
+  }
   if (!window.firebase) {
     await loadFirebaseScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
     await loadFirebaseScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js');
@@ -862,11 +885,12 @@ async function initializeFirebase() {
   firebaseState.ready = true;
   const stateRef = firebaseState.database.ref('boardingpro/state');
   stateRef.on('value', (snapshot) => {
-    if (firebaseState.syncing) return;
     const remote = snapshot.val();
     if (remote && typeof remote === 'object') {
+      firebaseState.remoteLoaded = true;
       applySynchronizedState({ data: remote });
     } else if (remote === null) {
+      firebaseState.remoteLoaded = true;
       stateCollectionKeys.forEach((key) => { state[key] = []; });
       normalizeStateCollections();
     }
@@ -874,15 +898,13 @@ async function initializeFirebase() {
   }, (error) => console.error('[BoardingPro] Sinkronisasi state realtime gagal:', error));
   stateCollectionKeys.forEach((key) => {
     firebaseState.database.ref(`boardingpro/state/${key}`).on('value', (snapshot) => {
-      if (firebaseState.syncing) return;
       const remote = snapshot.val();
-      state[key] = Array.isArray(remote) ? remote.filter(Boolean) : remote && typeof remote === 'object' ? Object.values(remote) : [];
+      state[key] = collectionFromRemote(remote);
       normalizeStateCollections();
       render();
     }, (error) => console.error(`[BoardingPro] Sinkronisasi koleksi ${key} gagal:`, error));
   });
   firebaseState.database.ref('boardingpro/state/config').on('value', (snapshot) => {
-    if (firebaseState.syncing) return;
     const remote = snapshot.val();
     if (remote && typeof remote === 'object') state.config = remote;
     normalizeStateCollections();
@@ -896,15 +918,13 @@ function syncFirebaseFinance() {
   const snapshot = {};
   stateCollectionKeys.forEach((key) => { snapshot[key] = state[key]; });
   snapshot.config = state.config;
-  const writes = [
-    firebaseState.database.ref('boardingpro/state').set(snapshot),
-    firebaseState.database.ref('boardingpro/state/config').set(state.config)
-  ];
+  const writes = [firebaseState.database.ref('boardingpro/state').set(snapshot)];
   stateCollectionKeys.forEach((key) => {
     const collection = Array.isArray(state[key]) ? state[key] : [];
     const keyedCollection = Object.fromEntries(collection.map((item, index) => [item?.id || String(index), item]));
     writes.push(firebaseState.database.ref(`boardingpro/state/${key}`).set(keyedCollection));
   });
+  writes.push(firebaseState.database.ref('boardingpro/state/config').set(state.config));
   Promise.all(writes).catch((error) => console.error('[BoardingPro] Gagal menyimpan state realtime ke Firebase:', error)).finally(() => {
     firebaseState.syncing = false;
   });
