@@ -276,6 +276,20 @@ function compactUsername(name) {
   const words = cleaned.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
   return words.length <= 1 ? (words[0] || '') : `${words[0]}.${words.slice(1).map((word) => word[0]).join('')}`;
 }
+function generateSecurePassword(length = 14) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#$%!&*';
+  const required = ['A', 'a', '2', '@'];
+  const bytes = new Uint32Array(Math.max(length, required.length));
+  if (window.crypto?.getRandomValues) window.crypto.getRandomValues(bytes);
+  else bytes.fill(Math.floor(Math.random() * alphabet.length));
+  const output = required.slice();
+  for (let index = output.length; index < Math.max(length, 12); index += 1) output.push(alphabet[bytes[index] % alphabet.length]);
+  return output.sort(() => 0.5 - Math.random()).join('');
+}
+function accountHasAssignedRole(account, roleName) {
+  const rolesForAccount = Array.isArray(account?.roles) ? account.roles.map((role) => String(role).toLowerCase()) : [];
+  return rolesForAccount.some((role) => role.includes(roleName));
+}
 function ensurePrimaryAdminAccounts() {
   const defaults = fallbackSeedData.internalAccounts;
   defaults.forEach((fallbackAccount) => {
@@ -524,7 +538,7 @@ function signatureQrHtml(label, name, timestamp, payload) {
   const badge = isApplicant ? 'Terverifikasi Digital' : "Stempel Digital Ma'had";
   return `<div class="signature-card" style="min-width:0;text-align:center;border:1px solid #cbd5e1;border-radius:8px;padding:12px;overflow-wrap:anywhere;break-inside:avoid"><b class="signature-title" style="display:block;font-size:11px">${escapeHtml(label)}</b><img src="${qrSignatureUrl(signaturePayload)}" alt="QR tanda tangan ${escapeHtml(label)}" width="160" height="160" style="display:block;width:160px;height:160px;max-width:100%;margin:8px auto;object-fit:contain" loading="eager"><strong style="display:block;font-size:11px">${escapeHtml(name || 'Tidak diketahui')}</strong><small style="display:block;font-size:9px;color:#475569">${escapeHtml(new Date(safeTimestamp).toLocaleString('id-ID'))}</small><span class="signature-badge" style="display:inline-block;margin-top:8px;padding:4px 8px;border-radius:999px;background:#d1fae5;color:#047857;font-size:9px;font-weight:700">${escapeHtml(badge)}</span></div>`;
 }
-const documentEngineStyles = `*,*:before,*:after{box-sizing:border-box}html,body{margin:0;padding:0;background:#e2e8f0;color:#0f172a;font-family:Arial,sans-serif}.document-container{position:relative;width:100%;max-width:210mm;min-height:297mm;margin:18px auto;padding:15mm;background:#fff;box-shadow:0 8px 28px #0f172a22;overflow:hidden}.kop-container{display:flex;align-items:center;justify-content:center;gap:18px;width:100%;text-align:center;border-bottom:3px double #0f172a;padding-bottom:12px;margin-bottom:16px}.logo-wrapper{display:grid;place-items:center;flex:none;width:110px;height:110px}.logo-wrapper img{display:block;width:100%;height:100%;object-fit:contain}.kop-text{flex:1;min-width:0;text-align:center;line-height:1.35}.kop-text b,.kop-text h1,.kop-text p,.kop-text small{display:block;margin:2px 0;text-align:center}.kop-text h1{font-size:18px;line-height:1.2}.kop-text p,.kop-text small{font-size:10px;line-height:1.45;color:#475569}.document-header{text-align:center;border-bottom:5px double #0f172a;padding-bottom:10px;margin-bottom:22px}.document-header h1,.document-header h2,.document-header p{margin:3px 0;text-align:center}.document-header h1{font-size:20px}.document-header p{font-size:11px;color:#475569}.document-content{line-height:1.65;overflow-wrap:anywhere}.document-signatures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:28px;page-break-inside:avoid}.document-watermark{position:absolute;top:48%;left:50%;z-index:2;width:150%;transform:translate(-50%,-50%) rotate(-28deg);color:#b91c1c2b;font-size:34px;font-weight:800;letter-spacing:3px;text-align:center;pointer-events:none;white-space:nowrap}.document-container.is-draft .document-signatures{display:none}.document-container.is-draft .document-content{opacity:.9}.document-multiline{white-space:pre-line}@media(max-width:820px){.document-container{width:100%;min-height:auto;margin:0;padding:28px 20px;box-shadow:none}.document-signatures{grid-template-columns:1fr}.document-watermark{font-size:25px}}@media print{@page{size:A4 portrait;margin:15mm}.document-container{width:100%;max-width:210mm;min-height:297mm;margin:0;box-shadow:none}.document-actions{display:none!important}}`;
+const documentEngineStyles = `*,*:before,*:after{box-sizing:border-box}html,body{margin:0;padding:0;background:#e2e8f0;color:#0f172a;font-family:Arial,sans-serif}.document-container{position:relative;width:100%;max-width:210mm;min-height:297mm;margin:18px auto;padding:15mm;background:#fff;box-shadow:0 8px 28px #0f172a22;overflow:hidden}.kop-container{display:flex;align-items:center;justify-content:center;gap:18px;width:100%;text-align:center;border-bottom:3px double #0f172a;padding-bottom:12px;margin-bottom:16px}.logo-wrapper{display:grid;place-items:center;flex:none;width:110px;height:110px;background:#ffffff !important}.logo-wrapper img{display:block;width:100%;height:100%;object-fit:contain}.kop-text{flex:1;min-width:0;text-align:center;line-height:1.35}.kop-text b,.kop-text h1,.kop-text p,.kop-text small{display:block;margin:2px 0;text-align:center}.kop-text h1{font-size:18px;line-height:1.2}.kop-text p,.kop-text small{font-size:10px;line-height:1.45;color:#475569}.document-header{text-align:center;border-bottom:5px double #0f172a;padding-bottom:10px;margin-bottom:22px}.document-header h1,.document-header h2,.document-header p{margin:3px 0;text-align:center}.document-header h1{font-size:20px}.document-header p{font-size:11px;color:#475569}.document-content{line-height:1.65;overflow-wrap:anywhere}.document-signatures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:28px;page-break-inside:avoid}.document-watermark{position:absolute;top:48%;left:50%;z-index:2;width:150%;transform:translate(-50%,-50%) rotate(-28deg);color:#b91c1c2b;font-size:34px;font-weight:800;letter-spacing:3px;text-align:center;pointer-events:none;white-space:nowrap}.document-container.is-draft .document-signatures{display:none}.document-container.is-draft .document-content{opacity:.9}.document-multiline{white-space:pre-line}@media(max-width:820px){.document-container{width:100%;min-height:auto;margin:0;padding:28px 20px;box-shadow:none}.document-signatures{grid-template-columns:1fr}.document-watermark{font-size:25px}}@media print{@page{size:A4 portrait;margin:15mm}.document-container{width:100%;max-width:210mm;min-height:297mm;margin:0;box-shadow:none}.document-actions{display:none!important}}`;
 function renderDocumentPreview(docType, docData = {}) {
   const status = String(docData.status || '').toLowerCase();
   const verified = ['approved', 'terverifikasi', 'verified', 'lunas', 'aktif'].includes(status);
@@ -708,12 +722,12 @@ const effectiveRole = () => {
 };
 const currentRoleIsAdmin = () => ['mahad', 'admin'].includes(effectiveRole());
 const checkPermission = () => currentRoleIsAdmin();
-const hasTahfizhAccess = () => currentRoleIsAdmin() || ['pembina', 'musyrif'].includes(effectiveRole()) || (effectiveRole() === 'guru' && currentAccount()?.isTahfizhTeacher === true) || (currentAccount()?.isMusyrif === true && ['guru', 'pembina', 'musyrif'].includes(effectiveRole()));
+const hasTahfizhAccess = () => currentRoleIsAdmin() || ['pembina', 'musyrif'].includes(effectiveRole()) || (effectiveRole() === 'guru' && (currentAccount()?.isTahfizhTeacher === true || accountHasAssignedRole(currentAccount(), 'tahfizh')));
 const canManageAnnouncements = () => ['mahad', 'kepsek'].includes(effectiveRole());
 const canPromoteStudents = () => ['kepsek', 'mahad', 'admin'].includes(effectiveRole());
 const canManageFinance = () => ['mahad', 'admin'].includes(effectiveRole());
 const canManageSecurity = () => ['security', 'mahad', 'admin'].includes(effectiveRole());
-const canManageDormitory = () => ['mahad', 'admin', 'pembina', 'musyrif'].includes(effectiveRole()) || (['guru', 'pembina', 'musyrif'].includes(effectiveRole()) && currentAccount()?.isMusyrif === true);
+const canManageDormitory = () => ['mahad', 'admin', 'pembina', 'musyrif'].includes(effectiveRole()) || (['guru', 'pembina', 'musyrif'].includes(effectiveRole()) && (currentAccount()?.isMusyrif === true || accountHasAssignedRole(currentAccount(), 'musyrif') || accountHasAssignedRole(currentAccount(), 'pembina')));
 const isActiveStudent = (student) => student && student.status !== 'Alumni' && student.status !== 'Alumni Program' && [10, 11, 12].includes(Number(student.grade)) || ['PPTAK', 'KWNQ'].includes(student?.program) && student.status !== 'Alumni' && student.status !== 'Alumni Program';
 state.billingNotifications = (state.billingNotifications || []).filter((bill) => isActiveStudent(state.students.find((student) => student.id === bill.studentId)));
 const financeGroupKeys = ['Reguler SMK  -  Kelas 10', 'Reguler SMK  -  Kelas 11', 'Reguler SMK  -  Kelas 12', 'Program PPTAK (1 Tahun)  -  Non-Jenjang', 'Program KWNQ (3 Bulan)  -  Non-Jenjang'];
@@ -752,24 +766,51 @@ const INACTIVITY_LIMIT = 15 * 60 * 1000;
 const ACTIVE_SESSION_KEY = 'boardingpro-active-session';
 const sessionToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let sessionHeartbeat = null;
+function readActiveSession() {
+  try {
+    const value = JSON.parse(localStorage.getItem(ACTIVE_SESSION_KEY) || 'null');
+    return value && typeof value === 'object' ? value : null;
+  } catch (error) {
+    console.error('[BoardingPro] Data sesi aktif tidak valid:', error);
+    return null;
+  }
+}
+function markAccountSession(account, active) {
+  if (!account || typeof account !== 'object') return;
+  account.isActive = active;
+  if (active) account.activeSessionId = sessionToken;
+  else delete account.activeSessionId;
+}
 function activateSingleSession(account) {
   if (!account?.username) return;
-  localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({ username: account.username, token: sessionToken, updatedAt: Date.now() }));
+  markAccountSession(account, true);
+  localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({ accountId: account.id || account.username, username: account.username, token: sessionToken, updatedAt: Date.now() }));
   window.clearInterval(sessionHeartbeat);
   sessionHeartbeat = window.setInterval(() => {
-    if (localStorage.getItem('boardingpro-auth') === 'true') localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({ username: account.username, token: sessionToken, updatedAt: Date.now() }));
+    if (localStorage.getItem('boardingpro-auth') === 'true' && account.activeSessionId === sessionToken) {
+      localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({ accountId: account.id || account.username, username: account.username, token: sessionToken, updatedAt: Date.now() }));
+    }
   }, 5000);
 }
 function endSingleSession() {
-  const active = JSON.parse(localStorage.getItem(ACTIVE_SESSION_KEY) || 'null');
-  if (active?.token === sessionToken) localStorage.removeItem(ACTIVE_SESSION_KEY);
+  const active = readActiveSession();
+  const account = currentAccount();
+  if (active?.token === sessionToken) {
+    if (account?.activeSessionId === sessionToken) markAccountSession(account, false);
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+    persist();
+  }
   window.clearInterval(sessionHeartbeat);
   sessionHeartbeat = null;
 }
 window.addEventListener('storage', (event) => {
   if (event.key !== ACTIVE_SESSION_KEY || localStorage.getItem('boardingpro-auth') !== 'true') return;
-  const active = JSON.parse(event.newValue || 'null');
-  if (active?.username === state.username && active.token !== sessionToken) {
+  const active = (() => {
+    try { return JSON.parse(event.newValue || 'null'); } catch (error) { console.error('[BoardingPro] Event sesi aktif tidak valid:', error); return null; }
+  })();
+  if (active?.username?.toLowerCase() === state.username?.toLowerCase() && active.token !== sessionToken) {
+    const account = currentAccount();
+    if (account?.activeSessionId === sessionToken) markAccountSession(account, false);
     endSingleSession();
     localStorage.removeItem('boardingpro-auth');
     showLanding();
@@ -886,6 +927,7 @@ function resetInactivityTimer() {
   if (localStorage.getItem('boardingpro-auth') !== 'true' || state.presentationMode) return;
   state.lastActivity = Date.now();
   inactivityTimer = window.setTimeout(() => {
+    endSingleSession();
     localStorage.removeItem('boardingpro-auth');
     secureStorage.set('boardingpro-user', null).catch((error) => console.error('[BoardingPro] Gagal menghapus sesi terenkripsi:', error));
     showLanding();
@@ -1004,14 +1046,30 @@ function metricValueIsActive(value) {
     : normalized.replace(',', '.'));
   return Number.isFinite(numericValue) && numericValue !== 0;
 }
+function dashboardAttendanceRate() {
+  const records = state.attendance.filter((item) => item.status);
+  if (!records.length) return 0;
+  return Math.round(records.filter((item) => item.status === 'Hadir').length / records.length * 1000) / 10;
+}
+function dashboardAverageGrade() {
+  const scores = state.grades.map((item) => Number(item.score)).filter((score) => Number.isFinite(score));
+  if (!scores.length) return 0;
+  return Math.round(scores.reduce((total, score) => total + score, 0) / scores.length * 10) / 10;
+}
+function dashboardActiveNotes() {
+  return state.monthlySummaries.filter((item) => String(item.note || item.notes || '').trim()).length;
+}
+function dashboardPercent(value) {
+  return metricValueIsActive(value) ? `${Number(value).toLocaleString('id-ID', { maximumFractionDigits: 1 })}%` : 0;
+}
 function statCard(label, value, helper, iconName, color = 'blue') {
   const hasValue = metricValueIsActive(value);
   const hasTrend = hasValue && helper && !/%/.test(String(helper));
   const trend = hasTrend ? `<span class="trend-up">${icon('trending-up', 14)} ${helper}</span>` : '';
-  return `<div class="stat-card"><div class="stat-top"><span class="stat-icon ${color}">${icon(iconName)}</span>${trend}</div><div class="stat-value">${value ?? 0}</div><div class="stat-label">${label}</div></div>`;
+  return `<div class="stat-card"><div class="stat-top"><span class="stat-icon ${color}">${icon(iconName)}</span><span class="trend-slot" style="display:${hasTrend ? 'flex' : 'none'} !important">${trend}</span></div><div class="stat-value">${hasValue ? value : 0}</div><div class="stat-label">${label}</div></div>`;
 }
 function metricNote(value, text) {
-  return metricValueIsActive(value) ? `<div class="metric-note">${text}</div>` : '';
+  return metricValueIsActive(value) && text && !/%/.test(String(text)) ? `<div class="metric-note">${text}</div>` : '';
 }
 function updateLiveDashboardDate() {
   document.querySelectorAll('[data-live-dashboard-date]').forEach((element) => {
@@ -1146,8 +1204,8 @@ function unifiedDashboard() {
   const balance = state.pocketBalances.find((item) => item.studentId === student.id)?.balance || 0;
   const transactions = state.pocketTransactions.filter((item) => item.studentId === student.id).slice(0, 4);
   const stats = canViewFinance()
-    ? `${statCard('Total Santri', state.students.length, '', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}`
-    : `${statCard('Total Santri', state.students.length, 'Data aktif', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '', 'calendar-check', 'green')}${statCard('Setoran Tahfizh', state.tahfizh.length, 'Rekaman terbaru', 'book-open-check', 'purple')}${statCard('Agenda Hari Ini', state.schedules.length, 'Kegiatan terjadwal', 'calendar-days', 'orange')}`;
+    ? `${statCard('Total Santri', state.students.length, '', 'users', 'blue')}${statCard('Kehadiran Rata-rata', dashboardPercent(dashboardAttendanceRate()), '', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}`
+    : `${statCard('Total Santri', state.students.length, 'Data aktif', 'users', 'blue')}${statCard('Kehadiran Rata-rata', dashboardPercent(dashboardAttendanceRate()), '', 'calendar-check', 'green')}${statCard('Setoran Tahfizh', state.tahfizh.length, 'Rekaman terbaru', 'book-open-check', 'purple')}${statCard('Agenda Hari Ini', state.schedules.length, 'Kegiatan terjadwal', 'calendar-days', 'orange')}`;
   const announcementRows = announcements.map((item) => `<div class="activity"><span class="activity-icon green">${icon('megaphone')}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div><time>${formatDate(item.date)}</time></div>`).join('');
   const pocketSection = canViewFinance() ? section('Uang Saku Santri', 'Saldo dan mutasi sesuai hak akses role', `<div class="finance-grid"><div class="finance-tile"><span>Saldo ${escapeHtml(student.name)}</span><b>${money(balance)}</b></div><div class="finance-tile"><span>Top up bulan ini</span><b>${money(transactions.filter((item) => item.type === 'Top Up').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div><div class="finance-tile"><span>Transaksi terbaru</span><b>${transactions.length}</b></div></div>${table(['Tanggal','Jenis','Nominal','Catatan'], transactions.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${item.type}</td><td>${money(item.amount)}</td><td>${escapeHtml(item.note)}</td></tr>`).join(''), 'Belum ada mutasi uang saku')}`) : '';
   const financeSection = canViewFinance() ? section('Keuangan & Invoice', 'SPP, non-SPP, beasiswa, laundry, dan dokumen pembayaran', `${billingTable(4)}<div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-view="finance">Buka pusat keuangan</button></div>`) : '';
@@ -1164,8 +1222,8 @@ function yayasanDashboard() {
   const verified = state.payments.filter((payment) => payment.status === 'Verified').reduce((sum, payment) => sum + payment.amount, 0);
   const pending = state.payments.filter((payment) => payment.status === 'Pending').length;
   return `${welcome('EXECUTIVE OVERVIEW', "Assalamu'alaikum, Pengelola ", `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  Ringkasan kinerja dan kesehatan keuangan BoardingPro STKIS.`, `<button class="btn btn-primary" data-action="export">${icon('download')} Export Laporan</button>`)}
-    <div class="stats-grid">${statCard('Total Santri', state.students.length, '', 'users', 'blue')}${statCard('Kehadiran Rata-rata', '94,8%', '', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}</div>
-    <div class="finance-grid"><div class="finance-tile"><span>SPP bulanan</span><b>${money(verified * .72)}</b>${metricNote(verified, '78% dari penerimaan')}</div><div class="finance-tile"><span>Dana Yayasan</span><b>${money(verified * .12)}</b>${metricNote(verified, 'Operasional & beasiswa')}</div><div class="finance-tile"><span>Non-SPP & uang saku</span><b>${money(verified * .16)}</b>${metricNote(verified, 'Asrama, makan, saku')}</div></div>
+    <div class="stats-grid">${statCard('Total Santri', state.students.length, '', 'users', 'blue')}${statCard('Kehadiran Rata-rata', dashboardPercent(dashboardAttendanceRate()), '', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}</div>
+    <div class="finance-grid"><div class="finance-tile"><span>SPP bulanan</span><b>${money(verified * .72)}</b>${metricNote(verified, 'Alokasi penerimaan')}</div><div class="finance-tile"><span>Dana Yayasan</span><b>${money(verified * .12)}</b>${metricNote(verified, 'Operasional & beasiswa')}</div><div class="finance-tile"><span>Non-SPP & uang saku</span><b>${money(verified * .16)}</b>${metricNote(verified, 'Asrama, makan, saku')}</div></div>
     <div class="grid-2">${section('Rekapitulasi Penerimaan Kas per Program', 'Laporan kas masuk dan penerimaan terverifikasi', financeProgramTable())}${section('Aktivitas Terbaru', 'Pembaruan data secara real-time', activityList())}</div>
     ${section('Monitoring Yayasan - Tahfizh', 'Program, kelas, dan santri dengan target dan capaian', yayasanAccordion())}`;
 }
@@ -1203,7 +1261,7 @@ function managementView() {
 function academicView() {
   const canEdit = ['mahad', 'admin', 'kepsek', 'guru'].includes(effectiveRole());
   return `${welcome('AKADEMIK & TAHFIZH TERINTEGRASI', 'Rekap pembelajaran dan hafalan', 'Nilai akademik dan capaian tahfizh santri dalam satu laporan.', canEdit ? `<button type="button" class="btn btn-primary" data-action="add-grade">${icon('plus')} Input Nilai</button>` : '')}
-    <div class="stats-grid">${statCard('Rata-rata Nilai', '86,4', '', 'chart-no-axes-combined', 'blue')}${statCard('Kehadiran Kelas', '96,1%', '', 'calendar-check', 'green')}${statCard('Peserta PKL', state.pklReports.length, 'SMK aktif', 'briefcase-business', 'purple')}${statCard('Catatan Aktif', '12', 'Minggu ini', 'notebook-pen', 'orange')}</div>
+    <div class="stats-grid">${statCard('Rata-rata Nilai', dashboardAverageGrade(), '', 'chart-no-axes-combined', 'blue')}${statCard('Kehadiran Kelas', dashboardPercent(dashboardAttendanceRate()), '', 'calendar-check', 'green')}${statCard('Peserta PKL', state.pklReports.length, 'SMK aktif', 'briefcase-business', 'purple')}${statCard('Catatan Aktif', dashboardActiveNotes(), 'Minggu ini', 'notebook-pen', 'orange')}</div>
     ${section('Rekap Terintegrasi Santri', 'Akademik formal dan target/capaian tahfizh', integratedAcademicTable())}
     <div class="grid-2">${section('Rekap Nilai Terbaru', 'Input guru dan hasil belajar', gradeTable())}${section('Rekap PKL', 'Monitoring peserta praktik', pklTable())}</div>`;
 }
@@ -2571,7 +2629,8 @@ function openTeacherModal(teacher) {
 function openAccountModal() {
   if (!currentRoleIsAdmin()) return;
   const roleOptions = () => masterRoles().map((role, index) => `<label class="role-option"><input type="checkbox" name="roles" value="${escapeHtml(role)}" ${index === 0 ? 'checked' : ''}> <span>${escapeHtml(role)}</span></label>`).join('');
-  openModal('Buat Akun Staf Internal', `<form id="account-modal-form" class="form-grid"><label>Nama Lengkap<input id="nama-staf" name="name" required></label><label>Username / ID<input id="username-staf" name="username" required autocomplete="off"></label><div class="full role-assignment"><div class="role-assignment-head"><b>Penugasan Peran</b><button type="button" class="btn btn-small btn-ghost" id="add-master-role">+ Tambah Opsi Peran</button></div><div id="master-role-options" class="role-options">${roleOptions()}</div></div><label>Password<input name="password" value="123456" required></label><label class="full"><input type="checkbox" name="isTahfizhTeacher"> Bertugas sebagai Guru/Ustadz Tahfizh</label><label class="full"><input type="checkbox" name="isMusyrif"> Bertugas sebagai Musyrif/Pembina Asrama</label><button type="submit" class="btn btn-primary full">Simpan Akun</button></form>`);
+  const generatedPassword = generateSecurePassword();
+  openModal('Buat Akun Staf Internal', `<form id="account-modal-form" class="form-grid"><label>Nama Lengkap<input id="nama-staf" name="name" required></label><label>Username / ID<input id="username-staf" name="username" required autocomplete="off"></label><div class="full role-assignment"><div class="role-assignment-head"><b>Penugasan Peran</b><button type="button" class="btn btn-small btn-ghost" id="add-master-role">+ Tambah Opsi Peran</button></div><div id="master-role-options" class="role-options">${roleOptions()}</div></div><label class="full">Password<div class="actions-inline"><input id="password-staf" name="password" value="${generatedPassword}" required autocomplete="new-password"><button type="button" class="btn btn-small btn-ghost" id="toggle-password-staf">Lihat</button><button type="button" class="btn btn-small btn-ghost" id="copy-password-staf">Salin</button></div></label><button type="submit" class="btn btn-primary full">Simpan Akun</button></form>`);
   const nameInput = $('#nama-staf');
   const usernameInput = $('#username-staf');
   const updateGeneratedUsername = () => {
@@ -2583,6 +2642,16 @@ function openAccountModal() {
     updateGeneratedUsername();
   });
   usernameInput.addEventListener('input', () => { usernameInput.dataset.manual = 'true'; });
+  $('#toggle-password-staf').addEventListener('click', (event) => {
+    const passwordInput = $('#password-staf');
+    passwordInput.type = passwordInput.type === 'password' ? 'text' : 'password';
+    event.currentTarget.textContent = passwordInput.type === 'password' ? 'Lihat' : 'Sembunyikan';
+  });
+  $('#password-staf').type = 'password';
+  $('#copy-password-staf').addEventListener('click', async () => {
+    const passwordInput = $('#password-staf');
+    try { await navigator.clipboard.writeText(passwordInput.value); showToast('Password sementara disalin.', 'success'); } catch (error) { console.error('[BoardingPro] Gagal menyalin password:', error); showToast('Password tidak dapat disalin otomatis.', 'error'); }
+  });
   $('#master-role-options').addEventListener('change', updateGeneratedUsername);
   $('#add-master-role').addEventListener('click', () => {
     openInputModal('Tambah Opsi Peran', 'Nama peran baru', '', (roleName) => {
@@ -2598,7 +2667,7 @@ function openAccountModal() {
     const selectedRoles = form.getAll('roles').map((role) => String(role).trim()).filter(Boolean);
     if (!selectedRoles.length) { alert('Pilih minimal satu peran.'); return; }
     if (state.internalAccounts.some((account) => account.username === username)) { alert('Username sudah digunakan.'); return; }
-    state.internalAccounts.push({ id: `ACC-${Date.now()}`, name: form.get('name'), username, password: form.get('password'), passwordChangeCount: 0, roles: selectedRoles, role: selectedRoles[0], displayName: displayNameForAccount({ name: form.get('name'), role: selectedRoles[0] }), isTahfizhTeacher: form.get('isTahfizhTeacher') === 'on', isMusyrif: form.get('isMusyrif') === 'on' });
+    state.internalAccounts.push({ id: `ACC-${Date.now()}`, name: form.get('name'), username, password: form.get('password'), passwordChangeCount: 0, roles: selectedRoles, role: selectedRoles[0], displayName: displayNameForAccount({ name: form.get('name'), role: selectedRoles[0] }), isTahfizhTeacher: selectedRoles.some((role) => /tahfizh/i.test(role)), isMusyrif: selectedRoles.some((role) => /musyrif|pembina/i.test(role)) });
     persist();
     closeModal();
     render();
@@ -2636,18 +2705,18 @@ function openTahfizhModal(record) {
   const editing = Boolean(record);
   const value = (key, fallback = '') => record && record[key] !== undefined ? record[key] : fallback;
   const scopedStudents = currentRoleIsAdmin() ? state.students : halaqohStudents();
-  openModal(editing ? 'Edit Setoran Tahfizh' : 'Input Setoran Tahfizh', `<form id="tahfizh-modal-form" class="form-grid"><label>Santri<select name="studentId">${scopedStudents.map((student) => `<option value="${student.id}" ${value('studentId') === student.id ? 'selected' : ''}>${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`).join('')}</select></label><label>Halaqoh<input value="${escapeHtml(halaqohLabel())}" disabled></label><label>Jenis<select name="type"><option ${value('type') === 'Ziyadah' ? 'selected' : ''}>Ziyadah</option><option ${value('type') === 'Murajaah' ? 'selected' : ''}>Murajaah</option></select></label><label>Predikat<select name="predikat"><option>Mutqin</option><option>Ziyadah</option></select></label><label>Juz<input name="juz" type="number" min="1" value="${value('juz')}" required></label><label>Surah<input name="surah" value="${escapeHtml(value('surah'))}" required></label><label class="full">Ayat<input name="ayat" value="${escapeHtml(value('ayat'))}" required></label><button type="submit" class="btn btn-primary full">${editing ? 'Simpan Perubahan' : 'Simpan Setoran'}</button></form>`);
-  $('#tahfizh-modal-form').addEventListener('submit', (event) => { event.preventDefault(); if (!(currentRoleIsAdmin() || hasTahfizhAccess())) return; const form = new FormData(event.target); const values = { studentId: form.get('studentId'), halaqohId: activeHalaqohId() || studentById(form.get('studentId')).halaqohId || '', juz: Number(form.get('juz')), surah: form.get('surah'), ayat: form.get('ayat'), type: form.get('type'), predikat: form.get('predikat') }; if (editing) Object.assign(record, values); else state.tahfizh.unshift({ id: `TH-${Date.now()}`, ...values, status: 'Menunggu', date: today }); persist(); closeModal(); render(); });
+  openModal(editing ? 'Edit Setoran Tahfizh' : 'Input Setoran Tahfizh', `<form id="tahfizh-modal-form" class="form-grid"><label>Santri<select name="studentId">${scopedStudents.map((student) => `<option value="${student.id}" ${value('studentId') === student.id ? 'selected' : ''}>${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`).join('')}</select></label><label>Halaqoh<input value="${escapeHtml(halaqohLabel())}" disabled></label><label>Sesi<select name="session"><option value="Pagi">Sesi 1: Pagi (Ba'da Subuh)</option><option value="Sore" ${value('session') === 'Sore' ? 'selected' : ''}>Sesi 2: Sore (Ba'da Ashar)</option><option value="Malam" ${value('session') === 'Malam' ? 'selected' : ''}>Sesi 3: Malam</option></select></label><label>Jenis<select name="type"><option ${value('type') === 'Ziyadah' ? 'selected' : ''}>Ziyadah</option><option ${value('type') === 'Murajaah' ? 'selected' : ''}>Murajaah</option></select></label><label>Predikat<select name="predikat"><option>Mutqin</option><option>Ziyadah</option></select></label><label>Juz<input name="juz" type="number" min="1" value="${value('juz')}" required></label><label>Surah<input name="surah" value="${escapeHtml(value('surah'))}" required></label><label class="full">Ayat<input name="ayat" value="${escapeHtml(value('ayat'))}" required></label><button type="submit" class="btn btn-primary full">${editing ? 'Simpan Perubahan' : 'Simpan Setoran'}</button></form>`);
+  $('#tahfizh-modal-form').addEventListener('submit', (event) => { event.preventDefault(); if (!(currentRoleIsAdmin() || hasTahfizhAccess())) return; const form = new FormData(event.target); const values = { studentId: form.get('studentId'), halaqohId: activeHalaqohId() || studentById(form.get('studentId')).halaqohId || '', session: form.get('session'), juz: Number(form.get('juz')), surah: form.get('surah'), ayat: form.get('ayat'), type: form.get('type'), predikat: form.get('predikat') }; if (editing) Object.assign(record, values); else state.tahfizh.unshift({ id: `TH-${Date.now()}`, ...values, status: 'Menunggu', date: today }); persist(); closeModal(); render(); });
 }
 function openTahfizhAttendanceModal() {
   if (!hasTahfizhAccess()) return;
   const scopedStudents = currentRoleIsAdmin() ? state.students : halaqohStudents();
-  openModal('Input Absensi Jam Tahfizh', `<form id="tahfizh-attendance-form" class="form-grid"><label>Santri<select name="studentId">${scopedStudents.map((student) => `<option value="${student.id}">${escapeHtml(student.name)} - ${escapeHtml(student.nis)}</option>`).join('')}</select></label><label>Halaqoh<input value="${escapeHtml(halaqohLabel())}" disabled></label><label>Tanggal<input name="date" type="date" value="${today}" required></label><label>Status<select name="status"><option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option></select></label><label class="full">Catatan<input name="note" placeholder="Catatan jam Tahfizh"></label><button class="btn btn-primary full">Simpan Absensi</button></form>`);
+  openModal('Input Absensi Jam Tahfizh', `<form id="tahfizh-attendance-form" class="form-grid"><label>Santri<select name="studentId">${scopedStudents.map((student) => `<option value="${student.id}">${escapeHtml(student.name)} - ${escapeHtml(student.nis)}</option>`).join('')}</select></label><label>Halaqoh<input value="${escapeHtml(halaqohLabel())}" disabled></label><label>Sesi<select name="session"><option value="Pagi">Sesi 1: Pagi (Ba'da Subuh)</option><option value="Sore">Sesi 2: Sore (Ba'da Ashar)</option><option value="Malam">Sesi 3: Malam</option></select></label><label>Tanggal<input name="date" type="date" value="${today}" required></label><label>Status<select name="status"><option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option></select></label><label class="full">Catatan<input name="note" placeholder="Catatan jam Tahfizh"></label><button class="btn btn-primary full">Simpan Absensi</button></form>`);
   $('#tahfizh-attendance-form').addEventListener('submit', (event) => {
     event.preventDefault();
     if (!hasTahfizhAccess()) return;
     const form = new FormData(event.target);
-    state.attendance.unshift({ id: `ATT-TH-${Date.now()}`, type: 'tahfizh', halaqohId: activeHalaqohId() || studentById(form.get('studentId')).halaqohId || '', studentId: form.get('studentId'), date: form.get('date'), status: form.get('status'), by: roles[effectiveRole()]?.label || roles.mahad.label, note: form.get('note') || '' });
+    state.attendance.unshift({ id: `ATT-TH-${Date.now()}`, type: 'tahfizh', halaqohId: activeHalaqohId() || studentById(form.get('studentId')).halaqohId || '', studentId: form.get('studentId'), session: form.get('session'), date: form.get('date'), status: form.get('status'), by: roles[effectiveRole()]?.label || roles.mahad.label, note: form.get('note') || '' });
     persist();
     closeModal();
     render();
@@ -2785,6 +2854,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (error) error.hidden = true;
+    const active = readActiveSession();
+    if (active?.username?.toLowerCase() === account.username.toLowerCase() && active.token !== sessionToken) {
+      // A new login takes over the account; the prior tab is notified through storage.
+      const previousAccount = state.users.find((item) => item.username.toLowerCase() === account.username.toLowerCase());
+      if (previousAccount) {
+        previousAccount.isActive = false;
+        delete previousAccount.activeSessionId;
+      }
+    }
     state.role = account.role;
     state.activeRoleView = null;
     state.username = account.username;
@@ -2800,7 +2878,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.setTimeout(showUnreadCriticalNotifications, 120);
   });
   const logout = $('#logout');
-  if (logout) logout.addEventListener('click', () => { localStorage.removeItem('boardingpro-auth'); secureStorage.set('boardingpro-user', null).catch((error) => console.error('[BoardingPro] Gagal menghapus sesi terenkripsi:', error)); showLanding(); });
+  if (logout) logout.addEventListener('click', () => {
+    endSingleSession();
+    localStorage.removeItem('boardingpro-auth');
+    secureStorage.set('boardingpro-user', null).catch((error) => console.error('[BoardingPro] Gagal menghapus sesi terenkripsi:', error));
+    showLanding();
+  });
   if (localStorage.getItem('boardingpro-auth') === 'true') {
     activateSingleSession(currentAccount());
     saveAuthenticatedUser();
