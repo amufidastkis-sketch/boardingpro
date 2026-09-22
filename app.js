@@ -232,7 +232,7 @@ function filterActiveNotifications(items) {
 }
 function securityAlertBanner() {
   const active = state.incidents.filter((item) => item.status !== 'Selesai');
-  return active.length ? `<div class="notice" style="margin-bottom:18px"><b>âœ“  ${active.length} laporan darurat keamanan perlu ditindaklanjuti.</b> <button class="btn btn-small btn-ghost" data-view="security-reports">Buka laporan</button></div>` : '';
+  return active.length ? `<div class="notice" style="margin-bottom:18px"><b>- ${active.length} laporan darurat keamanan perlu ditindaklanjuti.</b> <button class="btn btn-small btn-ghost" data-view="security-reports">Buka laporan</button></div>` : '';
 }
 state.pklReports = state.pklReports.map((report) => ({
   id: report.id,
@@ -416,7 +416,9 @@ function waitForDocumentReady(root) {
     });
   });
   const fontsReady = document.fonts?.ready || Promise.resolve();
-  return Promise.all([fontsReady, ...imageReady]).then(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  return Promise.all([fontsReady, ...imageReady]).then(() => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(resolve, 80)));
+  }));
 }
 function printDocumentInFrame(html, title, pageStyle = '') {
   if (!String(html || '').match(/<(?:article|main|section|div)[^>]*class=["'][^"']*(?:document-container|permit-letter)/i)) {
@@ -427,7 +429,7 @@ function printDocumentInFrame(html, title, pageStyle = '') {
   frame.className = 'document-print-frame';
   frame.setAttribute('title', `Print ${title}`);
   frame.setAttribute('aria-hidden', 'true');
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;';
+  frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;opacity:1;pointer-events:none;background:#fff;';
   document.body.appendChild(frame);
   const frameDocument = frame.contentDocument;
   if (!frameDocument) {
@@ -461,7 +463,7 @@ async function downloadDocumentPdf(html, title, pageStyle = '') {
     throw new Error('Generator PDF belum siap. Muat ulang halaman lalu coba lagi.');
   }
   const pdfNode = documentNode.cloneNode(true);
-  pdfNode.style.cssText = 'position:fixed;left:-100000px;top:0;width:794px;min-height:1123px;padding:30px;background:#fff;z-index:-1;display:block!important;visibility:visible!important;page-break-after:avoid;break-after:avoid-page;';
+  pdfNode.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;min-height:1123px;padding:30px;background:#fff;color:#0f172a;z-index:1;display:block!important;visibility:visible!important;opacity:1!important;page-break-after:avoid;break-after:avoid-page;';
   normalizeDocumentVisibility(pdfNode);
   const styleNode = document.createElement('style');
   styleNode.textContent = documentLayoutStyles;
@@ -474,6 +476,11 @@ async function downloadDocumentPdf(html, title, pageStyle = '') {
   });
   document.body.appendChild(pdfNode);
   await waitForDocumentReady(pdfNode);
+  const pdfRect = pdfNode.getBoundingClientRect();
+  if (!pdfRect.width || !pdfRect.height || !pdfNode.textContent.trim()) {
+    pdfNode.remove();
+    throw new Error('Target PDF tidak terlihat atau tidak memiliki konten.');
+  }
   try {
     await window.html2pdf().set({
       margin: 0,
@@ -855,7 +862,7 @@ async function offerInstallPrompt() {
   deferredInstallPrompt = null;
 }
 const firebaseState = { database: null, syncing: false, ready: false, remoteLoaded: false };
-const firebaseConfig = window.BOARDINGPRO_FIREBASE_CONFIG || null;
+const firebaseRuntimeConfig = window.firebaseConfig || window.BOARDINGPRO_FIREBASE_CONFIG || null;
 window.appData = window.appData || {};
 window.appData.state = state;
 window.appData.currentSantri = currentStudent();
@@ -872,7 +879,7 @@ function loadFirebaseScript(source) {
 }
 
 async function initializeFirebase() {
-  if (!firebaseConfig || !firebaseConfig.databaseURL) {
+  if (!firebaseRuntimeConfig || !firebaseRuntimeConfig.databaseURL) {
     console.warn('[BoardingPro] Firebase belum dikonfigurasi. Data operasional memakai fallback lokal sampai BOARDINGPRO_FIREBASE_CONFIG tersedia.');
     return;
   }
@@ -880,7 +887,7 @@ async function initializeFirebase() {
     await loadFirebaseScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
     await loadFirebaseScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js');
   }
-  const firebaseApp = window.firebase.apps.length ? window.firebase.app() : window.firebase.initializeApp(firebaseConfig);
+  const firebaseApp = window.firebase.apps.length ? window.firebase.app() : window.firebase.initializeApp(firebaseRuntimeConfig);
   firebaseState.database = firebaseApp.database();
   firebaseState.ready = true;
   const stateRef = firebaseState.database.ref('boardingpro/state');
@@ -1157,7 +1164,7 @@ function dashboard() {
 }
 
 function launchPoster() {
-  return `<section class="launch-poster"><div class="poster-copy"><span class="poster-kicker">SMART BOARDING SCHOOL  -  MA'HAD</span><h2>Siap-Siap Peluncuran!</h2><p class="poster-subtitle">BoardingPro STKIS âœ“  Sistem Informasi Smart Boarding</p><p class="poster-tagline">Satu ruang kendali untuk amanah pendidikan, pengasuhan, dan keuangan.</p><div class="poster-features"><span><i class="fa-solid fa-grid-2"></i> Dashboard Terpadu</span><span><i class="fa-solid fa-calendar-days"></i> Jadwal & Event Real-time</span><span><i class="fa-solid fa-bullhorn"></i> Pengumuman & Feed Harian</span><span><i class="fa-solid fa-chart-line"></i> Rekap Nilai & Kehadiran</span></div><strong>Segera Hadir untuk Memudahkan Operasional Ma'had Anda!</strong></div><div class="poster-art" aria-hidden="true"><img src="./assets/logo-removebg-preview.png" alt=""><span>BOARDING<br>PRO</span></div></section>`;
+  return `<section class="launch-poster"><div class="poster-copy"><span class="poster-kicker">SMART BOARDING SCHOOL  -  MA'HAD</span><h2>Siap-Siap Peluncuran!</h2><p class="poster-subtitle">BoardingPro STKIS - Sistem Informasi Smart Boarding</p><p class="poster-tagline">Satu ruang kendali untuk amanah pendidikan, pengasuhan, dan keuangan.</p><div class="poster-features"><span><i class="fa-solid fa-grid-2"></i> Dashboard Terpadu</span><span><i class="fa-solid fa-calendar-days"></i> Jadwal & Event Real-time</span><span><i class="fa-solid fa-bullhorn"></i> Pengumuman & Feed Harian</span><span><i class="fa-solid fa-chart-line"></i> Rekap Nilai & Kehadiran</span></div><strong>Segera Hadir untuk Memudahkan Operasional Ma'had Anda!</strong></div><div class="poster-art" aria-hidden="true"><img src="./assets/logo-removebg-preview.png" alt=""><span>BOARDING<br>PRO</span></div></section>`;
 }
 
 function commonDashboard(roleTitle, description, extra = '') {
