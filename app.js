@@ -1,7 +1,7 @@
 /* Application behaviour. Shared catalogues and seed data live only in data.js?v=6000. */
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const today = new Date().toISOString().slice(0, 10);
-const KOP_SURAT_LOGO = './assets/logo-removebg-preview.png';
+const KOP_SURAT_LOGO = './assets/logo%20stkis.png';
 const OFFICIAL_EDUCATION_ACCOUNT = Object.freeze({
   bank: 'BSI',
   accountNumber: '7123456789',
@@ -134,7 +134,6 @@ function kopSuratHtml() {
   return `<header class="kop-container kop-surat"><div class="logo-wrapper" aria-label="Logo Yayasan"><img src="${KOP_SURAT_LOGO}" alt="Logo"></div><div class="kop-text"><b>SEKOLAH TAHFIDZ KEJURUAN</b><h1>IRMAN SOFRAN</h1><p>Kp. Eurih RT. 004 RW.03 Kel. Tambang Ayam, Kec. Anyar, Kab. Serang, Prov. Banten, 42166, Indonesia | Telp: ${SecurityMasker.phone('0877-7120-0615')}</p><small>admin@tahfidzkejuruan.org | www.tahfidzkejuruan.org</small></div></header>`;
 }
 const stateCollectionKeys = ['students', 'internalAccounts', 'classes', 'halaqoh', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords', 'pklReports', 'tahfizhSemesterRecords', 'attendance', 'schedules', 'events', 'payments', 'permits', 'tahfizh', 'grades', 'points', 'teacherAttendance', 'dormAttendance', 'gateEvents', 'activities'];
-const resettableDataKeys = stateCollectionKeys.filter((key) => key !== 'internalAccounts');
 const STATE_SYNC_STORAGE_KEY = 'boardingpro-state-sync';
 const savedState = localStorage.getItem('boardingpro-state');
 const emptyInitialData = clone(seedDataSource);
@@ -159,16 +158,68 @@ function normalizeStateCollections() {
   state.currentUser = state.currentUser && typeof state.currentUser === 'object' ? state.currentUser : null;
   if (typeof ensurePrimaryAdminAccounts === 'function') ensurePrimaryAdminAccounts();
 }
-function resetTransactionalData() {
+const selectiveResetModules = {
+  students: { label: 'Data Santri / Siswa', collections: ['students'] },
+  staff: { label: 'Akun Pengajar / Guru & Staff', accounts: 'staff' },
+  parents: { label: 'Akun Orang Tua / Wali Santri', accounts: 'parents' },
+  finance: { label: 'Data Tagihan, Pembayaran & Invoice', collections: ['financeBills', 'payments', 'invoices', 'receipts'] },
+  academic: { label: 'Data Akademik', collections: ['attendance', 'grades', 'tahfizh', 'tahfizhSemesterRecords', 'permits', 'disciplineRecords'] },
+  activity: { label: 'Log Aktivitas System', collections: ['activities', 'gateEvents'] }
+};
+function accountMatchesResetGroup(account, group) {
+  const accountRoles = [account.role, ...(Array.isArray(account.roles) ? account.roles : [])]
+    .map((role) => canonicalRole(String(role || '').toLowerCase()));
+  if (group === 'parents') return accountRoles.some((role) => ['parent', 'wali'].includes(role));
+  return accountRoles.some((role) => ['guru', 'guru_tahfizh', 'pembina', 'musyrif', 'security'].includes(role));
+}
+async function resetSelectedModules(selectedKeys) {
   if (!currentRoleIsAdmin()) throw new Error('Hanya Admin atau Ma\'had yang dapat mereset data.');
-  resettableDataKeys.forEach((key) => { state[key] = []; });
-  state.billingNotifications = [];
+  const modules = selectedKeys.map((key) => selectiveResetModules[key]).filter(Boolean);
+  if (!modules.length) throw new Error('Pilih minimal satu modul untuk direset.');
+  const collectionKeys = [...new Set(modules.flatMap((module) => module.collections || []))];
+  const resetAccountGroups = [...new Set(modules.map((module) => module.accounts).filter(Boolean))];
+  const previousCollections = Object.fromEntries(collectionKeys.map((key) => [key, state[key]]));
+  const previousAccounts = state.internalAccounts;
+  const accountKeep = state.internalAccounts.filter((account) => !resetAccountGroups.some((group) => accountMatchesResetGroup(account, group)));
+  collectionKeys.forEach((key) => { state[key] = []; });
+  if (resetAccountGroups.length) state.internalAccounts = accountKeep;
   state.users = state.internalAccounts;
-  state.currentUser = state.internalAccounts.find((account) => account.username === state.username) || state.currentUser;
-  state.view = 'dashboard';
-  ['boardingpro-state-sync', 'boardingpro_santri'].forEach((key) => localStorage.removeItem(key));
   normalizeStateCollections();
-  persist();
+  window.appData.state = state;
+  window.appData.currentSantri = currentStudent();
+
+  try {
+    if (firebaseRuntimeConfig?.databaseURL) {
+      if (!firebaseState.ready || !firebaseState.database) {
+        if (firebaseState.initPromise) await firebaseState.initPromise;
+      }
+      if (!firebaseState.ready || !firebaseState.database) throw new Error('Firebase belum siap; reset tidak dijalankan.');
+      if (!firebaseState.remoteLoaded && firebaseState.remoteReadyPromise) await firebaseState.remoteReadyPromise;
+      const selectedNodeUpdates = Object.fromEntries(collectionKeys.map((key) => [key, null]));
+      if (resetAccountGroups.length) {
+        const keyedRemainingAccounts = Object.fromEntries(accountKeep.map((account, index) => [account.id || String(index), account]));
+        selectedNodeUpdates.internalAccounts = Object.keys(keyedRemainingAccounts).length ? keyedRemainingAccounts : null;
+      }
+      await firebaseState.database.ref('boardingpro/state').update(selectedNodeUpdates);
+    } else {
+      const saved = await persist();
+      if (!saved) throw new Error('Penyimpanan lokal tidak mengonfirmasi reset.');
+    }
+
+    if (collectionKeys.includes('students')) localStorage.removeItem('boardingpro_santri');
+    if (resetAccountGroups.length) localStorage.setItem('boardingpro_users', JSON.stringify(state.internalAccounts));
+    requestRuntimeRender();
+    return modules.map((module) => module.label);
+  } catch (error) {
+    Object.assign(state, previousCollections);
+    state.internalAccounts = previousAccounts;
+    state.users = state.internalAccounts;
+    normalizeStateCollections();
+    window.appData.state = state;
+    requestRuntimeRender();
+    console.error('[BoardingPro] Gagal mereset modul terpilih di Firebase:', error);
+    throw error;
+  }
 }
 normalizeStateCollections();
 secureStorage.get('boardingpro-state').then((storedState) => {
@@ -463,7 +514,7 @@ async function downloadDocumentPdf(html, title, pageStyle = '') {
     throw new Error('Generator PDF belum siap. Muat ulang halaman lalu coba lagi.');
   }
   const pdfNode = documentNode.cloneNode(true);
-  pdfNode.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;min-height:1123px;padding:30px;background:#fff;color:#0f172a;z-index:1;display:block!important;visibility:visible!important;opacity:1!important;page-break-after:avoid;break-after:avoid-page;';
+  pdfNode.style.cssText = 'position:fixed;left:0;top:0;width:794px;min-height:1123px;padding:30px;background:#fff;color:#0f172a;z-index:2147483647;pointer-events:none;display:block!important;visibility:visible!important;opacity:1!important;page-break-after:avoid;break-after:avoid-page;';
   normalizeDocumentVisibility(pdfNode);
   const styleNode = document.createElement('style');
   styleNode.textContent = documentLayoutStyles;
@@ -505,7 +556,7 @@ function exportReportPdf() {
     return `<tr><td>${escapeHtml(student.name)}</td><td>${escapeHtml(student.className || student.program || '-')}</td><td>${attendanceRate}</td><td>${escapeHtml(paymentStatus)}</td></tr>`;
   }).join('');
   const report = `<article class="document-container report-document"><h1 style="margin:0 0 6px;text-align:center">LAPORAN BOARDINGPRO STKIS</h1><p style="text-align:center;margin:0 0 18px;color:#475569">${escapeHtml(formatLocalLongDate())} - ${escapeHtml(role.label || role.demoName)}</p><table style="width:100%;border-collapse:collapse;table-layout:fixed;word-wrap:break-word"><thead><tr><th style="width:40%;padding:8px;border:1px solid #cbd5e1;text-align:left">Santri</th><th style="width:25%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kelas / Program</th><th style="width:15%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kehadiran</th><th style="width:20%;padding:8px;border:1px solid #cbd5e1;text-align:left">SPP</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="padding:12px;text-align:center">Belum ada data</td></tr>'}</tbody></table></article>`;
-  return downloadDocumentPdf(report, `Laporan-BoardingPro-${new Date().toISOString().slice(0, 10)}`);
+  return printDocumentInFrame(report, `Laporan-BoardingPro-${new Date().toISOString().slice(0, 10)}`, '@page{size:A4 portrait;margin:15mm}');
 }
 function documentActionButtons(kind, id, label = 'Cetak') {
   if (!canUseDocumentActions()) return '';
@@ -651,8 +702,9 @@ const persist = () => {
   }
   window.appData.state = state;
   window.appData.currentSantri = currentStudent();
-  syncFirebaseFinance();
+  const saveResult = syncFirebaseFinance();
   requestRuntimeRender();
+  return saveResult;
 };
 function applySynchronizedState(snapshot) {
   if (!snapshot?.data || typeof snapshot.data !== 'object') return false;
@@ -861,7 +913,7 @@ async function offerInstallPrompt() {
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
 }
-const firebaseState = { database: null, syncing: false, ready: false, remoteLoaded: false };
+const firebaseState = { database: null, syncing: false, ready: false, remoteLoaded: false, initPromise: null, remoteReadyPromise: null };
 const firebaseRuntimeConfig = window.firebaseConfig || window.BOARDINGPRO_FIREBASE_CONFIG || null;
 window.appData = window.appData || {};
 window.appData.state = state;
@@ -890,6 +942,8 @@ async function initializeFirebase() {
   const firebaseApp = window.firebase.apps.length ? window.firebase.app() : window.firebase.initializeApp(firebaseRuntimeConfig);
   firebaseState.database = firebaseApp.database();
   firebaseState.ready = true;
+  let markRemoteReady;
+  firebaseState.remoteReadyPromise = new Promise((resolve) => { markRemoteReady = resolve; });
   const stateRef = firebaseState.database.ref('boardingpro/state');
   stateRef.on('value', (snapshot) => {
     const remote = snapshot.val();
@@ -901,8 +955,13 @@ async function initializeFirebase() {
       stateCollectionKeys.forEach((key) => { state[key] = []; });
       normalizeStateCollections();
     }
+    if (firebaseState.remoteLoaded) markRemoteReady();
     render();
-  }, (error) => console.error('[BoardingPro] Sinkronisasi state realtime gagal:', error));
+  }, (error) => {
+    firebaseState.remoteLoaded = true;
+    markRemoteReady();
+    console.error('[BoardingPro] Sinkronisasi state realtime gagal:', error);
+  });
   stateCollectionKeys.forEach((key) => {
     firebaseState.database.ref(`boardingpro/state/${key}`).on('value', (snapshot) => {
       const remote = snapshot.val();
@@ -919,22 +978,33 @@ async function initializeFirebase() {
   }, (error) => console.error('[BoardingPro] Sinkronisasi konfigurasi gagal:', error));
 }
 
-function syncFirebaseFinance() {
-  if (!firebaseState.ready || !firebaseState.database) return;
+async function syncFirebaseFinance() {
+  if (!firebaseState.ready && firebaseRuntimeConfig?.databaseURL && firebaseState.initPromise) {
+    await firebaseState.initPromise;
+  }
+  if (!firebaseRuntimeConfig?.databaseURL) return true;
+  if (!firebaseState.ready || !firebaseState.database) {
+    console.error('[BoardingPro] Penyimpanan Firebase tidak tersedia; perubahan operasional belum dikonfirmasi.');
+    return false;
+  }
+  if (!firebaseState.remoteLoaded && firebaseState.remoteReadyPromise) await firebaseState.remoteReadyPromise;
   firebaseState.syncing = true;
   const snapshot = {};
-  stateCollectionKeys.forEach((key) => { snapshot[key] = state[key]; });
+  stateCollectionKeys.filter((key) => key !== 'financeBills').forEach((key) => { snapshot[key] = state[key]; });
   snapshot.config = state.config;
-  const writes = [firebaseState.database.ref('boardingpro/state').set(snapshot)];
-  stateCollectionKeys.forEach((key) => {
-    const collection = Array.isArray(state[key]) ? state[key] : [];
-    const keyedCollection = Object.fromEntries(collection.map((item, index) => [item?.id || String(index), item]));
-    writes.push(firebaseState.database.ref(`boardingpro/state/${key}`).set(keyedCollection));
-  });
-  writes.push(firebaseState.database.ref('boardingpro/state/config').set(state.config));
-  Promise.all(writes).catch((error) => console.error('[BoardingPro] Gagal menyimpan state realtime ke Firebase:', error)).finally(() => {
+  try {
+    const billsById = Object.fromEntries(state.financeBills.map((bill, index) => [bill.id || String(index), bill]));
+    await Promise.all([
+      firebaseState.database.ref('boardingpro/state').update(snapshot),
+      firebaseState.database.ref('boardingpro/state/financeBills').set(billsById)
+    ]);
+    return true;
+  } catch (error) {
+    console.error('[BoardingPro] Gagal menyimpan state realtime ke Firebase:', error);
+    return false;
+  } finally {
     firebaseState.syncing = false;
-  });
+  }
 }
 
 function saveAuthenticatedUser() {
@@ -1164,7 +1234,7 @@ function dashboard() {
 }
 
 function launchPoster() {
-  return `<section class="launch-poster"><div class="poster-copy"><span class="poster-kicker">SMART BOARDING SCHOOL  -  MA'HAD</span><h2>Siap-Siap Peluncuran!</h2><p class="poster-subtitle">BoardingPro STKIS - Sistem Informasi Smart Boarding</p><p class="poster-tagline">Satu ruang kendali untuk amanah pendidikan, pengasuhan, dan keuangan.</p><div class="poster-features"><span><i class="fa-solid fa-grid-2"></i> Dashboard Terpadu</span><span><i class="fa-solid fa-calendar-days"></i> Jadwal & Event Real-time</span><span><i class="fa-solid fa-bullhorn"></i> Pengumuman & Feed Harian</span><span><i class="fa-solid fa-chart-line"></i> Rekap Nilai & Kehadiran</span></div><strong>Segera Hadir untuk Memudahkan Operasional Ma'had Anda!</strong></div><div class="poster-art" aria-hidden="true"><img src="./assets/logo-removebg-preview.png" alt=""><span>BOARDING<br>PRO</span></div></section>`;
+  return `<section class="launch-poster"><div class="poster-copy"><span class="poster-kicker">SMART BOARDING SCHOOL  -  MA'HAD</span><h2>Siap-Siap Peluncuran!</h2><p class="poster-subtitle">BoardingPro STKIS - Sistem Informasi Smart Boarding</p><p class="poster-tagline">Satu ruang kendali untuk amanah pendidikan, pengasuhan, dan keuangan.</p><div class="poster-features"><span><i class="fa-solid fa-grid-2"></i> Dashboard Terpadu</span><span><i class="fa-solid fa-calendar-days"></i> Jadwal & Event Real-time</span><span><i class="fa-solid fa-bullhorn"></i> Pengumuman & Feed Harian</span><span><i class="fa-solid fa-chart-line"></i> Rekap Nilai & Kehadiran</span></div><strong>Segera Hadir untuk Memudahkan Operasional Ma'had Anda!</strong></div><div class="poster-art" aria-hidden="true"><img src="./assets/logo%20stkis.png" alt=""><span>BOARDING<br>PRO</span></div></section>`;
 }
 
 function commonDashboard(roleTitle, description, extra = '') {
@@ -1602,10 +1672,10 @@ function financeView() {
   const studentId = effectiveRole() === 'parent' || effectiveRole() === 'student' ? currentStudent().id : undefined;
   const visibleBills = state.financeBills.filter((bill) => !studentId || bill.studentId === studentId);
   const outstanding = visibleBills.filter((bill) => bill.status !== 'Paid').reduce((sum, bill) => sum + billNet(bill), 0);
-  const resetAction = currentRoleIsAdmin() ? `<button type="button" class="btn btn-danger" data-action="reset-data">${icon('trash-2')} Reset Data Transaksional</button>` : '';
+  const resetAction = currentRoleIsAdmin() ? `<button type="button" class="btn btn-danger" data-action="reset-data">${icon('trash-2')} Reset Data Selektif (Modular)</button>` : '';
   return `${welcome('KEUANGAN YAYASAN', 'Billing, Beasiswa & Invoice', 'Komponen SPP dan non-SPP dikelola transparan dengan nominal fleksibel.', currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-billing">${icon('plus')} Tambah Komponen</button>` : '')}
     ${renderPaymentDestinationDetails({ adminPanel: currentRoleIsAdmin() })}
-    ${currentRoleIsAdmin() ? section('Reset Data untuk Operasional Baru', 'Hapus seluruh data santri dan transaksi, tetapi akun serta konfigurasi rekening tetap dipertahankan.', `<div class="notice"><b>Perhatian:</b> tindakan ini menghapus santri, presensi, nilai, Tahfizh, izin, tagihan, pembayaran, invoice, dan aktivitas secara permanen dari penyimpanan lokal.</div>`, resetAction) : ''}
+    ${currentRoleIsAdmin() ? section('Reset Data Selektif (Modular)', 'Pilih modul yang perlu dikosongkan. Profil lembaga, rekening bank, dan konfigurasi umum tidak akan dihapus.', `<div class="notice"><b>Reset selektif:</b> hanya node modul terpilih yang dihapus dari Firebase Realtime Database.</div>`, resetAction) : ''}
     <div class="stats-grid">${statCard('Tagihan Aktif', state.financeBills.filter((bill) => bill.status !== 'Paid').length, 'Perlu ditindaklanjuti', 'receipt', 'orange')}${statCard('Piutang Bersih', money(outstanding), 'Setelah beasiswa & diskon', 'wallet-cards', 'purple')}${statCard('Beasiswa Aktif', state.scholarships.filter((item) => item.active).length, 'Program bantuan', 'heart-handshake', 'green')}${statCard('Invoice Terbit', state.invoices.length, 'Dapat dicetak', 'file-check-2', 'blue')}</div>
     ${section('Daftar Tagihan', 'Rincian nominal yang harus dibayar', billingTable(undefined, studentId))}
     ${section('Pembayaran & Invoice', 'Persetujuan otomatis menerbitkan invoice dan kuitansi', paymentTable(currentRoleIsAdmin(), studentId))}
@@ -2438,15 +2508,42 @@ function bindActions() {
   document.querySelectorAll('[data-action="add-account"]').forEach((button) => button.addEventListener('click', openAccountModal));
   document.querySelectorAll('[data-action="reset-data"]').forEach((button) => button.addEventListener('click', () => {
     if (!currentRoleIsAdmin()) return;
-    openConfirmModal('Reset Data Transaksional', 'Hapus seluruh data santri, presensi, nilai, Tahfizh, izin, tagihan, pembayaran, invoice, dan aktivitas? Akun serta konfigurasi sistem tetap dipertahankan.', () => {
+    const options = Object.entries(selectiveResetModules).map(([key, module]) =>
+      `<label class="reset-option"><input type="checkbox" name="modules" value="${key}"><span>${escapeHtml(module.label)}</span></label>`
+    ).join('');
+    openModal('Reset Data Selektif (Modular)', `<form id="selective-reset-form" class="form-grid"><p class="notice full">Pilih hanya modul yang akan dihapus. Profil lembaga, nomor rekening, dan konfigurasi umum tidak akan disentuh.</p><div class="actions-inline full"><button type="button" class="btn btn-ghost btn-small" data-reset-select-all>Pilih Semua</button><button type="button" class="btn btn-ghost btn-small" data-reset-select-none>Batal Pilih Semua</button></div><div class="reset-options full">${options}</div><label class="full">Ketik <b>RESET</b> untuk konfirmasi kedua<input name="confirmation" autocomplete="off" placeholder="Ketik RESET" required></label><div class="actions-inline full" style="justify-content:flex-end"><button type="button" class="btn btn-ghost" data-close-modal>Batal</button><button type="submit" class="btn btn-danger">Reset Modul Terpilih</button></div></form>`);
+    const form = $('#selective-reset-form');
+    form.querySelector('[data-reset-select-all]').addEventListener('click', () => form.querySelectorAll('input[name="modules"]').forEach((input) => { input.checked = true; }));
+    form.querySelector('[data-reset-select-none]').addEventListener('click', () => form.querySelectorAll('input[name="modules"]').forEach((input) => { input.checked = false; }));
+    form.querySelector('[data-close-modal]').addEventListener('click', closeModal);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!currentRoleIsAdmin()) return;
+      const data = new FormData(form);
+      const selected = data.getAll('modules').map(String);
+      if (String(data.get('confirmation') || '').trim() !== 'RESET') {
+        showToast('Konfirmasi tidak sesuai. Ketik RESET untuk melanjutkan.', 'error');
+        form.elements.confirmation.focus();
+        return;
+      }
+      if (!selected.length) {
+        showToast('Pilih minimal satu modul untuk direset.', 'error');
+        return;
+      }
+      const submit = form.querySelector('[type="submit"]');
+      submit.disabled = true;
+      submit.textContent = 'Mereset...';
       try {
-        resetTransactionalData();
+        const labels = await resetSelectedModules(selected);
+        console.info('[BoardingPro] Modul berhasil direset:', labels);
         closeModal();
-        alert('Data transaksional berhasil dikosongkan. Akun dan konfigurasi sistem tetap aman.');
+        showToast(`Berhasil reset: ${labels.join(', ')}.`, 'success');
         render();
       } catch (error) {
-        console.error('[BoardingPro] Gagal mereset data:', error);
-        alert('Data gagal direset. Silakan coba lagi.');
+        console.error('[BoardingPro] Reset selektif gagal:', error);
+        showToast('Reset gagal. Tidak ada perubahan yang dikonfirmasi; periksa koneksi Firebase.', 'error');
+        submit.disabled = false;
+        submit.textContent = 'Reset Modul Terpilih';
       }
     });
   }));
@@ -2455,8 +2552,9 @@ function bindActions() {
   document.querySelectorAll('[data-action="export"]').forEach((button) => button.addEventListener('click', async () => {
     button.disabled = true;
     try {
-      await exportReportPdf();
-      showToast('Laporan berhasil diunduh.');
+      const opened = await exportReportPdf();
+      if (!opened) throw new Error('Dialog cetak laporan tidak dapat dibuka.');
+      showToast('Dialog cetak dibuka. Pilih "Save as PDF" untuk menyimpan laporan.');
     } catch (error) {
       console.error('[BoardingPro] Gagal mengekspor laporan:', error);
       showToast('Laporan gagal diunduh. Silakan coba lagi.', 'error');
@@ -2712,8 +2810,71 @@ function openBillingModal(bill) {
   const editing = Boolean(bill);
   const value = (key, fallback = '') => bill && bill[key] !== undefined ? bill[key] : fallback;
   const categories = [financeCategories.spp, financeCategories.foundation, ...financeCategories.maahadNonSpp, financeCategories.pocketMoney, financeCategories.custom];
-  openModal(editing ? 'Edit Komponen Tagihan' : 'Tambah Komponen Tagihan', `<form id="billing-modal-form" class="form-grid"><label>Santri<select name="studentId">${state.students.map((student) => `<option value="${student.id}" ${value('studentId', state.students[0]?.id) === student.id ? 'selected' : ''}>${student.name}</option>`).join('')}</select></label><label>Komponen<select name="category">${categories.map((category) => `<option value="${category.id}" ${value('category', category.id) === category.id ? 'selected' : ''}>${category.label}</option>`).join('')}</select></label><label>Nama Tagihan<input name="label" value="${escapeHtml(value('label'))}" placeholder="Contoh: Kegiatan akhir semester" required></label><label>Nominal (Rp)<input name="amount" type="number" min="0" value="${value('amount', 0)}" required></label><label>Beasiswa (Rp)<input name="scholarship" type="number" min="0" value="${value('scholarship', 0)}"></label><label>Diskon (Rp)<input name="discount" type="number" min="0" value="${value('discount', 0)}"></label><label>Jatuh Tempo<input name="dueDate" type="date" value="${value('dueDate', today)}" required></label><button class="btn btn-primary full">Simpan Tagihan</button></form>`);
-  $('#billing-modal-form').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.target); const values = { studentId: form.get('studentId'), category: form.get('category'), label: form.get('label'), period: 'September 2026', amount: Number(form.get('amount')), scholarship: Number(form.get('scholarship')), discount: Number(form.get('discount')), dueDate: form.get('dueDate') }; if (editing) Object.assign(bill, values); else state.financeBills.unshift({ id: `BILL-${Date.now()}`, status: 'Open', ...values }); persist(); closeModal(); render(); });
+  openModal(editing ? 'Edit Komponen Tagihan' : 'Tambah Komponen Tagihan', `<form id="billing-modal-form" class="form-grid"><label>Santri<select name="studentId">${state.students.map((student) => `<option value="${student.id}" ${value('studentId', state.students[0]?.id) === student.id ? 'selected' : ''}>${student.name}</option>`).join('')}</select></label><label>Komponen<select name="category">${categories.map((category) => `<option value="${category.id}" ${value('category', category.id) === category.id ? 'selected' : ''}>${category.label}</option>`).join('')}</select></label><label>Nama Tagihan<input name="label" value="${escapeHtml(value('label'))}" placeholder="Contoh: Kegiatan akhir semester" required></label><label>Nominal (Rp)<input name="amount" type="number" min="0" value="${value('amount', 0)}" required></label><label>Beasiswa (Rp)<input name="scholarship" type="number" min="0" value="${value('scholarship', 0)}"></label><label>Diskon (Rp)<input name="discount" type="number" min="0" value="${value('discount', 0)}"></label><label>Jatuh Tempo<input name="dueDate" type="date" value="${value('dueDate', today)}" required></label><button type="submit" class="btn btn-primary full">Simpan Tagihan</button></form>`);
+  $('#billing-modal-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const amount = Number.parseFloat(String(form.get('amount') || ''));
+    const scholarship = Number.parseFloat(String(form.get('scholarship') || '0'));
+    const discount = Number.parseFloat(String(form.get('discount') || '0'));
+    const studentId = String(form.get('studentId') || '');
+    const label = String(form.get('label') || '').trim();
+    if (!studentId || !label || !Number.isFinite(amount) || amount < 0
+      || !Number.isFinite(scholarship) || scholarship < 0
+      || !Number.isFinite(discount) || discount < 0) {
+      showToast('Lengkapi data santri, nama tagihan, dan nominal yang valid.', 'error');
+      return;
+    }
+
+    const previous = editing ? { ...bill } : null;
+    const target = editing ? bill : {
+      id: `BILL-${Date.now()}`,
+      status: 'Open',
+      createdAt: new Date().toISOString()
+    };
+    const values = {
+      studentId,
+      category: String(form.get('category') || ''),
+      label,
+      period: new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
+      amount,
+      scholarship,
+      discount,
+      dueDate: String(form.get('dueDate') || ''),
+      updatedAt: new Date().toISOString()
+    };
+    const submitButton = event.currentTarget.querySelector('[type="submit"]');
+    submitButton.disabled = true;
+    submitButton.textContent = 'Menyimpan...';
+    try {
+      Object.assign(target, values);
+      if (!editing) state.financeBills.unshift(target);
+      const saved = await persist();
+      if (!saved) throw new Error('Firebase tidak mengonfirmasi penyimpanan tagihan.');
+      if (firebaseState.ready) console.info('[BoardingPro] Tagihan tersimpan ke boardingpro/state/financeBills:', target.id);
+      else console.warn('[BoardingPro] Tagihan tersimpan di penyimpanan lokal karena Firebase belum dikonfigurasi:', target.id);
+      closeModal();
+      render();
+      showToast('Tagihan berhasil disimpan.', 'success');
+    } catch (error) {
+      if (editing) {
+        Object.keys(bill).forEach((key) => { if (!Object.prototype.hasOwnProperty.call(previous, key)) delete bill[key]; });
+        Object.assign(bill, previous);
+      }
+      else state.financeBills = state.financeBills.filter((item) => item.id !== target.id);
+      window.appData.state = state;
+      if (!firebaseState.ready) await persist();
+      console.error('[BoardingPro] Gagal menyimpan komponen tagihan ke Firebase:', error);
+      render();
+      showToast('Tagihan gagal disimpan. Periksa koneksi Firebase lalu coba lagi.', 'error');
+    } finally {
+      const currentSubmit = $('#billing-modal-form [type="submit"]');
+      if (currentSubmit) {
+        currentSubmit.disabled = false;
+        currentSubmit.textContent = 'Simpan Tagihan';
+      }
+    }
+  });
 }
 function openPointModal() {
   if (!canManageDormitory()) return;
@@ -2870,11 +3031,18 @@ function showLanding() {
   updatePreview();
 }
 document.addEventListener('DOMContentLoaded', () => {
-  if (resetWeeklyExitQuota()) persist();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch((error) => console.error('[BoardingPro] Service worker gagal didaftarkan:', error));
   }
-  initializeFirebase().catch((error) => console.error('[BoardingPro] Firebase tidak siap:', error));
+  firebaseState.initPromise = initializeFirebase().then(async (ready) => {
+    if (ready === false) return false;
+    if (firebaseState.remoteReadyPromise) await firebaseState.remoteReadyPromise;
+    if (resetWeeklyExitQuota()) return persist();
+    return true;
+  }).catch((error) => {
+    console.error('[BoardingPro] Firebase tidak siap:', error);
+    return false;
+  });
   const accountLogin = $('#account-login-form');
   if (accountLogin) accountLogin.addEventListener('submit', (event) => {
     event.preventDefault();
