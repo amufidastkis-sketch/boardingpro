@@ -1,5 +1,6 @@
 /* Application behaviour. Shared catalogues and seed data live only in data.js?v=6000. */
 const clone = (value) => JSON.parse(JSON.stringify(value));
+<<<<<<< HEAD
 const today = new Date().toISOString().slice(0, 10);
 const KOP_SURAT_LOGO = './assets/logo%20stkis.png';
 const OFFICIAL_EDUCATION_ACCOUNT = Object.freeze({
@@ -23,6 +24,10 @@ function readPaymentAccountsStorage() {
     return {};
   }
 }
+=======
+const today = '2026-09-05';
+const KOP_SURAT_LOGO = './assets/logo%20stkis.png';
+>>>>>>> 18518bd (Update splash screen logo to logo stkis with white background container)
 const SECURITY_STORAGE_PREFIX = 'boardingpro-secure:';
 const SECURITY_KEY_NAME = `${SECURITY_STORAGE_PREFIX}key`;
 const securityKeyMaterial = localStorage.getItem(SECURITY_KEY_NAME) || (() => {
@@ -131,7 +136,7 @@ document.addEventListener('submit', (event) => {
   sanitizeTextFields(event.target);
 }, true);
 function kopSuratHtml() {
-  return `<header class="kop-container kop-surat"><div class="logo-wrapper" aria-label="Logo Yayasan"><img src="${KOP_SURAT_LOGO}" alt="Logo"></div><div class="kop-text"><b>SEKOLAH TAHFIDZ KEJURUAN</b><h1>IRMAN SOFRAN</h1><p>Kp. Eurih RT. 004 RW.03 Kel. Tambang Ayam, Kec. Anyar, Kab. Serang, Prov. Banten, 42166, Indonesia | Telp: ${SecurityMasker.phone('0877-7120-0615')}</p><small>admin@tahfidzkejuruan.org | www.tahfidzkejuruan.org</small></div></header>`;
+  return `<header class="kop-container kop-surat" style="display:grid;grid-template-columns:clamp(56px,15vw,110px) minmax(0,1fr);align-items:center;justify-content:stretch;gap:clamp(8px,2.5vw,18px);width:100%;text-align:center"><div class="logo-wrapper" style="width:clamp(56px,15vw,110px);height:clamp(56px,15vw,110px)" aria-label="Logo Yayasan"><img src="${KOP_SURAT_LOGO}" alt="Logo"></div><div class="kop-text"><b>SEKOLAH TAHFIDZ KEJURUAN</b><h1>IRMAN SOFRAN</h1><p>Kp. Eurih RT. 004 RW.03 Kel. Tambang Ayam, Kec. Anyar, Kab. Serang, Prov. Banten, 42166, Indonesia | Telp: ${SecurityMasker.phone('0877-7120-0615')}</p><small>admin@tahfidzkejuruan.org | www.tahfidzkejuruan.org</small></div></header>`;
 }
 const stateCollectionKeys = ['students', 'internalAccounts', 'classes', 'halaqoh', 'teachers', 'financeBills', 'scholarships', 'discounts', 'invoices', 'receipts', 'dailyFeed', 'monthlySummaries', 'yayasanProgress', 'announcements', 'pocketTransactions', 'pocketBalances', 'majors', 'teacherTeachingRecords', 'incidents', 'lostFound', 'disciplineRecords', 'pklReports', 'tahfizhSemesterRecords', 'attendance', 'schedules', 'events', 'payments', 'permits', 'tahfizh', 'grades', 'points', 'teacherAttendance', 'dormAttendance', 'gateEvents', 'activities'];
 const STATE_SYNC_STORAGE_KEY = 'boardingpro-state-sync';
@@ -433,7 +438,7 @@ const documentLayoutStyles = `
   .document-container .currency,.document-container td.currency{text-align:right!important;white-space:nowrap}
   .document-container .signature-grid,.document-container .discipline-signatures{display:grid!important;grid-template-columns:1fr 1fr!important;gap:24px!important;page-break-inside:avoid;break-inside:avoid;page-break-after:avoid;break-after:avoid-page}
   .document-action-buttons,.document-actions{display:none!important}
-  @media print{@page{size:A4 portrait;margin:0}.document-container{page-break-after:avoid!important;break-after:avoid-page!important;page-break-inside:avoid}}
+  @media print{@page{size:A4 portrait;margin:10mm}.document-container{width:190mm!important;max-width:190mm!important;min-height:277mm!important;padding:0!important;margin:0 auto!important;overflow:visible!important;page-break-after:avoid!important;break-after:avoid-page!important;page-break-inside:avoid}.kop-container,.kop-surat{grid-template-columns:100px minmax(0,1fr)!important;gap:14px!important}.kop-container .logo-wrapper,.kop-surat .logo-wrapper{width:100px;height:100px}.invoice-table-wrap{overflow:visible!important}.invoice-document .clean-table{min-width:0!important}.invoice-document .signature-grid{grid-template-columns:1fr 1fr!important}.signature-card img{width:150px!important;max-width:150px!important;height:auto!important}}
 `;
 function normalizeDocumentVisibility(root) {
   if (!root) throw new Error('Konten dokumen tidak tersedia.');
@@ -547,6 +552,7 @@ async function downloadDocumentPdf(html, title, pageStyle = '') {
 }
 function exportReportPdf() {
   const role = roles[effectiveRole()] || roles.guru;
+<<<<<<< HEAD
   const rows = state.students.map((student) => {
     const attendance = state.attendance.filter((item) => item.studentId === student.id);
     const present = attendance.filter((item) => item.status === 'Hadir').length;
@@ -557,6 +563,11 @@ function exportReportPdf() {
   }).join('');
   const report = `<article class="document-container report-document"><h1 style="margin:0 0 6px;text-align:center">LAPORAN BOARDINGPRO STKIS</h1><p style="text-align:center;margin:0 0 18px;color:#475569">${escapeHtml(formatLocalLongDate())} - ${escapeHtml(role.label || role.demoName)}</p><table style="width:100%;border-collapse:collapse;table-layout:fixed;word-wrap:break-word"><thead><tr><th style="width:40%;padding:8px;border:1px solid #cbd5e1;text-align:left">Santri</th><th style="width:25%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kelas / Program</th><th style="width:15%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kehadiran</th><th style="width:20%;padding:8px;border:1px solid #cbd5e1;text-align:left">SPP</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="padding:12px;text-align:center">Belum ada data</td></tr>'}</tbody></table></article>`;
   return printDocumentInFrame(report, `Laporan-BoardingPro-${new Date().toISOString().slice(0, 10)}`, '@page{size:A4 portrait;margin:15mm}');
+=======
+  const rows = state.students.map((student) => `<tr><td>${escapeHtml(student.name)}</td><td>${escapeHtml(student.className || student.program || 'Belum ditentukan')}</td><td>${escapeHtml(`${Number(student.attendance || 0)}%`)}</td><td>${escapeHtml(student.spp || 'Belum ada')}</td></tr>`).join('');
+  const report = `<article class="document-container report-document"><h1 style="margin:0 0 6px;text-align:center">LAPORAN BOARDINGPRO STK IS</h1><p style="text-align:center;margin:0 0 18px;color:#475569">${escapeHtml(formatLocalLongDate())} ”•– ${escapeHtml(role.label || role.demoName)}</p><table style="width:100%;border-collapse:collapse;table-layout:fixed;word-wrap:break-word"><thead><tr><th style="width:40%;padding:8px;border:1px solid #cbd5e1;text-align:left">Santri</th><th style="width:25%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kelas / Program</th><th style="width:15%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kehadiran</th><th style="width:20%;padding:8px;border:1px solid #cbd5e1;text-align:left">SPP</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="padding:12px;text-align:center">Belum ada data</td></tr>'}</tbody></table></article>`;
+  return downloadDocumentPdf(report, `Laporan-BoardingPro-${new Date().toISOString().slice(0, 10)}`);
+>>>>>>> 18518bd (Update splash screen logo to logo stkis with white background container)
 }
 function documentActionButtons(kind, id, label = 'Cetak') {
   if (!canUseDocumentActions()) return '';
@@ -594,7 +605,7 @@ function signatureQrHtml(label, name, timestamp, payload) {
   const signaturePayload = { ...payload, signer: name || 'Tidak diketahui', signedAt: safeTimestamp };
   const isApplicant = label.toLowerCase().includes('pemohon');
   const badge = isApplicant ? 'Terverifikasi Digital' : "Stempel Digital Ma'had";
-  return `<div class="signature-card" style="min-width:0;text-align:center;border:1px solid #cbd5e1;border-radius:8px;padding:12px;overflow-wrap:anywhere;break-inside:avoid"><b class="signature-title" style="display:block;font-size:11px">${escapeHtml(label)}</b><img src="${qrSignatureUrl(signaturePayload)}" alt="QR tanda tangan ${escapeHtml(label)}" width="160" height="160" style="display:block;width:160px;height:160px;max-width:100%;margin:8px auto;object-fit:contain" loading="eager"><strong style="display:block;font-size:11px">${escapeHtml(name || 'Tidak diketahui')}</strong><small style="display:block;font-size:9px;color:#475569">${escapeHtml(new Date(safeTimestamp).toLocaleString('id-ID'))}</small><span class="signature-badge" style="display:inline-block;margin-top:8px;padding:4px 8px;border-radius:999px;background:#d1fae5;color:#047857;font-size:9px;font-weight:700">${escapeHtml(badge)}</span></div>`;
+  return `<div class="signature-card" style="min-width:0;text-align:center;border:1px solid #cbd5e1;border-radius:8px;padding:12px;overflow-wrap:anywhere;break-inside:avoid"><b class="signature-title" style="display:block;font-size:11px">${escapeHtml(label)}</b><img src="${qrSignatureUrl(signaturePayload)}" alt="QR tanda tangan ${escapeHtml(label)}" width="160" height="160" style="display:block;width:min(150px,100%);height:auto;max-width:150px;aspect-ratio:1;margin:8px auto;object-fit:contain" loading="eager"><strong style="display:block;font-size:11px">${escapeHtml(name || 'Tidak diketahui')}</strong><small style="display:block;font-size:9px;color:#475569">${escapeHtml(new Date(safeTimestamp).toLocaleString('id-ID'))}</small><span class="signature-badge" style="display:inline-block;margin-top:8px;padding:4px 8px;border-radius:999px;background:#d1fae5;color:#047857;font-size:9px;font-weight:700">${escapeHtml(badge)}</span></div>`;
 }
 const documentEngineStyles = `*,*:before,*:after{box-sizing:border-box}html,body{margin:0;padding:0;background:#e2e8f0;color:#0f172a;font-family:Arial,sans-serif}.document-container{position:relative;width:100%;max-width:210mm;min-height:297mm;margin:18px auto;padding:15mm;background:#fff;box-shadow:0 8px 28px #0f172a22;overflow:hidden}.kop-container{display:flex;align-items:center;justify-content:center;gap:18px;width:100%;text-align:center;border-bottom:3px double #0f172a;padding-bottom:12px;margin-bottom:16px}.logo-wrapper{display:grid;place-items:center;flex:none;width:110px;height:110px;background:#ffffff !important}.logo-wrapper img{display:block;width:100%;height:100%;object-fit:contain}.kop-text{flex:1;min-width:0;text-align:center;line-height:1.35}.kop-text b,.kop-text h1,.kop-text p,.kop-text small{display:block;margin:2px 0;text-align:center}.kop-text h1{font-size:18px;line-height:1.2}.kop-text p,.kop-text small{font-size:10px;line-height:1.45;color:#475569}.document-header{text-align:center;border-bottom:5px double #0f172a;padding-bottom:10px;margin-bottom:22px}.document-header h1,.document-header h2,.document-header p{margin:3px 0;text-align:center}.document-header h1{font-size:20px}.document-header p{font-size:11px;color:#475569}.document-content{line-height:1.65;overflow-wrap:anywhere}.document-signatures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:28px;page-break-inside:avoid}.document-watermark{position:absolute;top:48%;left:50%;z-index:2;width:150%;transform:translate(-50%,-50%) rotate(-28deg);color:#b91c1c2b;font-size:34px;font-weight:800;letter-spacing:3px;text-align:center;pointer-events:none;white-space:nowrap}.document-container.is-draft .document-signatures{display:none}.document-container.is-draft .document-content{opacity:.9}.document-multiline{white-space:pre-line}@media(max-width:820px){.document-container{width:100%;min-height:auto;margin:0;padding:28px 20px;box-shadow:none}.document-signatures{grid-template-columns:1fr}.document-watermark{font-size:25px}}@media print{@page{size:A4 portrait;margin:15mm}.document-container{width:100%;max-width:210mm;min-height:297mm;margin:0;box-shadow:none}.document-actions{display:none!important}}`;
 function renderDocumentPreview(docType, docData = {}) {
@@ -603,10 +614,17 @@ function renderDocumentPreview(docType, docData = {}) {
   const institution = state.config?.institution || {};
   const title = docData.title || ({ discipline: 'Surat Peringatan / DO', invoice: 'Invoice Pembayaran', billing: 'Surat Tagihan', permit: 'Surat Izin Santri' }[docType] || 'Dokumen BoardingPro');
   const content = docData.html || ({
+<<<<<<< HEAD
     discipline: `<h2>${escapeHtml(docData.level || 'SURAT KEDISIPLINAN')}</h2><p>Santri: <b>${escapeHtml(docData.studentName || '-')}</b></p><p class="document-multiline">${escapeHtml(docData.sanction || docData.description || '-')}</p>`,
     invoice: `<h2>INVOICE PEMBAYARAN</h2><p>Nomor: <b>${escapeHtml(docData.number || '-')}</b></p><p>Santri: ${escapeHtml(docData.studentName || '-')}</p><p class="document-multiline">${escapeHtml(docData.description || '-')}</p><h3>${escapeHtml(docData.total || '-')}</h3>`,
     billing: `<h2>SURAT TAGIHAN</h2><p>Nomor: <b>${escapeHtml(docData.number || '-')}</b></p><p>Santri: ${escapeHtml(docData.studentName || '-')}</p><p class="document-multiline">${escapeHtml(docData.description || '-')}</p><h3>${escapeHtml(docData.total || '-')}</h3>`,
     permit: `<h2>SURAT IZIN SANTRI</h2><p>Santri: <b>${escapeHtml(docData.studentName || '-')}</b></p><p class="document-multiline">${escapeHtml(docData.reason || '-')}</p>`
+=======
+    discipline: `<h2>${escapeHtml(docData.level || 'SURAT KEDISIPLINAN')}</h2><p>Santri: <b>${escapeHtml(docData.studentName || 'Belum ditentukan')}</b></p><p class="document-multiline">${escapeHtml(docData.sanction || docData.description || 'Tidak ada keterangan')}</p>`,
+    invoice: `<h2>INVOICE PEMBAYARAN</h2><p>Nomor: <b>${escapeHtml(docData.number || 'Belum tersedia')}</b></p><p>Santri: <b>${escapeHtml(docData.studentName || 'Belum ditentukan')}</b></p><p class="document-multiline">${escapeHtml(docData.description || 'Belum ada keterangan')}</p>`,
+    billing: `<h2>SURAT TAGIHAN</h2><p>Nomor: <b>${escapeHtml(docData.number || 'Belum tersedia')}</b></p><p>Santri: <b>${escapeHtml(docData.studentName || 'Belum ditentukan')}</b></p><p class="document-multiline">${escapeHtml(docData.description || 'Belum ada keterangan')}</p>`,
+    permit: `<h2>SURAT IZIN SANTRI</h2><p>Santri: <b>${escapeHtml(docData.studentName || 'Belum ditentukan')}</b></p><p class="document-multiline">${escapeHtml(docData.reason || docData.description || 'Tidak ada keterangan')}</p>`
+>>>>>>> 18518bd (Update splash screen logo to logo stkis with white background container)
   }[docType] || `<h2>${escapeHtml(title)}</h2><p class="document-multiline">${escapeHtml(docData.description || 'Dokumen digital BoardingPro')}</p>`);
   const signatures = verified && docData.signaturesHtml ? `<div class="document-signatures">${docData.signaturesHtml}</div>` : '';
   const watermark = verified ? '' : '<div class="document-watermark" aria-label="Draft menunggu verifikasi">DRAFT / MENUNGGU VERIFIKASI</div>';
@@ -2256,10 +2274,17 @@ function renderInvoiceModal(invoiceId, print = false, receiptId = null) {
   const isReceipt = Boolean(receipt);
   const title = isReceipt ? 'KWITANSI PEMBAYARAN' : paid ? 'INVOICE PEMBAYARAN' : 'SURAT PENAGIHAN / INVOICE';
   const detailRows = `<tr><td>Subtotal</td><td class="currency">${money(subtotal)}</td></tr><tr><td>Potongan/Beasiswa</td><td class="currency">- ${money(adjustment.scholarship + adjustment.discount)}</td></tr><tr><td><b>Total Kewajiban</b></td><td class="currency"><b>${money(total)}</b></td></tr>`;
+<<<<<<< HEAD
   const invoiceSignatureBlock = `<div class="signature-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:28px">${signatureQrHtml('Pemohon', source.applicantName || 'Orang Tua / Wali', source.applicantSignedAt, source.applicantQrPayload || { documentId: source.id, documentType: 'invoice', role: 'parent' })}${signatureQrHtml('Mengetahui & Menyetujui', source.verifierName || (paid ? 'Administrator' : 'Belum diverifikasi'), source.verifierSignedAt, source.verifierQrPayload || { documentId: source.id, documentType: 'invoice', role: 'verifier' })}</div>`;
   const cleanRows = `<tr><td>Nomor</td><td>${escapeHtml(source.number || source.id)}</td></tr><tr><td>Santri</td><td>${escapeHtml(student.name)} (${escapeHtml(SecurityMasker.identity(student.nis || '-'))})</td></tr><tr><td>Kategori</td><td>${escapeHtml(categoryLabel(source.category))}</td></tr>${detailRows}<tr><td>Status</td><td>${paid ? 'LUNAS' : 'BELUM LUNAS'}</td></tr>`;
   const pageStyle = '@page{size:A4 portrait;margin:15mm}.document-container,.receipt-document{width:100%;max-width:210mm;min-height:297mm;padding:15mm}';
   const html = `<article class="document-container invoice-document${isReceipt ? ' receipt-document' : ''}">${header}<div class="doc-header"><h2>${escapeHtml(title)}</h2><span class="status-badge ${paid ? 'status-badge--verified' : 'status-badge--draft'}">${paid ? 'Terverifikasi' : 'Draft'}</span></div><table class="clean-table">${cleanRows}</table>${invoiceSignatureBlock}<footer class="document-footer">Security Hash Code: <b>${hash}</b></footer></article>${documentActionButtons(isReceipt ? 'receipt' : 'invoice', isReceipt ? receipt.id : source.id, isReceipt ? 'Print Kwitansi' : 'Print Invoice')}`;
+=======
+  const invoiceSignatureBlock = `<div class="signature-grid">${signatureQrHtml('Pemohon', source.applicantName || 'Orang Tua / Wali', source.applicantSignedAt, source.applicantQrPayload || { documentId: source.id, documentType: 'invoice', role: 'parent' })}${signatureQrHtml('Mengetahui & Menyetujui', source.verifierName || (paid ? 'Administrator' : 'Belum diverifikasi'), source.verifierSignedAt, source.verifierQrPayload || { documentId: source.id, documentType: 'invoice', role: 'verifier' })}</div>`;
+  const cleanRows = `<tr><td>Nomor</td><td>${escapeHtml(source.number || source.id)}</td></tr><tr><td>Santri</td><td>${escapeHtml(student.name)} (${escapeHtml(SecurityMasker.identity(student.nis || '✓  || categoryLabel(source.category))}</td></tr>${detailRows}<tr><td>Status</td><td>${paid ? 'LUNAS / PAID' : 'BELUM LUNAS / UNPAID'}</td></tr>`;
+  const pageStyle = '@page{size:A4 portrait;margin:15mm}.document-container,.receipt-document{width:100%;max-width:210mm;min-height:297mm;padding:15mm}';
+  const html = `<article class="document-container invoice-document${isReceipt ? ' receipt-document' : ''}">${header}<div class="doc-header"><h2>${escapeHtml(title)}</h2><span class="status-badge ${paid ? 'status-badge--verified' : 'status-badge--draft'}">${paid ? '✓  Terverifikasi' : 'Draft'}</span></div><div class="invoice-table-wrap"><table class="clean-table">${cleanRows}</table></div>${invoiceSignatureBlock}<footer class="document-footer">Security Hash Code: <b>${hash}</b></footer></article>${documentActionButtons(isReceipt ? 'receipt' : 'invoice', isReceipt ? receipt.id : source.id, isReceipt ? 'Print Kwitansi' : 'Print Invoice')}`;
+>>>>>>> 18518bd (Update splash screen logo to logo stkis with white background container)
   if (print) {
     printDocumentInFrame(html, `${title} - ${source.number || source.id}`, pageStyle);
     return;
