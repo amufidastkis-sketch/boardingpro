@@ -1,6 +1,5 @@
 /* Application behaviour. Shared catalogues and seed data live only in data.js?v=6000. */
 const clone = (value) => JSON.parse(JSON.stringify(value));
-<<<<<<< HEAD
 const today = new Date().toISOString().slice(0, 10);
 const KOP_SURAT_LOGO = './assets/logo%20stkis.png';
 const OFFICIAL_EDUCATION_ACCOUNT = Object.freeze({
@@ -24,10 +23,6 @@ function readPaymentAccountsStorage() {
     return {};
   }
 }
-=======
-const today = '2026-09-05';
-const KOP_SURAT_LOGO = './assets/logo%20stkis.png';
->>>>>>> 18518bd (Update splash screen logo to logo stkis with white background container)
 const SECURITY_STORAGE_PREFIX = 'boardingpro-secure:';
 const SECURITY_KEY_NAME = `${SECURITY_STORAGE_PREFIX}key`;
 const securityKeyMaterial = localStorage.getItem(SECURITY_KEY_NAME) || (() => {
@@ -552,7 +547,6 @@ async function downloadDocumentPdf(html, title, pageStyle = '') {
 }
 function exportReportPdf() {
   const role = roles[effectiveRole()] || roles.guru;
-<<<<<<< HEAD
   const rows = state.students.map((student) => {
     const attendance = state.attendance.filter((item) => item.studentId === student.id);
     const present = attendance.filter((item) => item.status === 'Hadir').length;
@@ -563,11 +557,6 @@ function exportReportPdf() {
   }).join('');
   const report = `<article class="document-container report-document"><h1 style="margin:0 0 6px;text-align:center">LAPORAN BOARDINGPRO STKIS</h1><p style="text-align:center;margin:0 0 18px;color:#475569">${escapeHtml(formatLocalLongDate())} - ${escapeHtml(role.label || role.demoName)}</p><table style="width:100%;border-collapse:collapse;table-layout:fixed;word-wrap:break-word"><thead><tr><th style="width:40%;padding:8px;border:1px solid #cbd5e1;text-align:left">Santri</th><th style="width:25%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kelas / Program</th><th style="width:15%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kehadiran</th><th style="width:20%;padding:8px;border:1px solid #cbd5e1;text-align:left">SPP</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="padding:12px;text-align:center">Belum ada data</td></tr>'}</tbody></table></article>`;
   return printDocumentInFrame(report, `Laporan-BoardingPro-${new Date().toISOString().slice(0, 10)}`, '@page{size:A4 portrait;margin:15mm}');
-=======
-  const rows = state.students.map((student) => `<tr><td>${escapeHtml(student.name)}</td><td>${escapeHtml(student.className || student.program || 'Belum ditentukan')}</td><td>${escapeHtml(`${Number(student.attendance || 0)}%`)}</td><td>${escapeHtml(student.spp || 'Belum ada')}</td></tr>`).join('');
-  const report = `<article class="document-container report-document"><h1 style="margin:0 0 6px;text-align:center">LAPORAN BOARDINGPRO STK IS</h1><p style="text-align:center;margin:0 0 18px;color:#475569">${escapeHtml(formatLocalLongDate())} ”•– ${escapeHtml(role.label || role.demoName)}</p><table style="width:100%;border-collapse:collapse;table-layout:fixed;word-wrap:break-word"><thead><tr><th style="width:40%;padding:8px;border:1px solid #cbd5e1;text-align:left">Santri</th><th style="width:25%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kelas / Program</th><th style="width:15%;padding:8px;border:1px solid #cbd5e1;text-align:left">Kehadiran</th><th style="width:20%;padding:8px;border:1px solid #cbd5e1;text-align:left">SPP</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="padding:12px;text-align:center">Belum ada data</td></tr>'}</tbody></table></article>`;
-  return downloadDocumentPdf(report, `Laporan-BoardingPro-${new Date().toISOString().slice(0, 10)}`);
->>>>>>> 18518bd (Update splash screen logo to logo stkis with white background container)
 }
 function documentActionButtons(kind, id, label = 'Cetak') {
   if (!canUseDocumentActions()) return '';
@@ -614,17 +603,10 @@ function renderDocumentPreview(docType, docData = {}) {
   const institution = state.config?.institution || {};
   const title = docData.title || ({ discipline: 'Surat Peringatan / DO', invoice: 'Invoice Pembayaran', billing: 'Surat Tagihan', permit: 'Surat Izin Santri' }[docType] || 'Dokumen BoardingPro');
   const content = docData.html || ({
-<<<<<<< HEAD
     discipline: `<h2>${escapeHtml(docData.level || 'SURAT KEDISIPLINAN')}</h2><p>Santri: <b>${escapeHtml(docData.studentName || '-')}</b></p><p class="document-multiline">${escapeHtml(docData.sanction || docData.description || '-')}</p>`,
     invoice: `<h2>INVOICE PEMBAYARAN</h2><p>Nomor: <b>${escapeHtml(docData.number || '-')}</b></p><p>Santri: ${escapeHtml(docData.studentName || '-')}</p><p class="document-multiline">${escapeHtml(docData.description || '-')}</p><h3>${escapeHtml(docData.total || '-')}</h3>`,
     billing: `<h2>SURAT TAGIHAN</h2><p>Nomor: <b>${escapeHtml(docData.number || '-')}</b></p><p>Santri: ${escapeHtml(docData.studentName || '-')}</p><p class="document-multiline">${escapeHtml(docData.description || '-')}</p><h3>${escapeHtml(docData.total || '-')}</h3>`,
     permit: `<h2>SURAT IZIN SANTRI</h2><p>Santri: <b>${escapeHtml(docData.studentName || '-')}</b></p><p class="document-multiline">${escapeHtml(docData.reason || '-')}</p>`
-=======
-    discipline: `<h2>${escapeHtml(docData.level || 'SURAT KEDISIPLINAN')}</h2><p>Santri: <b>${escapeHtml(docData.studentName || 'Belum ditentukan')}</b></p><p class="document-multiline">${escapeHtml(docData.sanction || docData.description || 'Tidak ada keterangan')}</p>`,
-    invoice: `<h2>INVOICE PEMBAYARAN</h2><p>Nomor: <b>${escapeHtml(docData.number || 'Belum tersedia')}</b></p><p>Santri: <b>${escapeHtml(docData.studentName || 'Belum ditentukan')}</b></p><p class="document-multiline">${escapeHtml(docData.description || 'Belum ada keterangan')}</p>`,
-    billing: `<h2>SURAT TAGIHAN</h2><p>Nomor: <b>${escapeHtml(docData.number || 'Belum tersedia')}</b></p><p>Santri: <b>${escapeHtml(docData.studentName || 'Belum ditentukan')}</b></p><p class="document-multiline">${escapeHtml(docData.description || 'Belum ada keterangan')}</p>`,
-    permit: `<h2>SURAT IZIN SANTRI</h2><p>Santri: <b>${escapeHtml(docData.studentName || 'Belum ditentukan')}</b></p><p class="document-multiline">${escapeHtml(docData.reason || docData.description || 'Tidak ada keterangan')}</p>`
->>>>>>> 18518bd (Update splash screen logo to logo stkis with white background container)
   }[docType] || `<h2>${escapeHtml(title)}</h2><p class="document-multiline">${escapeHtml(docData.description || 'Dokumen digital BoardingPro')}</p>`);
   const signatures = verified && docData.signaturesHtml ? `<div class="document-signatures">${docData.signaturesHtml}</div>` : '';
   const watermark = verified ? '' : '<div class="document-watermark" aria-label="Draft menunggu verifikasi">DRAFT / MENUNGGU VERIFIKASI</div>';
@@ -2274,17 +2256,10 @@ function renderInvoiceModal(invoiceId, print = false, receiptId = null) {
   const isReceipt = Boolean(receipt);
   const title = isReceipt ? 'KWITANSI PEMBAYARAN' : paid ? 'INVOICE PEMBAYARAN' : 'SURAT PENAGIHAN / INVOICE';
   const detailRows = `<tr><td>Subtotal</td><td class="currency">${money(subtotal)}</td></tr><tr><td>Potongan/Beasiswa</td><td class="currency">- ${money(adjustment.scholarship + adjustment.discount)}</td></tr><tr><td><b>Total Kewajiban</b></td><td class="currency"><b>${money(total)}</b></td></tr>`;
-<<<<<<< HEAD
-  const invoiceSignatureBlock = `<div class="signature-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:28px">${signatureQrHtml('Pemohon', source.applicantName || 'Orang Tua / Wali', source.applicantSignedAt, source.applicantQrPayload || { documentId: source.id, documentType: 'invoice', role: 'parent' })}${signatureQrHtml('Mengetahui & Menyetujui', source.verifierName || (paid ? 'Administrator' : 'Belum diverifikasi'), source.verifierSignedAt, source.verifierQrPayload || { documentId: source.id, documentType: 'invoice', role: 'verifier' })}</div>`;
+  const invoiceSignatureBlock = `<div class="signature-grid">${signatureQrHtml('Pemohon', source.applicantName || 'Orang Tua / Wali', source.applicantSignedAt, source.applicantQrPayload || { documentId: source.id, documentType: 'invoice', role: 'parent' })}${signatureQrHtml('Mengetahui & Menyetujui', source.verifierName || (paid ? 'Administrator' : 'Belum diverifikasi'), source.verifierSignedAt, source.verifierQrPayload || { documentId: source.id, documentType: 'invoice', role: 'verifier' })}</div>`;
   const cleanRows = `<tr><td>Nomor</td><td>${escapeHtml(source.number || source.id)}</td></tr><tr><td>Santri</td><td>${escapeHtml(student.name)} (${escapeHtml(SecurityMasker.identity(student.nis || '-'))})</td></tr><tr><td>Kategori</td><td>${escapeHtml(categoryLabel(source.category))}</td></tr>${detailRows}<tr><td>Status</td><td>${paid ? 'LUNAS' : 'BELUM LUNAS'}</td></tr>`;
   const pageStyle = '@page{size:A4 portrait;margin:15mm}.document-container,.receipt-document{width:100%;max-width:210mm;min-height:297mm;padding:15mm}';
-  const html = `<article class="document-container invoice-document${isReceipt ? ' receipt-document' : ''}">${header}<div class="doc-header"><h2>${escapeHtml(title)}</h2><span class="status-badge ${paid ? 'status-badge--verified' : 'status-badge--draft'}">${paid ? 'Terverifikasi' : 'Draft'}</span></div><table class="clean-table">${cleanRows}</table>${invoiceSignatureBlock}<footer class="document-footer">Security Hash Code: <b>${hash}</b></footer></article>${documentActionButtons(isReceipt ? 'receipt' : 'invoice', isReceipt ? receipt.id : source.id, isReceipt ? 'Print Kwitansi' : 'Print Invoice')}`;
-=======
-  const invoiceSignatureBlock = `<div class="signature-grid">${signatureQrHtml('Pemohon', source.applicantName || 'Orang Tua / Wali', source.applicantSignedAt, source.applicantQrPayload || { documentId: source.id, documentType: 'invoice', role: 'parent' })}${signatureQrHtml('Mengetahui & Menyetujui', source.verifierName || (paid ? 'Administrator' : 'Belum diverifikasi'), source.verifierSignedAt, source.verifierQrPayload || { documentId: source.id, documentType: 'invoice', role: 'verifier' })}</div>`;
-  const cleanRows = `<tr><td>Nomor</td><td>${escapeHtml(source.number || source.id)}</td></tr><tr><td>Santri</td><td>${escapeHtml(student.name)} (${escapeHtml(SecurityMasker.identity(student.nis || '✓  || categoryLabel(source.category))}</td></tr>${detailRows}<tr><td>Status</td><td>${paid ? 'LUNAS / PAID' : 'BELUM LUNAS / UNPAID'}</td></tr>`;
-  const pageStyle = '@page{size:A4 portrait;margin:15mm}.document-container,.receipt-document{width:100%;max-width:210mm;min-height:297mm;padding:15mm}';
-  const html = `<article class="document-container invoice-document${isReceipt ? ' receipt-document' : ''}">${header}<div class="doc-header"><h2>${escapeHtml(title)}</h2><span class="status-badge ${paid ? 'status-badge--verified' : 'status-badge--draft'}">${paid ? '✓  Terverifikasi' : 'Draft'}</span></div><div class="invoice-table-wrap"><table class="clean-table">${cleanRows}</table></div>${invoiceSignatureBlock}<footer class="document-footer">Security Hash Code: <b>${hash}</b></footer></article>${documentActionButtons(isReceipt ? 'receipt' : 'invoice', isReceipt ? receipt.id : source.id, isReceipt ? 'Print Kwitansi' : 'Print Invoice')}`;
->>>>>>> 18518bd (Update splash screen logo to logo stkis with white background container)
+  const html = `<article class="document-container invoice-document${isReceipt ? ' receipt-document' : ''}">${header}<div class="doc-header"><h2>${escapeHtml(title)}</h2><span class="status-badge ${paid ? 'status-badge--verified' : 'status-badge--draft'}">${paid ? 'Terverifikasi' : 'Draft'}</span></div><div class="invoice-table-wrap"><table class="clean-table">${cleanRows}</table></div>${invoiceSignatureBlock}<footer class="document-footer">Security Hash Code: <b>${hash}</b></footer></article>${documentActionButtons(isReceipt ? 'receipt' : 'invoice', isReceipt ? receipt.id : source.id, isReceipt ? 'Print Kwitansi' : 'Print Invoice')}`;
   if (print) {
     printDocumentInFrame(html, `${title} - ${source.number || source.id}`, pageStyle);
     return;
