@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./assets/icon-192.png">
-  <link rel="stylesheet" href="./style.css?v=6008">
+  <link rel="stylesheet" href="./style.css?v=6016">
   <title>BoardingPro STKIS - Sistem Informasi Smart Boarding</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -252,10 +252,15 @@
 <body>
   <section id="landing" class="landing">
     <div class="landing-glow"></div>
-    <div class="landing-tools"><div class="landing-tools-heading"><button class="btn btn-ghost" id="landing-quran-button" type="button">Buka Al-Qur’an Digital</button></div><div id="landing-prayer-hero"></div></div>
+    <div class="landing-brand"><img class="landing-logo" src="./assets/logo%20stkis.png" alt="Logo Sekolah Tahfidz Kejuruan Irman Sofran"><div><b>BoardingPro <span>STKIS</span></b><small>SMART BOARDING</small></div></div>
+    <div class="landing-feature-grid" aria-label="Fitur Islami BoardingPro">
+      <button class="landing-feature-card" type="button" data-landing-tool="quran"><span class="landing-feature-icon"><i class="fa-solid fa-book-quran" aria-hidden="true"></i></span><b>Al-Qur’an Digital</b><small>Terjemahan Kemenag & tafsir</small></button>
+      <button class="landing-feature-card" type="button" data-landing-tool="murottal"><span class="landing-feature-icon"><i class="fa-solid fa-headphones" aria-hidden="true"></i></span><b>Murottal 30 Juz</b><small>Playlist penuh & tematik</small></button>
+      <button class="landing-feature-card" type="button" data-landing-tool="prayer"><span class="landing-feature-icon"><i class="fa-solid fa-mosque" aria-hidden="true"></i></span><b>Waktu Shalat</b><small>Jadwal & pengingat Adzan</small></button>
+      <button class="landing-feature-card" type="button" data-landing-tool="qibla"><span class="landing-feature-icon"><i class="fa-solid fa-compass" aria-hidden="true"></i></span><b>Arah Kiblat</b><small>Kompas dari lokasi perangkat</small></button>
+    </div>
     <div id="landing-scholar-quotes"></div>
     <div class="landing-copy">
-      <div class="landing-brand"><img class="landing-logo" src="./assets/logo%20stkis.png" alt="Logo Sekolah Tahfidz Kejuruan Irman Sofran"><div><b>BoardingPro</b><small>STKIS - SMART BOARDING</small></div></div>
       <span class="eyebrow">SISTEM INFORMASI STKIS</span>
       <h1>Karena Mendidik adalah Amanah<br><em>yang Kita Perjuangkan Bersama.</em></h1>
       <p>Bukan sekedar mengantar mereka tumbuh, tetapi menjaga setiap langkahnya agar tetap berada dalam kebaikan.</p>
@@ -300,8 +305,8 @@
       firebase.initializeApp(window.firebaseConfig);
   }
 </script>
-  <script src="data.js?v=6008"></script>
-  <script src="app.js?v=6008"></script>
+  <script src="data.js?v=6016"></script>
+  <script src="app.js?v=6016"></script>
 
 <!-- Modal Rincian Kehadiran Guru -->
 <div id="modal-detail-guru" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">

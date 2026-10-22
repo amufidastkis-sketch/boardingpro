@@ -1114,29 +1114,56 @@ let audioUnlockContext = null;
 let persistentQariCatalog = null;
 let persistentQari = localStorage.getItem('boardingpro-qari') || 'saad';
 let persistentSurahIndex = Number(localStorage.getItem('boardingpro-murottal-index') || 0);
+let persistentThematicQueue = null;
+let persistentThematicQueuePosition = 0;
+let persistentThematicQueueId = null;
+let persistentThematicSegment = null;
+const quranSurahMetadataCache = new Map();
 let quranPlaylist = [];
 let persistentPlayerBound = false;
 let lastPrayerAlerts = new Set(JSON.parse(localStorage.getItem('boardingpro-prayer-alerts') || '[]'));
 const prayerNames = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 const prayerLabels = { Fajr: 'Subuh', Dhuhr: 'Dzuhur', Asr: 'Ashar', Maghrib: 'Maghrib', Isha: 'Isya' };
-const learningVerses = [{ label: 'Doa Memohon Ilmu', reference: '20:114', surah: 20 }, { label: 'Keutamaan Orang Berilmu', reference: '39:9', surah: 39 }, { label: 'Derajat Orang Berilmu', reference: '58:11', surah: 58 }, { label: 'Perintah Membaca', reference: '96:1', surah: 96 }, { label: 'Tanda Kebesaran Allah', reference: '3:190', surah: 3 }];
 const qariDefinitions = { saad: { label: 'Syaikh Saad Al-Ghamidi', match: 'سعد الغامدي' }, mansour: { label: 'Syaikh Mansyur Al-Salimi', match: 'منصور السالمي' }, yasser: { label: 'Syaikh Yasser Al-Dosari', match: 'ياسر الدوسري' } };
 const qiblaCoordinates = { latitude: 21.422487, longitude: 39.826206 };
+const thematicMurottalPlaylists = [
+  { id: 'ilm', title: 'Keutamaan Menuntut Ilmu', references: [{ surah: 58, start: 11, end: 11, label: "Al-Mujadilah: 11" }, { surah: 20, start: 114, end: 114, label: "Thaha: 114" }, { surah: 39, start: 9, end: 9, label: "Az-Zumar: 9" }] },
+  { id: 'badar-uhud', title: 'Kisah Perang Badar & Uhud', references: [{ surah: 3, start: 121, end: 175, label: "Ali 'Imran: 121-175" }, { surah: 8, start: 5, end: 19, label: "Al-Anfal: 5-19" }] },
+  { id: 'isra-miraj', title: "Peristiwa Isra' Mi'raj", references: [{ surah: 17, start: 1, end: 1, label: "Al-Isra': 1" }, { surah: 53, start: 1, end: 18, label: "An-Najm: 1-18" }] },
+  { id: 'riba', title: 'Bahaya & Hukum Riba', references: [{ surah: 2, start: 275, end: 281, label: 'Al-Baqarah: 275-281' }, { surah: 3, start: 130, end: 130, label: "Ali 'Imran: 130" }] },
+  { id: 'muamalah', title: 'Hukum Jual Beli & Muamalah', references: [{ surah: 2, start: 282, end: 283, label: 'Al-Baqarah: 282-283' }, { surah: 4, start: 29, end: 29, label: "An-Nisa': 29" }] },
+  { id: 'parents', title: 'Berbakti kepada Orang Tua', references: [{ surah: 17, start: 23, end: 24, label: "Al-Isra': 23-24" }, { surah: 31, start: 14, end: 15, label: 'Luqman: 14-15' }] },
+  { id: 'ittiba', title: "Kewajiban Ittiba' kepada Rasulullah", references: [{ surah: 3, start: 31, end: 32, label: "Ali 'Imran: 31-32" }, { surah: 4, start: 59, end: 59, label: "An-Nisa': 59" }, { surah: 59, start: 7, end: 7, label: 'Al-Hasyr: 7' }] },
+  { id: 'family', title: 'Hukum Pernikahan & Keluarga', references: [{ surah: 30, start: 21, end: 21, label: 'Ar-Rum: 21' }, { surah: 4, start: 1, end: 1, label: "An-Nisa': 1" }, { surah: 4, start: 3, end: 3, label: "An-Nisa': 3" }, { surah: 4, start: 34, end: 34, label: "An-Nisa': 34" }, { surah: 24, start: 32, end: 32, label: 'An-Nur: 32' }] },
+  { id: 'purification', title: 'Tata Cara Bersuci & Wudhu', references: [{ surah: 5, start: 6, end: 6, label: "Al-Ma'idah: 6" }, { surah: 8, start: 11, end: 11, label: 'Al-Anfal: 11' }] },
+  { id: 'judgment-day', title: 'Dahsyatnya Hari Kiamat', references: [{ surah: 81, start: 1, end: 14, label: 'At-Takwir: 1-14' }, { surah: 82, start: 1, end: 19, label: 'Al-Infitar: 1-19' }, { surah: 101, start: 1, end: 11, label: "Al-Qari'ah: 1-11" }] },
+  { id: 'barzakh', title: 'Kehidupan Alam Kubur & Barzakh', references: [{ surah: 23, start: 99, end: 100, label: "Al-Mu'minun: 99-100" }, { surah: 102, start: 1, end: 8, label: 'At-Takatsur: 1-8' }, { surah: 40, start: 45, end: 46, label: 'Ghafir: 45-46' }] },
+  { id: 'paradise-hellfire', title: 'Sifat Penghuni Surga & Neraka', references: [{ surah: 88, start: 1, end: 26, label: 'Al-Ghasyiyah: 1-26' }, { surah: 56, start: 11, end: 56, label: "Al-Waqi'ah: 11-56" }] }
+];
 const scholarLearningQuotes = [
-  { scholar: 'Syaikh Shalih Al-Fauzan', text: 'Ilmu yang benar membimbing seorang muslim untuk beribadah kepada Allah di atas petunjuk dan dalil.' },
-  { scholar: 'Syaikh Muqbil bin Hadi Al-Wadi‘i', text: 'Kesungguhan menuntut ilmu perlu disertai keikhlasan, kesabaran, dan perhatian terhadap pemahaman yang benar.' },
-  { scholar: 'Syaikh Abdurrazzaq bin Abdul Muhsin Al-Badr', text: 'Ilmu adalah jalan untuk mengenal Allah, memperbaiki ibadah, dan menumbuhkan rasa takut serta harap kepada-Nya.' },
-  { scholar: 'Syaikh Wahid bin Abdussalam Bali', text: 'Manfaat ilmu tampak ketika ia diamalkan, dijaga dengan adab, dan menjadi sebab kebaikan bagi orang lain.' },
-  { scholar: 'Syaikh Dr. Muhsin', text: 'Menuntut ilmu membutuhkan ketekunan; sedikit yang dipelajari dengan benar dan diamalkan lebih bermanfaat.' }
+  { scholar: 'Imam Malik bin Anas', text: 'Ilmu dan adab berjalan beriringan; ilmu yang dipelajari hendaknya membuahkan ketenangan dan amal.', emphasis: 'membuahkan ketenangan dan amal', source: 'Tartibul Madarik, karya Al-Qadhi Iyadh' },
+  { scholar: 'Imam Asy-Syafi’i', text: 'Menuntut ilmu memerlukan kesungguhan, waktu, dan kesabaran menghadapi proses belajar.', emphasis: 'kesungguhan, waktu, dan kesabaran', source: 'Diwan Asy-Syafi’i / Al-Majmu’, karya Imam An-Nawawi' },
+  { scholar: 'Imam Ahmad bin Hanbal', text: 'Seorang penuntut ilmu terus belajar selama masih memiliki kesempatan dan kehidupan.', emphasis: 'terus belajar selama masih memiliki kesempatan', source: 'Al-Adab Asy-Syar’iyyah, karya Ibnu Muflih' },
+  { scholar: 'Imam Sufyan Ats-Tsauri', text: 'Ilmu dicari untuk memperbaiki niat dan amal, bukan untuk berbangga atau mencari kedudukan.', emphasis: 'memperbaiki niat dan amal', source: 'Hilyatul Auliya’, karya Abu Nu’aim Al-Ashbahani' },
+  { scholar: 'Imam Ibnul Qayyim Al-Jauziyyah', text: 'Ilmu yang bermanfaat mengantarkan hati mengenal Allah dan mendorong anggota badan untuk taat.', emphasis: 'mengenal Allah dan mendorong anggota badan untuk taat', source: 'Miftah Daris Sa’adah, karya Ibnul Qayyim' },
+  { scholar: 'Syaikh Shalih Al-Fauzan', text: 'Ilmu yang benar membimbing seorang muslim untuk beribadah kepada Allah di atas petunjuk dan dalil.', emphasis: 'beribadah kepada Allah di atas petunjuk dan dalil', source: 'Al-I’tidhar bil ‘Ilmi, karya Syaikh Shalih Al-Fauzan' },
+  { scholar: 'Syaikh Muqbil bin Hadi Al-Wadi’i', text: 'Kesungguhan menuntut ilmu perlu disertai keikhlasan, kesabaran, dan perhatian terhadap pemahaman yang benar.', emphasis: 'keikhlasan, kesabaran, dan pemahaman yang benar', source: 'Tuhfatul Mujib, karya Syaikh Muqbil bin Hadi Al-Wadi’i' },
+  { scholar: 'Syaikh Abdurrazzaq bin Abdul Muhsin Al-Badr', text: 'Ilmu adalah jalan untuk mengenal Allah, memperbaiki ibadah, dan menumbuhkan rasa takut serta harap kepada-Nya.', emphasis: 'mengenal Allah dan memperbaiki ibadah', source: 'Ta’dzimul ‘Ilmi, karya Syaikh Abdurrazzaq Al-Badr' },
+  { scholar: 'Syaikh Wahid bin Abdussalam Bali', text: 'Manfaat ilmu tampak ketika ia diamalkan, dijaga dengan adab, dan menjadi sebab kebaikan bagi orang lain.', emphasis: 'diamalkan, dijaga dengan adab', source: 'Al-Bidayah, karya Syaikh Wahid bin Abdussalam Bali' },
+  { scholar: 'Syaikh Dr. Abdul Muhsin Al-Qasim', text: 'Menuntut ilmu membutuhkan ketekunan; ilmu yang dipahami dengan benar dan diamalkan membawa manfaat.', emphasis: 'dipahami dengan benar dan diamalkan', source: 'Khulasah Ta’dzimil ‘Ilm, karya Syaikh Dr. Abdul Muhsin Al-Qasim' }
 ];
 
 function scholarQuoteWidget() {
   const initialIndex = new Date().getDate() % scholarLearningQuotes.length;
-  return `<section class="scholar-quote-widget" data-scholar-slider aria-label="Mutiara Kata Ulama"><div class="scholar-quote-heading"><div><span class="eyebrow">MUTIARA KATA ULAMA</span><h2>Ilmu yang Menuntun</h2></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-scholar-step="-1" aria-label="Kutipan sebelumnya">‹</button><button class="icon-btn" type="button" data-scholar-step="1" aria-label="Kutipan berikutnya">›</button></div></div><div class="scholar-quote-slides">${scholarLearningQuotes.map((quote, index) => `<article class="scholar-quote-slide" data-scholar-slide${index === initialIndex ? '' : ' hidden'}><p>“${quote.text}”</p><b>${quote.scholar}</b></article>`).join('')}</div><small>Ringkasan faedah, bukan kutipan verbatim.</small></section>`;
+  return `<section class="scholar-quote-widget" data-scholar-slider aria-label="Faedah dan Nasehat Ulama"><div class="scholar-quote-heading"><div><span class="eyebrow">MUTIARA ILMU SALAFUSSHALIH & ULAMA KIBAR</span><h2>Faedah &amp; Nasehat Ulama</h2></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-scholar-step="-1" aria-label="Faedah sebelumnya">‹</button><button class="icon-btn" type="button" data-scholar-step="1" aria-label="Faedah berikutnya">›</button></div></div><div class="scholar-quote-slides">${scholarLearningQuotes.map((quote, index) => `<article class="scholar-quote-slide" data-scholar-slide${index === initialIndex ? '' : ' hidden'}><p>${escapeHtml(quote.text).replace(escapeHtml(quote.emphasis), `<strong>${escapeHtml(quote.emphasis)}</strong>`)}</p><b>${escapeHtml(quote.scholar)}</b><small class="scholar-quote-source">Rujukan bacaan: ${escapeHtml(quote.source)}</small></article>`).join('')}</div><small>Faedah di atas berupa parafrasa tema, bukan redaksi verbatim dari kitab. Rujukan dicantumkan sebagai bacaan lanjutan.</small></section>`;
 }
 
 function prayerWidgetMarkup() {
-  return `<section class="prayer-hero"><div class="prayer-hero-heading"><img src="./assets/logo%20stkis.png" alt="Logo Sekolah Tahfidz Kejuruan Irman Sofran"><div><span class="eyebrow">SEKOLAH TAHFIDZ KEJURUAN IRMAN SOFRAN</span><h2>Waktu Ibadah</h2><p data-prayer-status>Mencari lokasi via GPS atau IP untuk jadwal shalat…</p></div><button type="button" class="btn btn-ghost btn-small" data-prayer-refresh aria-label="Perbarui lokasi">Perbarui Lokasi</button></div><div class="prayer-times" data-prayer-times><span>Jadwal shalat sedang dicari dari GPS atau lokasi IP.</span></div><div class="prayer-hero-footer"><b data-prayer-countdown aria-live="polite"></b><div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-prayer-notifications>Aktifkan Notifikasi</button><button type="button" class="btn btn-ghost btn-small" data-prayer-adhan>${localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Matikan Audio Adzan' : 'Aktifkan Audio Adzan'}</button></div></div><small class="metric-note">Pengingat in-app otomatis saat aplikasi terbuka. Suara dan notifikasi sistem bergantung pada izin/kebijakan browser.</small></section><section class="qibla-widget" data-qibla-widget><div class="qibla-compass" aria-label="Kompas arah kiblat"><span class="qibla-north">U</span><span class="qibla-needle" data-qibla-needle>↑</span><span class="qibla-kaaba">K</span></div><div class="qibla-copy"><span class="eyebrow">ARAH KIBLAT</span><h3 data-qibla-degree>Menentukan arah…</h3><p data-qibla-location data-prayer-location>${escapeHtml(prayerLocation?.label || 'Menentukan lokasi pengguna…')}</p><p class="metric-note" data-qibla-heading>Arah dihitung dari lokasi GPS atau perkiraan IP.</p><button type="button" class="btn btn-ghost btn-small" data-qibla-calibrate>Aktifkan Kompas Perangkat</button></div></section>`;
+  return `<section class="prayer-hero" data-prayer-widget><div class="prayer-hero-heading"><img src="./assets/logo%20stkis.png" alt="Logo Sekolah Tahfidz Kejuruan Irman Sofran"><div><span class="eyebrow">SEKOLAH TAHFIDZ KEJURUAN IRMAN SOFRAN</span><h2>Waktu Ibadah</h2><p data-prayer-status>Mencari lokasi via GPS atau IP untuk jadwal shalat…</p><p class="prayer-location-detail" data-prayer-location>${escapeHtml(prayerLocation?.label || 'Mencari nama wilayah…')}</p></div><button type="button" class="btn btn-ghost btn-small" data-prayer-refresh aria-label="Perbarui lokasi">Perbarui Lokasi</button></div><div class="prayer-times" data-prayer-times><span>Jadwal shalat sedang dicari dari GPS atau lokasi IP.</span></div><div class="prayer-hero-footer"><b data-prayer-countdown aria-live="polite"></b><div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-prayer-notifications>Aktifkan Notifikasi</button><button type="button" class="btn btn-ghost btn-small" data-prayer-adhan>${localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Matikan Audio Adzan' : 'Aktifkan Audio Adzan'}</button></div></div><small class="metric-note">Pengingat in-app otomatis saat aplikasi terbuka. Suara dan notifikasi sistem bergantung pada izin/kebijakan browser.</small></section>`;
+}
+
+function qiblaWidgetMarkup() {
+  return `<section class="qibla-widget" data-qibla-widget><div class="qibla-compass" aria-label="Kompas arah kiblat"><span class="qibla-north">U</span><span class="qibla-needle" data-qibla-needle>↑</span><span class="qibla-kaaba">K</span></div><div class="qibla-copy"><span class="eyebrow">ARAH KIBLAT</span><h3 data-qibla-degree>Menentukan arah…</h3><p data-qibla-location data-prayer-location>${escapeHtml(prayerLocation?.label || 'Mencari nama wilayah…')}</p><p class="metric-note" data-qibla-heading>Arah dihitung dari lokasi GPS atau perkiraan IP.</p><button type="button" class="btn btn-ghost btn-small" data-qibla-calibrate>Aktifkan Kompas Perangkat</button></div></section>`;
 }
 
 function calculateQiblaBearing(latitude, longitude) {
@@ -1177,7 +1204,6 @@ async function enableDeviceCompass() {
 
 function renderPrayerWidgets() {
   const widgets = document.querySelectorAll('[data-prayer-widget]');
-  if (!widgets.length) return;
   widgets.forEach((widget) => {
     const status = widget.querySelector('[data-prayer-status]');
     const times = widget.querySelector('[data-prayer-times]');
@@ -1426,7 +1452,7 @@ function bindPrayerWidgets() {
       if (enabled) playAdhanAudio();
     };
   });
-  if (!prayerIntervalId) {
+  if (!prayerIntervalId && document.querySelector('[data-prayer-widget], [data-qibla-widget]')) {
     prayerIntervalId = window.setInterval(() => {
       if (prayerTimingDate && prayerTimingDate !== new Date().toDateString()) {
         prayerTimings = null;
@@ -1449,7 +1475,7 @@ function bindPrayerWidgets() {
       renderPrayerWidgets();
     }, 1000);
   }
-  loadPrayerTimings();
+  if (document.querySelector('[data-prayer-widget], [data-qibla-widget]')) loadPrayerTimings();
 }
 
 function bindPersistentPlayer() {
@@ -1463,12 +1489,27 @@ function bindPersistentPlayer() {
   const surahSelect = player.querySelector('[data-player-surah]');
   if (qari) qari.value = persistentQari;
   player.querySelector('[data-player-start]')?.addEventListener('click', () => playPersistentSurah(Number(surahSelect.value) - 1, qari.value));
-  player.querySelector('[data-player-prev]')?.addEventListener('click', () => playPersistentSurah(Math.max(0, persistentSurahIndex - 1), qari.value));
-  player.querySelector('[data-player-next]')?.addEventListener('click', () => playPersistentSurah(Math.min(113, persistentSurahIndex + 1), qari.value));
+  player.querySelector('[data-player-prev]')?.addEventListener('click', () => {
+    if (persistentThematicQueue?.length) {
+      advanceThematicPlaylist(-1, qari.value);
+      return;
+    }
+    playPersistentSurah(Math.max(0, persistentSurahIndex - 1), qari.value);
+  });
+  player.querySelector('[data-player-next]')?.addEventListener('click', () => {
+    if (persistentThematicQueue?.length) {
+      advanceThematicPlaylist(1, qari.value);
+      return;
+    }
+    playPersistentSurah(Math.min(113, persistentSurahIndex + 1), qari.value);
+  });
   player.querySelector('[data-player-stop]')?.addEventListener('click', () => {
     audio.pause();
     audio.removeAttribute('src');
     audio.load();
+    persistentThematicQueue = null;
+    persistentThematicQueueId = null;
+    persistentThematicSegment = null;
     player.hidden = true;
     localStorage.setItem('boardingpro-murottal-stopped', 'true');
     if (track) track.textContent = 'Audio dimatikan oleh pengguna.';
@@ -1481,15 +1522,29 @@ function bindPersistentPlayer() {
   qari?.addEventListener('change', () => {
     persistentQari = qari.value;
     localStorage.setItem('boardingpro-qari', persistentQari);
-    if (audio.src && !audio.paused) playPersistentSurah(persistentSurahIndex, persistentQari);
+    if (audio.src && !audio.paused) {
+      if (persistentThematicQueue?.length) playCurrentThematicReference(persistentQari);
+      else playPersistentSurah(persistentSurahIndex, persistentQari);
+    }
   });
   selector?.addEventListener('change', () => {
+    persistentThematicQueue = null;
+    persistentThematicQueueId = null;
+    persistentThematicSegment = null;
     persistentSurahIndex = Math.max(0, Number(selector.value) - 1);
     localStorage.setItem('boardingpro-murottal-index', String(persistentSurahIndex));
   });
   audio?.addEventListener('ended', () => {
-    if (persistentSurahIndex < 113) playPersistentSurah(persistentSurahIndex + 1, qari.value);
+    if (persistentThematicQueue?.length) {
+      advanceThematicPlaylist(1, qari.value);
+    } else if (persistentSurahIndex < 113) playPersistentSurah(persistentSurahIndex + 1, qari.value);
     else if (track) track.textContent = 'Alhamdulillah, 114 surah telah selesai diputar.';
+  });
+  audio?.addEventListener('timeupdate', () => {
+    if (!persistentThematicSegment || audio.currentTime < persistentThematicSegment.end) return;
+    persistentThematicSegment = null;
+    audio.pause();
+    if (persistentThematicQueue?.length) advanceThematicPlaylist(1, qari.value);
   });
   audio?.addEventListener('error', () => {
     if (audio.currentSrc && track) track.textContent = 'Audio surah gagal dimuat. Coba qari lain atau periksa koneksi.';
@@ -1504,7 +1559,11 @@ function bindPersistentPlayer() {
 }
 
 function quranPanelMarkup() {
-  return `<section class="panel quran-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Tilawah, terjemahan Kemenag RI, transliterasi Latin, dan tafsir.</p></div></div></div><div class="quran-controls"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat<input data-quran-ayah type="number" min="1" value="1"></label><label>Halaman<input data-quran-page type="number" min="1" max="604" placeholder="1–604"></label><button class="btn btn-primary" type="button" data-quran-load>Buka</button></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div><hr><h3>Murottal Lengkap 30 Juz</h3><p class="metric-note">Putar playlist lengkap 114 surah. Pemutar mengambang tetap aktif selama pengguna menutup dialog, berpindah halaman, maupun login.</p><div class="quran-controls"><label>Ayat tema<select data-learning-verse>${learningVerses.map((verse) => `<option value="${verse.reference}">${verse.label} (${verse.reference})</option>`).join('')}</select></label><label>Qari<select data-qari><option value="saad">Syaikh Saad Al-Ghamidi</option><option value="mansour">Syaikh Mansyur Al-Salimi</option><option value="yasser">Syaikh Yasser Al-Dosari</option></select></label><button class="btn btn-ghost" type="button" data-quran-play>Putar Murottal</button></div></section>`;
+  return `<section class="panel quran-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Mushaf per surah, ayat, atau halaman; terjemahan Kemenag RI dan Tafsir Ibnu Katsir.</p></div></div></div><div class="quran-controls"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat<input data-quran-ayah type="number" min="1" value="1"></label><label>Halaman<input data-quran-page type="number" min="1" max="604" placeholder="1–604"></label><button class="btn btn-primary" type="button" data-quran-load>Buka</button></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></section>`;
+}
+
+function murottalPanelMarkup() {
+  return `<section class="panel murottal-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Murottal 30 Juz & Tematik</h2><p>Pemutar audio terpisah dari modul Al-Qur’an. Playback memakai floating player persisten.</p></div></div></div><div class="murottal-full-play"><div class="murottal-full-copy"><h3>Murottal Lengkap 30 Juz</h3><p>Playlist 114 surah, dilanjutkan otomatis hingga selesai.</p></div><div class="quran-controls murottal-controls"><label>Mulai dari Surah<select data-murottal-surah><option value="1">Memuat daftar surah…</option></select></label><label>Qari<select data-qari><option value="saad">Syaikh Saad Al-Ghamidi</option><option value="mansour">Syaikh Mansyur Al-Salimi</option><option value="yasser">Syaikh Yasser Al-Dosari</option></select></label><button type="button" class="btn btn-primary" data-murottal-play>Putar Murottal 30 Juz</button></div></div><hr><div class="thematic-playlist-heading"><div><h3>Playlist Murottal Tematik</h3><p>Playlist akan memulai audio dari ayat yang disebutkan lalu melanjutkan ayat tematik secara berurutan.</p></div></div><div class="thematic-playlist-grid">${thematicMurottalPlaylists.map((playlist) => `<article class="thematic-playlist-card"><h4>${playlist.title}</h4><p>${playlist.references.map((reference) => reference.label).join(' · ')}</p><button class="btn btn-ghost btn-small" type="button" data-play-theme="${playlist.id}">Putar Playlist</button></article>`).join('')}</div><small class="metric-note">Saad Al-Ghamidi dan Yasser Ad-Dosary memakai rekaman per ayat. Untuk Mansyur Al-Salimi, sumber tersedia per surah; pemotongan ayat memakai perkiraan proporsi teks Arab dan bukan penanda timestamp resmi.</small></section>`;
 }
 
 function renderQuranVerse(data) {
@@ -1634,12 +1693,17 @@ async function getPersistentReciter(qari = persistentQari) {
   return { reciter, mushaf: reciter.moshaf.find((item) => Number(item.surah_total) === 114) };
 }
 
-async function playPersistentSurah(index = persistentSurahIndex, qari = persistentQari) {
+async function playPersistentSurah(index = persistentSurahIndex, qari = persistentQari, preserveThematicQueue = false) {
   const player = $('#persistent-murottal-player');
   const audio = player?.querySelector('[data-persistent-audio]');
   const trackLabel = player?.querySelector('[data-player-track]');
   if (!player || !audio) return;
   try {
+    if (!preserveThematicQueue) {
+      persistentThematicQueue = null;
+      persistentThematicQueueId = null;
+    }
+    persistentThematicSegment = null;
     const [surahs, recitation] = await Promise.all([ensureQuranSurahList(), getPersistentReciter(qari)]);
     const nextIndex = Math.min(Math.max(0, Number(index) || 0), surahs.length - 1);
     const surahNumber = nextIndex + 1;
@@ -1652,7 +1716,11 @@ async function playPersistentSurah(index = persistentSurahIndex, qari = persiste
     player.querySelector('[data-player-qari]').value = qari;
     player.querySelector('[data-player-surah]').value = String(surahNumber);
     player.hidden = false;
-    trackLabel.textContent = `${surahs[nextIndex].englishName} · ${recitation.reciter.name}`;
+    const activePlaylist = persistentThematicQueue?.length
+      ? thematicMurottalPlaylists.find((playlist) => playlist.id === persistentThematicQueueId)
+      : null;
+    const referenceText = activePlaylist?.references.find((reference) => reference.surah === surahNumber)?.label;
+    trackLabel.textContent = `${activePlaylist ? `${activePlaylist.title} · ${referenceText || surahs[nextIndex].englishName}` : surahs[nextIndex].englishName} · ${qariDefinitions[qari].label}`;
     audio.src = `${recitation.mushaf.server}${String(surahNumber).padStart(3, '0')}.mp3`;
     audio.load();
     await audio.play();
@@ -1661,19 +1729,143 @@ async function playPersistentSurah(index = persistentSurahIndex, qari = persiste
     if (trackLabel) trackLabel.textContent = `Audio gagal dimuat: ${error.message}`;
     showToast(`Murottal tidak dapat diputar: ${error.message}`, 'error');
   }
+
 }
 
-async function loadQariAudio(container = document) {
-  const reference = container.querySelector('[data-learning-verse]')?.value || '20:114';
-  const surah = Number(reference.split(':')[0]);
-  const qari = container.querySelector('[data-qari]')?.value || 'saad';
-  await playPersistentSurah(surah - 1, qari);
+async function playThematicPlaylist(playlistId, qari = persistentQari) {
+  const playlist = thematicMurottalPlaylists.find((item) => item.id === playlistId);
+  if (!playlist) {
+    showToast('Playlist murottal tematik tidak ditemukan.', 'error');
+    return;
+  }
+  persistentThematicQueue = playlist.references.flatMap((reference) => {
+    const start = Math.max(1, Number(reference.start) || 1);
+    const end = Math.max(start, Number(reference.end) || start);
+    return Array.from({ length: end - start + 1 }, (_, index) => ({ surah: reference.surah, ayah: start + index }));
+  });
+  persistentThematicQueuePosition = 0;
+  persistentThematicQueueId = playlist.id;
+  await playCurrentThematicReference(qari);
+}
+
+function advanceThematicPlaylist(direction, qari = persistentQari) {
+  if (!persistentThematicQueue?.length) return;
+  const nextPosition = persistentThematicQueuePosition + direction;
+  if (nextPosition < 0) return;
+  if (nextPosition >= persistentThematicQueue.length) {
+    persistentThematicQueue = null;
+    persistentThematicQueueId = null;
+    persistentThematicSegment = null;
+    const audio = $('#persistent-murottal-player [data-persistent-audio]');
+    audio?.pause();
+    const track = $('#persistent-murottal-player [data-player-track]');
+    if (track) track.textContent = 'Playlist tematik selesai diputar.';
+    return;
+  }
+  persistentThematicQueuePosition = nextPosition;
+  playCurrentThematicReference(qari);
+}
+
+async function getSurahVerseWeights(surahNumber) {
+  if (quranSurahMetadataCache.has(surahNumber)) return quranSurahMetadataCache.get(surahNumber);
+  const response = await fetch(`https://api.alquran.cloud/v1/surah/${surahNumber}`);
+  if (!response.ok) throw new Error(`Layanan teks Al-Qur'an merespons ${response.status}.`);
+  const result = await response.json();
+  const ayahs = result.data?.ayahs;
+  if (!Array.isArray(ayahs) || !ayahs.length) throw new Error(`Data ayat Surah ${surahNumber} tidak tersedia.`);
+  const weights = ayahs.map((ayah) => Math.max(1, String(ayah.text || '').replace(/\s/g, '').length));
+  const prefix = [0];
+  weights.forEach((weight) => prefix.push(prefix[prefix.length - 1] + weight));
+  const metadata = { verseCount: weights.length, totalWeight: prefix[prefix.length - 1], prefix };
+  quranSurahMetadataCache.set(surahNumber, metadata);
+  return metadata;
+}
+
+async function playCurrentThematicReference(qari = persistentQari) {
+  const reference = persistentThematicQueue?.[persistentThematicQueuePosition];
+  const player = $('#persistent-murottal-player');
+  const audio = player?.querySelector('[data-persistent-audio]');
+  const track = player?.querySelector('[data-player-track]');
+  if (!reference || !player || !audio) return;
+  try {
+    const [surahs, recitation] = await Promise.all([ensureQuranSurahList(), getPersistentReciter(qari)]);
+    const surahNumber = reference.surah;
+    const surahIndex = surahNumber - 1;
+    const surah = surahs[surahIndex];
+    if (!surah) throw new Error(`Surah ${surahNumber} tidak ditemukan.`);
+    persistentSurahIndex = surahIndex;
+    persistentQari = qari;
+    localStorage.setItem('boardingpro-murottal-index', String(surahIndex));
+    localStorage.setItem('boardingpro-qari', qari);
+    player.querySelector('[data-player-qari]').value = qari;
+    player.querySelector('[data-player-surah]').value = String(surahNumber);
+    player.hidden = false;
+    const playlist = thematicMurottalPlaylists.find((item) => item.id === persistentThematicQueueId);
+    const currentLabel = playlist?.references.find((item) => item.surah === surahNumber && reference.ayah >= item.start && reference.ayah <= item.end)?.label;
+    if (track) track.textContent = `${playlist?.title || 'Murottal Tematik'} · ${currentLabel || `${surah.englishName}:${reference.ayah}`} · Ayat ${reference.ayah} · ${qariDefinitions[qari].label}`;
+
+    if (qari === 'saad' || qari === 'yasser') {
+      const directory = qari === 'saad' ? 'Ghamadi_40kbps' : 'Yasser_Ad-Dussary_128kbps';
+      const file = `${String(surahNumber).padStart(3, '0')}${String(reference.ayah).padStart(3, '0')}.mp3`;
+      persistentThematicSegment = null;
+      audio.src = `https://everyayah.com/data/${directory}/${file}`;
+      audio.load();
+      await audio.play();
+      return;
+    }
+
+    const available = String(recitation.mushaf.surah_list || '').split(',').map(Number);
+    if (available.length && !available.includes(surahNumber)) throw new Error(`Audio surah ${surahNumber} tidak tersedia untuk qari ini.`);
+    const weights = await getSurahVerseWeights(surahNumber);
+    if (reference.ayah > weights.verseCount) throw new Error(`Ayat ${reference.ayah} tidak tersedia pada surah ${surahNumber}.`);
+    const startRatio = weights.prefix[reference.ayah - 1] / weights.totalWeight;
+    const endRatio = weights.prefix[reference.ayah] / weights.totalWeight;
+    await new Promise((resolve, reject) => {
+      const onLoaded = () => {
+        audio.removeEventListener('error', onError);
+        const start = audio.duration * startRatio;
+        const end = audio.duration * endRatio;
+        persistentThematicSegment = { end: Math.max(start + 1, end) };
+        audio.currentTime = start;
+        resolve();
+      };
+      const onError = () => {
+        audio.removeEventListener('loadedmetadata', onLoaded);
+        reject(new Error('Audio qari atau metadata durasi surah tidak dapat dimuat.'));
+      };
+      audio.addEventListener('loadedmetadata', onLoaded, { once: true });
+      audio.addEventListener('error', onError, { once: true });
+      audio.src = `${recitation.mushaf.server}${String(surahNumber).padStart(3, '0')}.mp3`;
+      audio.load();
+    });
+    await audio.play();
+  } catch (error) {
+    persistentThematicSegment = null;
+    console.error('[BoardingPro] Audio ayat tematik tidak dapat dimulai:', error);
+    if (track) track.textContent = `Audio ayat ${reference.ayah} tidak dapat dimuat: ${error.message}`;
+    showToast(`Audio ayat tematik tidak dapat diputar: ${error.message}`, 'error');
+  }
 }
 
 function openQuranModal() {
   openModal('Al-Qur’an Digital STKIS', quranPanelMarkup());
   const panel = $('#modal-root .quran-panel');
   bindQuranPanel(panel);
+}
+
+function openMurottalModal() {
+  openModal('Murottal 30 Juz & Tematik', murottalPanelMarkup());
+  bindMurottalPanel($('#modal-root .murottal-panel'));
+}
+
+function openPrayerModal() {
+  openModal('Waktu Shalat & Notifikasi Adzan', prayerWidgetMarkup());
+  bindPrayerWidgets();
+}
+
+function openQiblaModal() {
+  openModal('Kompas Arah Kiblat', qiblaWidgetMarkup());
+  bindPrayerWidgets();
 }
 
 function bindQuranPanel(container) {
@@ -1683,12 +1875,42 @@ function bindQuranPanel(container) {
     const button = event.target.closest('[data-quran-tafsir]');
     if (button) loadQuranTafsir(button.dataset.quranTafsir, container);
   });
-  container.querySelector('[data-quran-play]')?.addEventListener('click', () => loadQariAudio(container));
   loadQuranSurahList(container);
 }
 
+function bindMurottalPanel(container) {
+  if (!container) return;
+  const qariSelectors = container.querySelectorAll('[data-theme-qari], [data-qari]');
+  qariSelectors.forEach((select) => {
+    select.value = persistentQari;
+    select.addEventListener('change', () => {
+      persistentQari = select.value;
+      localStorage.setItem('boardingpro-qari', persistentQari);
+      qariSelectors.forEach((other) => { other.value = persistentQari; });
+    });
+  });
+  const surahSelect = container.querySelector('[data-murottal-surah]');
+  if (surahSelect) {
+    ensureQuranSurahList().then((surahs) => {
+      surahSelect.innerHTML = surahs.map((surah) => `<option value="${surah.number}">${surah.number} · ${escapeHtml(surah.englishName)}</option>`).join('');
+      surahSelect.value = String(Math.min(114, persistentSurahIndex + 1));
+    }).catch((error) => {
+      console.error('[BoardingPro] Gagal memuat daftar surah untuk playlist:', error);
+      surahSelect.innerHTML = '<option value="">Daftar surah gagal dimuat</option>';
+      showToast(`Daftar surah tidak dapat dimuat: ${error.message}`, 'error');
+    });
+  }
+  container.querySelector('[data-murottal-play]')?.addEventListener('click', () => {
+    playPersistentSurah(Number(surahSelect?.value || 1) - 1, container.querySelector('[data-qari]')?.value || persistentQari);
+  });
+  container.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-play-theme]');
+    if (button) playThematicPlaylist(button.dataset.playTheme, container.querySelector('[data-theme-qari], [data-qari]')?.value || persistentQari);
+  });
+}
+
 function navItems() {
-  const common = [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'schedule', label: 'Jadwal & Event', icon: 'calendar-days' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }];
+  const common = [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'schedule', label: 'Jadwal & Event', icon: 'calendar-days' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }];
   const pklItem = canViewPkl() ? { id: 'pkl', label: 'Laporan PKL Santri', icon: 'briefcase-business' } : null;
   const semesterTahfizhItem = ['yayasan', 'kepsek', 'mahad', 'maahad', 'admin', 'pembina', 'musyrif', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'tahfizh-semester', label: 'Rekap Tahfizh Semester', icon: 'book-open-check' } : null;
   const semesterAttendanceItem = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'attendance-semester', label: 'Rekap Absensi Semester', icon: 'calendar-check' } : null;
@@ -1703,7 +1925,7 @@ function navItems() {
     pembina: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     musyrif: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     security: [...common, { id: 'gate', label: 'Log Gerbang', icon: 'scan-line' }, { id: 'security-reports', label: 'Laporan Keamanan', icon: 'shield-alert' }],
-    parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
+    parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'schedule', label: 'Jadwal & Event', icon: 'calendar-days' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
     student: [...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Sanksi Saya', icon: 'shield-alert' }, { id: 'tahfizh', label: 'Tahfizh Saya', icon: 'book-open-check' }, ...(pklItem ? [pklItem] : [])]
   };
   // The real Ma'had/Admin account keeps its full navigation only in the
@@ -1877,7 +2099,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<div class="worship-tools">${prayerWidgetMarkup()}</div><div class="actions-inline quran-shortcut"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button></div>${educationalQuoteWidget()}${scholarQuoteWidget()}${launchPoster()}${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<div class="worship-tools">${prayerWidgetMarkup()}${qiblaWidgetMarkup()}</div><div class="actions-inline quran-shortcut"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></div>${educationalQuoteWidget()}${scholarQuoteWidget()}${launchPoster()}${extra}`;
 }
 
 function adminDashboard() {
@@ -2473,6 +2695,7 @@ function renderView() {
   else if (state.view === 'teachers') html = section('Data Staff & Karyawan', 'Kelola posisi, unit, dan kontak opsional staff sekolah.', teachersTable(), currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-teacher">${icon('plus')} Tambah Staff</button>` : '');
   else if (state.view === 'accounts' && canManageUserAccounts()) html = section('Akun Internal Staf', 'Kelola username dan password internal tanpa email', accountsTable(), `<button class="btn btn-primary" data-action="add-account">${icon('plus')} Buat Akun Staf</button>`);
   else if (state.view === 'quran') html = quranPanelMarkup();
+  else if (state.view === 'murottal') html = murottalPanelMarkup();
   else if (state.view === 'permits') html = effectiveRole() === 'parent' ? permitForm() : `${musyrifPermitForm()}${section('Manajemen Perizinan', 'Verifikasi seluruh pengajuan santri', permitTable(true))}`;
   else if (state.view === 'billing') html = canViewFinance() ? financeView() : dashboard();
   else if (state.view === 'payments') html = canViewFinance() ? (effectiveRole() === 'parent' ? paymentForm() : `${paymentVerificationPanel()}${section('Riwayat Pembayaran', 'Seluruh transaksi pembayaran yang tercatat', paymentTable(currentRoleIsAdmin()))}`) : dashboard();
@@ -2500,6 +2723,7 @@ function renderView() {
   $('#main-content').querySelectorAll('button:not([type]):not(form button)').forEach((button) => { button.type = 'button'; });
   bindPrayerWidgets();
   if (state.view === 'quran') bindQuranPanel($('#main-content .quran-panel'));
+  if (state.view === 'murottal') bindMurottalPanel($('#main-content .murottal-panel'));
   bindActions();
   if (window.lucide) lucide.createIcons();
   renderRoleBasedNotifications();
@@ -3754,9 +3978,19 @@ document.addEventListener('DOMContentLoaded', () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch((error) => console.error('[BoardingPro] Service worker gagal didaftarkan:', error));
   }
-  $('#landing-quran-button')?.addEventListener('click', openQuranModal);
-  const landingPrayer = $('#landing-prayer-hero');
-  if (landingPrayer) landingPrayer.innerHTML = `<div class="worship-tools">${prayerWidgetMarkup()}</div>`;
+  document.querySelectorAll('[data-landing-tool]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (button.dataset.landingTool === 'prayer') {
+        openPrayerModal();
+      } else if (button.dataset.landingTool === 'qibla') {
+        openQiblaModal();
+      } else if (button.dataset.landingTool === 'murottal') {
+        openMurottalModal();
+      } else {
+        openQuranModal();
+      }
+    });
+  });
   const landingScholarQuotes = $('#landing-scholar-quotes');
   if (landingScholarQuotes) landingScholarQuotes.innerHTML = scholarQuoteWidget();
   document.addEventListener('click', (event) => {
