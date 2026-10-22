@@ -37,3 +37,754 @@
     grid-template-columns: 1fr;
   }
 }
+
+.landing-tools {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.landing-prayer {
+  padding: 14px;
+  border: 1px solid #ccfbf1;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 25px -5px rgba(13, 148, 136, .08);
+}
+
+.landing-prayer .panel-head {
+  margin-bottom: 10px;
+}
+
+.prayer-times {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.prayer-time {
+  display: grid;
+  gap: 3px;
+  padding: 8px 4px;
+  border: 1px solid #d1fae5;
+  border-radius: 9px;
+  text-align: center;
+  background: #f0fdf4;
+}
+
+.prayer-time b,
+.prayer-time span {
+  color: #334155;
+  font-size: 10px;
+}
+
+.prayer-countdown {
+  margin: 8px 0;
+  color: #047857;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.quran-shortcut {
+  margin: -6px 0 16px;
+}
+
+.quran-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.quran-brand img {
+  width: 48px;
+  height: 48px;
+  padding: 3px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #fff;
+}
+
+.quran-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.quran-controls label {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.quran-controls input,
+.quran-controls select {
+  width: 100%;
+}
+
+.quran-panel hr {
+  margin: 20px 0;
+  border: 0;
+  border-top: 1px solid #d1fae5;
+}
+
+.quran-panel h3 {
+  margin: 8px 0;
+  color: #064e3b;
+  font-size: 14px;
+}
+
+.quran-verses {
+  display: grid;
+  gap: 10px;
+  max-height: 65vh;
+  overflow: auto;
+}
+
+.quran-verse {
+  padding: 14px;
+  border: 1px solid #d1fae5;
+  border-radius: 12px;
+  background: #fcfffd;
+}
+
+.quran-arabic {
+  margin: 12px 0;
+  color: #064e3b;
+  font-family: serif;
+  font-size: clamp(23px, 5vw, 32px);
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.quran-translation,
+.tafsir-result {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.tafsir-result {
+  margin-top: 10px;
+  padding: 12px;
+  border-left: 3px solid #0d9488;
+  background: #f0fdf4;
+}
+
+.quran-audio {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+}
+
+@media (max-width: 560px) {
+  .prayer-times {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .quran-controls {
+    align-items: stretch;
+  }
+
+  .quran-controls label {
+    flex-basis: 100%;
+  }
+}
+
+@media print {
+  .prayer-widget,
+  .quran-shortcut,
+  .landing-tools {
+    display: none !important;
+  }
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.landing-tools {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  margin-top: 0;
+}
+
+.landing-tools-heading {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.worship-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(240px, .65fr);
+  align-items: stretch;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.prayer-hero,
+.qibla-widget {
+  min-width: 0;
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid #99f6e4;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #f0fdfa, #fff 75%);
+  box-shadow: 0 12px 28px rgba(6, 78, 59, .08);
+}
+
+.prayer-hero-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.prayer-hero-heading img {
+  flex: none;
+  width: clamp(44px, 6vw, 62px);
+  height: clamp(44px, 6vw, 62px);
+  padding: 3px;
+  border: 1px solid #ccfbf1;
+  border-radius: 16px;
+  object-fit: contain;
+  background: #fff;
+}
+
+.prayer-hero-heading > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.prayer-hero-heading .eyebrow {
+  font-size: 9px;
+}
+
+.prayer-hero-heading h2 {
+  margin-top: 3px;
+  color: #064e3b;
+  font-size: clamp(16px, 2vw, 20px);
+}
+
+.prayer-hero-heading p {
+  margin-top: 4px;
+  color: #475569;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.prayer-hero .prayer-times {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0 12px;
+}
+
+.prayer-hero .prayer-time {
+  min-height: 54px;
+  align-content: center;
+  padding: 8px 3px;
+  border-color: #d1fae5;
+  background: #ffffffcf;
+}
+
+.prayer-hero .prayer-time b {
+  color: #64748b;
+  font-size: 9px;
+}
+
+.prayer-hero .prayer-time span {
+  color: #064e3b;
+  font-size: clamp(12px, 1.5vw, 15px);
+  font-weight: 800;
+}
+
+.prayer-hero-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.prayer-hero-footer > b {
+  color: #047857;
+  font-size: 13px;
+}
+
+.prayer-hero .metric-note {
+  display: block;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.qibla-widget {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.qibla-compass {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: clamp(96px, 12vw, 132px);
+  aspect-ratio: 1;
+  border: 7px solid #fff;
+  border-radius: 50%;
+  color: #064e3b;
+  background: radial-gradient(circle, #fff 48%, #ccfbf1 49%, #ecfdf5 100%);
+  box-shadow: 0 0 0 2px #99f6e4, 0 8px 20px #064e3b20;
+}
+
+.qibla-compass:before {
+  position: absolute;
+  inset: 7px;
+  border: 1px dashed #5eead4;
+  border-radius: 50%;
+  content: "";
+}
+
+.qibla-north,
+.qibla-kaaba,
+.qibla-needle {
+  position: absolute;
+  z-index: 1;
+  font-weight: 900;
+}
+
+.qibla-north {
+  top: 7px;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.qibla-kaaba {
+  right: 14px;
+  bottom: 13px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: #fff;
+  background: #064e3b;
+  font-size: 11px;
+}
+
+.qibla-needle {
+  transform-origin: 50% 62%;
+  color: #0f766e;
+  font-size: 38px;
+  transition: transform .2s ease;
+}
+
+.qibla-copy {
+  min-width: 0;
+}
+
+.qibla-copy h3 {
+  margin: 4px 0;
+  color: #064e3b;
+  font-size: clamp(13px, 1.5vw, 17px);
+}
+
+.qibla-copy p {
+  color: #475569;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.persistent-murottal {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 60;
+  display: grid;
+  gap: 9px;
+  width: min(390px, calc(100vw - 24px));
+  max-height: min(80vh, 640px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid #5eead4;
+  border-radius: 18px;
+  color: #0f172a;
+  background: #fff;
+  box-shadow: 0 18px 45px #022c2240;
+}
+
+.persistent-murottal[hidden] {
+  display: none !important;
+}
+
+.persistent-player-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.persistent-player-header img {
+  width: 38px;
+  height: 38px;
+  padding: 2px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #fff;
+  box-shadow: 0 0 0 1px #ccfbf1;
+}
+
+.persistent-player-header > div {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+}
+
+.persistent-player-header b {
+  color: #064e3b;
+  font-size: 12px;
+}
+
+.persistent-player-header small,
+.persistent-murottal .metric-note {
+  color: #475569;
+  font-size: 9px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.persistent-player-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.persistent-player-controls label {
+  min-width: 0;
+  color: #334155;
+  font-size: 9px;
+}
+
+.persistent-player-controls select {
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px solid #cbded1;
+  border-radius: 8px;
+  color: #0f172a;
+  background: #fff;
+  font-size: 10px;
+}
+
+.persistent-murottal audio {
+  width: 100%;
+  height: 38px;
+}
+
+.persistent-murottal .actions-inline {
+  justify-content: center;
+}
+
+.persistent-murottal .btn {
+  flex: 1 1 auto;
+  min-height: 38px;
+  padding: 8px;
+  font-size: 9px;
+}
+
+.persistent-murottal.player-minimized {
+  display: block;
+  width: min(220px, calc(100vw - 24px));
+  padding: 6px 9px;
+  border-radius: 999px;
+}
+
+.persistent-murottal.player-minimized .persistent-player-controls,
+.persistent-murottal.player-minimized audio,
+.persistent-murottal.player-minimized .actions-inline,
+.persistent-murottal.player-minimized .metric-note {
+  display: none;
+}
+
+.persistent-murottal.player-minimized .persistent-player-header {
+  gap: 7px;
+}
+
+.persistent-murottal.player-minimized .persistent-player-header img {
+  width: 28px;
+  height: 28px;
+}
+
+.persistent-murottal.player-minimized .persistent-player-header b {
+  font-size: 10px;
+}
+
+.persistent-murottal.player-minimized .persistent-player-header small {
+  overflow: hidden;
+  max-width: 130px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.persistent-murottal.player-minimized [data-player-hide] {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-color: #ccfbf1;
+  color: #064e3b;
+  background: #ecfdf5;
+}
+
+.scholar-quote-widget {
+  width: min(100%, 780px);
+  margin: 0 auto 18px;
+  padding: clamp(16px, 2.4vw, 24px);
+  border: 1px solid #a7f3d0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #fff 12%, #f0fdfa 100%);
+  box-shadow: 0 10px 25px -8px rgba(6, 78, 59, .12);
+}
+
+.scholar-quote-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scholar-quote-heading h2 {
+  margin-top: 4px;
+  color: #064e3b;
+  font-size: clamp(15px, 2vw, 20px);
+}
+
+.scholar-quote-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.scholar-quote-controls .icon-btn {
+  border-color: #ccfbf1;
+  color: #047857;
+  background: #fff;
+  font-size: 18px;
+}
+
+.scholar-quote-slide {
+  min-height: 96px;
+  padding: 18px 0 10px;
+}
+
+.scholar-quote-slide[hidden] {
+  display: none;
+}
+
+.scholar-quote-slide p {
+  color: #334155;
+  font-size: clamp(13px, 1.6vw, 16px);
+  font-weight: 600;
+  line-height: 1.75;
+}
+
+.scholar-quote-slide b {
+  display: block;
+  margin-top: 12px;
+  color: #047857;
+  font-size: 11px;
+}
+
+.scholar-quote-widget > small {
+  color: #64748b;
+  font-size: 9px;
+}
+
+#landing-scholar-quotes {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.quran-latin {
+  margin: 8px 0;
+  color: #0f766e;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.7;
+}
+
+.quran-translation {
+  line-height: 1.8;
+}
+
+.tafsir-result {
+  max-height: min(65vh, 620px);
+  overflow-y: auto;
+  white-space: normal;
+}
+
+.quran-verse .btn,
+.quran-controls .btn,
+.prayer-hero .btn,
+.qibla-widget .btn {
+  min-height: 42px;
+}
+
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .worship-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .qibla-widget {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-tools {
+    gap: 9px;
+  }
+
+  .landing-tools-heading {
+    justify-content: stretch;
+  }
+
+  .landing-tools-heading .btn {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .prayer-hero-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .prayer-hero-heading .eyebrow {
+    letter-spacing: .8px;
+  }
+
+  .prayer-hero-heading > .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .prayer-hero .prayer-times {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .prayer-hero-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .prayer-hero-footer .actions-inline {
+    width: 100%;
+  }
+
+  .prayer-hero-footer .btn {
+    flex: 1 1 140px;
+    min-height: 44px;
+  }
+
+  .qibla-widget {
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .qibla-compass {
+    width: 90px;
+  }
+
+  .qibla-kaaba {
+    right: 11px;
+    bottom: 11px;
+  }
+
+  .qibla-copy .btn {
+    width: 100%;
+  }
+
+  .persistent-murottal {
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: calc(100vw - 16px);
+    max-height: 60vh;
+    padding: 10px;
+  }
+
+  .persistent-murottal.player-minimized {
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: min(220px, calc(100vw - 16px));
+    padding: 6px 9px;
+  }
+
+  .persistent-murottal .actions-inline .btn {
+    min-height: 44px;
+  }
+
+  .quran-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quran-controls .btn {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .quran-verse {
+    padding: 12px;
+  }
+
+  .quran-verse .btn {
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1023px) {
+  .landing {
+    padding: 36px 24px;
+  }
+
+  .landing-tools {
+    max-width: 880px;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 1200px) {
+  .worship-tools {
+    grid-template-columns: minmax(0, 1.7fr) minmax(300px, .6fr);
+  }
+
+  .landing-tools {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 18px;
+  }
+
+  .landing-tools-heading {
+    justify-content: flex-start;
+  }
+}
+
+@media print {
+  .persistent-murottal {
+    display: none !important;
+  }
+}
