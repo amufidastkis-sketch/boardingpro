@@ -978,17 +978,22 @@ body {
   width: 48px;
   height: 48px;
   padding: 4px;
-  border-radius: 14px;
+  border: 0;
+  border-radius: 0;
   object-fit: contain;
   background: #fff;
-  box-shadow: 0 4px 14px rgba(6, 78, 59, .1);
+  box-shadow: none;
+  opacity: 1;
+  filter: none;
+  mix-blend-mode: normal;
 }
 
 #landing .landing-brand b {
   display: block;
-  color: #064e3b;
+  color: #064e3b !important;
   font-size: 15px;
   line-height: 1.3;
+  opacity: 1;
 }
 
 #landing .landing-brand b span {
@@ -999,10 +1004,85 @@ body {
 #landing .landing-brand small {
   display: block;
   margin-top: 3px;
-  color: #647b70;
+  color: #38564a !important;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 1px;
+  opacity: 1;
+}
+
+.prayer-location-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.prayer-city-picker {
+  display: flex;
+  min-width: 0;
+  gap: 7px;
+}
+
+.prayer-city-picker input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cbded1;
+  border-radius: 9px;
+  color: #0f172a;
+  background: #fff;
+  font: inherit;
+  font-size: 10px;
+}
+
+.prayer-location-actions .btn,
+.prayer-city-picker .btn {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.prayer-hero .prayer-times {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.prayer-times-note {
+  margin: -3px 0 12px;
+  color: #64748b;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.adhan-select-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #334155;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.adhan-select-label select {
+  min-height: 38px;
+  max-width: min(260px, 60vw);
+  padding: 6px 8px;
+  border: 1px solid #cbded1;
+  border-radius: 8px;
+  color: #0f172a;
+  background: #fff;
+  font: inherit;
+  font-size: 9px;
+}
+
+.btn-danger {
+  color: #fff;
+  background: #be123c;
+}
+
+.btn-danger:hover {
+  background: #9f1239;
 }
 
 #landing .landing-feature-grid {
@@ -1195,6 +1275,46 @@ body {
     justify-content: flex-start;
   }
 
+  .prayer-location-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .prayer-location-actions > .btn,
+  .prayer-city-picker .btn {
+    min-height: 44px;
+  }
+
+  .prayer-city-picker {
+    flex-direction: column;
+  }
+
+  .prayer-city-picker input {
+    min-height: 44px;
+  }
+
+  .prayer-hero .prayer-times {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prayer-hero-footer .actions-inline {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .prayer-hero-footer .actions-inline > *,
+  .prayer-hero-footer .actions-inline .btn,
+  .adhan-select-label select {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .adhan-select-label {
+    align-items: flex-start;
+    flex-direction: column;
+    font-size: 10px;
+  }
+
   .murottal-full-play {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
@@ -1209,5 +1329,187 @@ body {
     grid-column: auto;
     width: 100%;
     min-height: 46px;
+  }
+}
+
+.kaldik-panel {
+  margin-top: 18px;
+}
+
+.kaldik-event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.kaldik-event-card {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.kaldik-event-card time,
+.kaldik-schedule-card time {
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.kaldik-event-card h3,
+.kaldik-schedule-card h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.kaldik-event-card p,
+.kaldik-schedule-card p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.kaldik-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.kaldik-schedule-card {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.kaldik-schedule-card time {
+  display: block;
+  margin: 6px 0;
+}
+
+@media (max-width: 600px) {
+  .kaldik-event-card {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
+    padding: 12px;
+  }
+
+  .kaldik-event-card .badge {
+    justify-self: start;
+  }
+}
+
+#landing .landing-logo {
+  padding: 0;
+  background: transparent !important;
+}
+
+.landing-clock {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 6px 16px;
+  justify-self: start;
+  max-width: 100%;
+  padding: 0;
+  color: #38564a;
+  font-size: 11px;
+}
+
+.landing-clock-time {
+  grid-row: span 2;
+  color: #064e3b;
+  font-size: clamp(20px, 3vw, 28px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
+
+.landing-clock span {
+  white-space: nowrap;
+}
+
+.scholar-quote-dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.scholar-quote-dots button {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #a7f3d0;
+  cursor: pointer;
+}
+
+.scholar-quote-dots button.active {
+  width: 18px;
+  border-radius: 999px;
+  background: #047857;
+}
+
+.murottal-controls {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+}
+
+.murottal-controls label {
+  min-width: 0;
+}
+
+.murottal-controls select,
+.murottal-controls input {
+  width: 100%;
+}
+
+.teacher-journal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+
+.teacher-journal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.teacher-journal-status {
+  margin-top: 10px;
+  color: #475569;
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .landing-clock {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    font-size: 10px;
+  }
+
+  .landing-clock-time {
+    grid-row: auto;
+    font-size: 22px;
+  }
+
+  .teacher-journal-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .murottal-controls {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

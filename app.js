@@ -446,6 +446,11 @@ const formatLocalLongDate = (date = new Date()) => new Intl.DateTimeFormat('id-I
 const hijriMonthNames = ['Muharram', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban', 'Ramadan', 'Syawal', 'Zulkaidah', 'Zulhijah'];
 const hijriConversionOffsetDays = -1;
 function localMaghribHour(date = new Date()) {
+  const maghrib = prayerTimings?.Maghrib;
+  if (maghrib && prayerTimingDate === date.toDateString()) {
+    const [hour, minute] = String(maghrib).slice(0, 5).split(':').map(Number);
+    if (Number.isFinite(hour) && Number.isFinite(minute)) return hour + minute / 60;
+  }
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
   if (/Makassar|Singapore|Kuala_Lumpur|WITA/i.test(timeZone)) return 18 + 10 / 60;
   if (/Jayapura|WIT|Dili/i.test(timeZone)) return 18 + 20 / 60;
@@ -463,6 +468,17 @@ function hijriDateParts(date = new Date()) {
 function formatDashboardDate(date = new Date()) {
   const hijri = hijriDateParts(date);
   return `${formatLocalLongDate(date)} M / ${hijri.day} ${hijri.month} ${hijri.year} H`;
+}
+function updateLandingClock(date = new Date()) {
+  const time = document.querySelector('[data-landing-clock-time]');
+  const gregorian = document.querySelector('[data-landing-gregorian-date]');
+  const hijri = document.querySelector('[data-landing-hijri-date]');
+  if (time) time.textContent = new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(date);
+  if (gregorian) gregorian.textContent = `${formatLocalLongDate(date)} M`;
+  if (hijri) {
+    const parts = hijriDateParts(date);
+    hijri.textContent = `${parts.day} ${parts.month} ${parts.year} H`;
+  }
 }
 const money = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 const qrSignatureUrl = (payload) => `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=8&data=${encodeURIComponent(JSON.stringify(payload))}`;
@@ -1106,6 +1122,8 @@ let prayerTimingDate = '';
 let adhanAudio = null;
 let prayerIntervalId = null;
 let prayerLocationRequested = false;
+let prayerInitialLocationAttempted = false;
+let currentAdhanPrayer = '';
 let prayerNotificationPermission = typeof Notification === 'undefined' ? 'denied' : Notification.permission;
 let qiblaHeading = null;
 let qiblaOrientationBound = false;
@@ -1118,13 +1136,27 @@ let persistentThematicQueue = null;
 let persistentThematicQueuePosition = 0;
 let persistentThematicQueueId = null;
 let persistentThematicSegment = null;
+let persistentVerseContinuation = null;
 const quranSurahMetadataCache = new Map();
 let quranPlaylist = [];
 let persistentPlayerBound = false;
 let lastPrayerAlerts = new Set(JSON.parse(localStorage.getItem('boardingpro-prayer-alerts') || '[]'));
 const prayerNames = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 const prayerLabels = { Fajr: 'Subuh', Dhuhr: 'Dzuhur', Asr: 'Ashar', Maghrib: 'Maghrib', Isha: 'Isya' };
-const qariDefinitions = { saad: { label: 'Syaikh Saad Al-Ghamidi', match: 'سعد الغامدي' }, mansour: { label: 'Syaikh Mansyur Al-Salimi', match: 'منصور السالمي' }, yasser: { label: 'Syaikh Yasser Al-Dosari', match: 'ياسر الدوسري' } };
+const qariDefinitions = {
+  sudais: { label: 'Syekh Abdurrahman Al-Sudais', category: 'zyadah', quranComId: 3 },
+  ossi: { label: 'Syekh Abdul Rahman Al-Ossi', category: 'zyadah', match: 'العوسي' },
+  islamSobhi: { label: 'Syaikh Islam Sobhi', category: 'zyadah', match: 'إسلام صبحي' },
+  maher: { label: 'Syekh Maher Al-Muaiqly', category: 'zyadah', match: 'ماهر المعيقلي', everyAyahDirectory: 'Maher_AlMuaiqly_64kbps' },
+  mishary: { label: 'Syekh Mishary Rashid Alafasy', category: 'zyadah', quranComId: 7 },
+  mansour: { label: 'Syaikh Mansour Al Salimi', category: 'zyadah', match: 'منصور السالمي' },
+  yasser: { label: 'Syaikh Yasser Al Dosari', category: 'zyadah', match: 'ياسر الدوسري', everyAyahDirectory: 'Yasser_Ad-Dussary_128kbps' },
+  saad: { label: 'Syaikh Saad Al Ghamidi', category: 'zyadah', match: 'سعد الغامدي', everyAyahDirectory: 'Ghamadi_40kbps' },
+  husary: { label: 'Syekh Mahmoud Khalil Al-Hussary', category: 'tajwid', quranComId: 6 },
+  minshawi: { label: 'Syekh Muhammad Siddiq Al-Minshawi', category: 'tajwid', quranComId: 9 },
+  abdulbasit: { label: 'Syekh Abdul Basit Abdul Samad', category: 'tajwid', quranComId: 2 }
+};
+if (!qariDefinitions[persistentQari]) persistentQari = 'saad';
 const qiblaCoordinates = { latitude: 21.422487, longitude: 39.826206 };
 const thematicMurottalPlaylists = [
   { id: 'ilm', title: 'Keutamaan Menuntut Ilmu', references: [{ surah: 58, start: 11, end: 11, label: "Al-Mujadilah: 11" }, { surah: 20, start: 114, end: 114, label: "Thaha: 114" }, { surah: 39, start: 9, end: 9, label: "Az-Zumar: 9" }] },
@@ -1141,29 +1173,96 @@ const thematicMurottalPlaylists = [
   { id: 'paradise-hellfire', title: 'Sifat Penghuni Surga & Neraka', references: [{ surah: 88, start: 1, end: 26, label: 'Al-Ghasyiyah: 1-26' }, { surah: 56, start: 11, end: 56, label: "Al-Waqi'ah: 11-56" }] }
 ];
 const scholarLearningQuotes = [
-  { scholar: 'Imam Malik bin Anas', text: 'Ilmu dan adab berjalan beriringan; ilmu yang dipelajari hendaknya membuahkan ketenangan dan amal.', emphasis: 'membuahkan ketenangan dan amal', source: 'Tartibul Madarik, karya Al-Qadhi Iyadh' },
-  { scholar: 'Imam Asy-Syafi’i', text: 'Menuntut ilmu memerlukan kesungguhan, waktu, dan kesabaran menghadapi proses belajar.', emphasis: 'kesungguhan, waktu, dan kesabaran', source: 'Diwan Asy-Syafi’i / Al-Majmu’, karya Imam An-Nawawi' },
-  { scholar: 'Imam Ahmad bin Hanbal', text: 'Seorang penuntut ilmu terus belajar selama masih memiliki kesempatan dan kehidupan.', emphasis: 'terus belajar selama masih memiliki kesempatan', source: 'Al-Adab Asy-Syar’iyyah, karya Ibnu Muflih' },
-  { scholar: 'Imam Sufyan Ats-Tsauri', text: 'Ilmu dicari untuk memperbaiki niat dan amal, bukan untuk berbangga atau mencari kedudukan.', emphasis: 'memperbaiki niat dan amal', source: 'Hilyatul Auliya’, karya Abu Nu’aim Al-Ashbahani' },
-  { scholar: 'Imam Ibnul Qayyim Al-Jauziyyah', text: 'Ilmu yang bermanfaat mengantarkan hati mengenal Allah dan mendorong anggota badan untuk taat.', emphasis: 'mengenal Allah dan mendorong anggota badan untuk taat', source: 'Miftah Daris Sa’adah, karya Ibnul Qayyim' },
-  { scholar: 'Syaikh Shalih Al-Fauzan', text: 'Ilmu yang benar membimbing seorang muslim untuk beribadah kepada Allah di atas petunjuk dan dalil.', emphasis: 'beribadah kepada Allah di atas petunjuk dan dalil', source: 'Al-I’tidhar bil ‘Ilmi, karya Syaikh Shalih Al-Fauzan' },
-  { scholar: 'Syaikh Muqbil bin Hadi Al-Wadi’i', text: 'Kesungguhan menuntut ilmu perlu disertai keikhlasan, kesabaran, dan perhatian terhadap pemahaman yang benar.', emphasis: 'keikhlasan, kesabaran, dan pemahaman yang benar', source: 'Tuhfatul Mujib, karya Syaikh Muqbil bin Hadi Al-Wadi’i' },
-  { scholar: 'Syaikh Abdurrazzaq bin Abdul Muhsin Al-Badr', text: 'Ilmu adalah jalan untuk mengenal Allah, memperbaiki ibadah, dan menumbuhkan rasa takut serta harap kepada-Nya.', emphasis: 'mengenal Allah dan memperbaiki ibadah', source: 'Ta’dzimul ‘Ilmi, karya Syaikh Abdurrazzaq Al-Badr' },
-  { scholar: 'Syaikh Wahid bin Abdussalam Bali', text: 'Manfaat ilmu tampak ketika ia diamalkan, dijaga dengan adab, dan menjadi sebab kebaikan bagi orang lain.', emphasis: 'diamalkan, dijaga dengan adab', source: 'Al-Bidayah, karya Syaikh Wahid bin Abdussalam Bali' },
-  { scholar: 'Syaikh Dr. Abdul Muhsin Al-Qasim', text: 'Menuntut ilmu membutuhkan ketekunan; ilmu yang dipahami dengan benar dan diamalkan membawa manfaat.', emphasis: 'dipahami dengan benar dan diamalkan', source: 'Khulasah Ta’dzimil ‘Ilm, karya Syaikh Dr. Abdul Muhsin Al-Qasim' }
+  { scholar: 'Imam Malik bin Anas', core: 'Ilmu yang benar membimbing seseorang untuk beramal dengan ikhlas dan mengikuti tuntunan yang sahih.', reflection: 'Carilah ilmu yang mendekatkan kepada Allah, lalu jaga dengan adab dan amal; banyaknya pengetahuan bukan tujuan jika tidak memperbaiki ibadah.', source: 'Tartib al-Madarik wa Taqrib al-Masalik — Al-Qadhi Iyadh' },
+  { scholar: 'Imam Asy-Syafi’i', core: 'Kesungguhan, kesabaran, dan adab adalah bekal penting dalam perjalanan menuntut ilmu.', reflection: 'Belajar menuntut waktu dan kerendahan hati: tekun mengulang, menghormati guru, serta mengamalkan kebenaran yang telah dipahami.', source: 'Al-Risalah — Muhammad bin Idris Asy-Syafi’i' },
+  { scholar: 'Imam Ahmad bin Hanbal', core: 'Ilmu dicari untuk diamalkan dan menjadi sebab bertambahnya rasa takut kepada Allah.', reflection: 'Jadikan belajar sebagai ibadah yang terus-menerus. Ukuran keberhasilan bukan sekadar hafalan, tetapi keteguhan memegang kebenaran dan memperbaiki amal.', source: 'Al-Adab al-Syar’iyyah — Ibnu Muflih' },
+  { scholar: 'Imam Sufyan Ats-Tsauri', core: 'Niat yang lurus menjaga ilmu agar tidak berubah menjadi sarana mencari pujian.', reflection: 'Periksa niat sebelum dan selama belajar. Ilmu yang dicari untuk Allah menumbuhkan tawadhu, kehati-hatian, dan manfaat bagi sesama.', source: 'Hilyat al-Awliya’ — Abu Nu’aim al-Ashbahani' },
+  { scholar: 'Imam Ibnul Qayyim Al-Jauziyyah', core: 'Ilmu yang bermanfaat menuntun hati mengenal kebenaran dan menggerakkan anggota badan untuk taat.', reflection: 'Gabungkan pemahaman dengan amal. Pengetahuan yang tidak membuahkan ketaatan perlu diikuti dengan muhasabah, doa, dan pembenahan niat.', source: 'Miftah Dar al-Sa’adah — Ibnul Qayyim' },
+  { scholar: 'Imam Abu Hanifah', core: 'Pemahaman agama perlu dibangun dengan belajar yang tertib, ketelitian, dan tanggung jawab.', reflection: 'Jangan tergesa-gesa berbicara tanpa dasar. Pelajari dalil dan persoalan dengan cermat, lalu sampaikan ilmu dengan adab.', source: 'Al-Intiqa fi Fadha’il al-A’immah al-Tsalatsah al-Fuqaha’ — Ibnu Abdil Barr' },
+  { scholar: 'Syaikh Muhammad bin Abdul Wahab', core: 'Mempelajari tauhid dan mengamalkannya merupakan dasar penting dalam memperbaiki ibadah.', reflection: 'Mulailah belajar dari perkara yang paling mendasar: mengenal Allah, memahami ibadah, dan menjauhi kesyirikan berdasarkan dalil.', source: 'Ad-Durar al-Saniyyah fi al-Ajwibah al-Najdiyyah' },
+  { scholar: 'Syaikh Abdul Aziz bin Baz', core: 'Ilmu syar’i harus disertai amal, keikhlasan, dan penyampaian yang bijaksana.', reflection: 'Belajar, beramal, lalu mengajarkan kebaikan dengan cara yang lembut dan jelas. Periksa dalil sebelum menyampaikan sesuatu atas nama agama.', source: 'Majmu’ Fatawa wa Maqalat Mutanawwi’ah — Abdul Aziz bin Baz' },
+  { scholar: 'Syaikh Shalih Al-Fauzan', core: 'Mengambil ilmu dari Al-Qur’an, Sunnah, dan penjelasan ulama yang tepercaya menjaga pemahaman tetap terarah.', reflection: 'Utamakan sumber yang jelas dan belajar kepada guru yang berilmu. Bedakan antara dalil, penjelasan ulama, dan pendapat pribadi.', source: 'Al-Irsyad ila Sahih al-I’tiqad — Shalih Al-Fauzan' },
+  { scholar: 'Syaikh Muqbil bin Hadi Al-Wadi’i', core: 'Keteguhan mencari dalil dan kesabaran dalam belajar membantu seorang penuntut ilmu menghadapi kesulitan.', reflection: 'Jangan berhenti belajar ketika jalan terasa berat. Bersikap jujur terhadap sumber, tekun menelaah, dan merujuk kepada ahli ilmu saat belum memahami.', source: 'Tuhfat al-Mujib ‘ala As’ilat al-Hadhir wa al-Gharib — Muqbil bin Hadi Al-Wadi’i' },
+  { scholar: 'Syaikh Abdurrazzaq bin Abdul Muhsin Al-Badr', core: 'Mengagungkan ilmu tampak pada penghormatan terhadap wahyu, guru, waktu, dan adab belajar.', reflection: 'Siapkan hati sebelum menerima ilmu: luruskan niat, dengarkan dengan saksama, catat hal penting, dan buktikan penghormatan melalui amal.', source: 'Ta’zhim al-‘Ilm — Abdurrazzaq bin Abdul Muhsin Al-Badr' },
+  { scholar: 'Syaikh Wahid bin Abdussalam Bali', core: 'Menuntut ilmu dengan teliti membantu membedakan tuntunan yang bersumber dari dalil dengan amalan yang tidak berdasar.', reflection: 'Dalam mempelajari agama, periksa sumber dan mintalah penjelasan kepada orang berilmu. Sikap ini menjaga penuntut ilmu dari tergesa-gesa menerima atau menyampaikan suatu amalan.', source: 'As-Sarim al-Battar fi al-Tasaddi li al-Saharah al-Ashrar — Wahid bin Abdussalam Bali' },
+  { scholar: 'Syaikh Dr. Abdul Muhsin Al-Qasim', core: 'Memuliakan ilmu mencakup kesungguhan menuntutnya, menjaga adab, dan mengamalkannya.', reflection: 'Buat langkah belajar yang konsisten: pilih materi, ulangi, tanyakan yang belum jelas, dan terapkan ilmu sedikit demi sedikit.', source: 'Khulasat Ta’zhim al-‘Ilm — Abdul Muhsin Al-Qasim' },
+  { scholar: 'Syaikh Muhammad Nashiruddin al-Albani', core: 'Mengikuti dalil yang sahih membutuhkan penelitian dan kejujuran ilmiah.', reflection: 'Biasakan memeriksa sumber dan kualitas riwayat sebelum menjadikannya pegangan. Jangan mendahulukan kebiasaan atau fanatisme atas bukti.', source: 'Silsilat al-Ahadith al-Sahihah — Muhammad Nashiruddin al-Albani' },
+  { scholar: 'Syaikh Ibnu Utsaimin', core: 'Ilmu yang bermanfaat melahirkan rasa takut kepada Allah dan amal yang sesuai tuntunan.', reflection: 'Pelajari agama dengan bertahap dan bertanya kepada ahli ilmu. Setelah memahami, berusahalah mengamalkan dan menyampaikan dengan hikmah.', source: 'Kitab al-‘Ilm — Muhammad bin Shalih al-‘Utsaimin' },
+  { scholar: 'Syaikh Abdussalam As-Syuwai’ir', core: 'Ketelitian memahami dalil dan penjelasan ulama membantu menjaga ilmu dari kesimpulan yang tergesa-gesa.', reflection: 'Dahulukan belajar secara terstruktur, pahami istilah dan konteks pembahasan, lalu mintalah bimbingan guru sebelum menetapkan kesimpulan.', source: 'Kajian adab dan ketelitian belajar — Syaikh Abdussalam As-Syuwai’ir' }
 ];
+const adhanAudioCredits = '<small class="metric-note">Sumber audio default: <a href="https://commons.wikimedia.org/wiki/File:The_Adhan_-_Muslim_Call_to_Prayer_-_Aaqib_Azeez.mp3" target="_blank" rel="noopener noreferrer">Atcovi (CC BY-SA 4.0)</a>.</small>';
+
+function qariOptionsMarkup(selected = persistentQari) {
+  const groups = [
+    ['zyadah', 'Ziyadah & Muroja’ah · Irama dan kelancaran hafalan'],
+    ['tajwid', 'Keaslian Tajwid & Tahsin · Bacaan dan makhraj']
+  ];
+  return groups.map(([category, label]) => `<optgroup label="${escapeHtml(label)}">${Object.entries(qariDefinitions)
+    .filter(([, definition]) => definition.category === category)
+    .map(([id, definition]) => `<option value="${id}" ${id === selected ? 'selected' : ''}>${escapeHtml(definition.label)}</option>`).join('')}</optgroup>`).join('');
+}
+
+function juzOptionsMarkup(selected = '1') {
+  return Array.from({ length: 30 }, (_, index) => {
+    const value = String(index + 1);
+    return `<option value="${value}" ${value === String(selected) ? 'selected' : ''}>Juz ${value}</option>`;
+  }).join('');
+}
+
+function showScholarSlide(slider, nextIndex) {
+  const slides = [...slider.querySelectorAll('[data-scholar-slide]')];
+  if (!slides.length) return;
+  const selectedIndex = (nextIndex + slides.length) % slides.length;
+  slides.forEach((slide, index) => {
+    slide.hidden = index !== selectedIndex;
+    slide.setAttribute('aria-hidden', String(index !== selectedIndex));
+  });
+  slider.querySelectorAll('[data-scholar-index]').forEach((button, index) => {
+    button.classList.toggle('active', index === selectedIndex);
+    button.setAttribute('aria-pressed', String(index === selectedIndex));
+  });
+  slider.dataset.activeIndex = String(selectedIndex);
+}
+
+function bindScholarSlider(slider) {
+  if (!slider || slider.dataset.bound === 'true') return;
+  slider.dataset.bound = 'true';
+  let timer;
+  const advance = (step) => {
+    const current = Number(slider.dataset.activeIndex || 0);
+    showScholarSlide(slider, current + step);
+  };
+  const resetTimer = () => {
+    window.clearInterval(timer);
+    timer = window.setInterval(() => advance(1), 25000);
+  };
+  slider.addEventListener('click', (event) => {
+    const step = event.target.closest('[data-scholar-step]');
+    if (step) advance(Number(step.dataset.scholarStep) || 1);
+    const dot = event.target.closest('[data-scholar-index]');
+    if (dot) showScholarSlide(slider, Number(dot.dataset.scholarIndex));
+    if (step || dot) resetTimer();
+  });
+  slider.addEventListener('mouseenter', () => window.clearInterval(timer));
+  slider.addEventListener('mouseleave', resetTimer);
+  slider.addEventListener('focusin', () => window.clearInterval(timer));
+  slider.addEventListener('focusout', (event) => {
+    if (!slider.contains(event.relatedTarget)) resetTimer();
+  });
+  resetTimer();
+}
 
 function scholarQuoteWidget() {
   const initialIndex = new Date().getDate() % scholarLearningQuotes.length;
-  return `<section class="scholar-quote-widget" data-scholar-slider aria-label="Faedah dan Nasehat Ulama"><div class="scholar-quote-heading"><div><span class="eyebrow">MUTIARA ILMU SALAFUSSHALIH & ULAMA KIBAR</span><h2>Faedah &amp; Nasehat Ulama</h2></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-scholar-step="-1" aria-label="Faedah sebelumnya">‹</button><button class="icon-btn" type="button" data-scholar-step="1" aria-label="Faedah berikutnya">›</button></div></div><div class="scholar-quote-slides">${scholarLearningQuotes.map((quote, index) => `<article class="scholar-quote-slide" data-scholar-slide${index === initialIndex ? '' : ' hidden'}><p>${escapeHtml(quote.text).replace(escapeHtml(quote.emphasis), `<strong>${escapeHtml(quote.emphasis)}</strong>`)}</p><b>${escapeHtml(quote.scholar)}</b><small class="scholar-quote-source">Rujukan bacaan: ${escapeHtml(quote.source)}</small></article>`).join('')}</div><small>Faedah di atas berupa parafrasa tema, bukan redaksi verbatim dari kitab. Rujukan dicantumkan sebagai bacaan lanjutan.</small></section>`;
+  return `<section class="scholar-quote-widget" data-scholar-slider data-active-index="${initialIndex}" aria-label="Faedah Ulama"><div class="scholar-quote-heading"><div><span class="eyebrow">FAEDAH ULAMA</span></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-scholar-step="-1" aria-label="Ulama sebelumnya">‹</button><button class="icon-btn" type="button" data-scholar-step="1" aria-label="Ulama berikutnya">›</button></div></div><div class="scholar-quote-slides" aria-live="polite">${scholarLearningQuotes.map((quote, index) => `<article class="scholar-quote-slide" data-scholar-slide${index === initialIndex ? '' : ' hidden'} aria-hidden="${index !== initialIndex}"><p>${escapeHtml(quote.reflection)} <strong>${escapeHtml(quote.core)}</strong></p><b>${escapeHtml(quote.scholar)}</b><small class="scholar-quote-source">Rujukan: ${escapeHtml(quote.source)}</small></article>`).join('')}</div><div class="scholar-quote-dots" aria-label="Pilih tokoh ulama">${scholarLearningQuotes.map((quote, index) => `<button type="button" data-scholar-index="${index}" aria-label="Tampilkan ${escapeHtml(quote.scholar)}" aria-pressed="${index === initialIndex}" class="${index === initialIndex ? 'active' : ''}"></button>`).join('')}</div></section>`;
 }
 
 function prayerWidgetMarkup() {
-  return `<section class="prayer-hero" data-prayer-widget><div class="prayer-hero-heading"><img src="./assets/logo%20stkis.png" alt="Logo Sekolah Tahfidz Kejuruan Irman Sofran"><div><span class="eyebrow">SEKOLAH TAHFIDZ KEJURUAN IRMAN SOFRAN</span><h2>Waktu Ibadah</h2><p data-prayer-status>Mencari lokasi via GPS atau IP untuk jadwal shalat…</p><p class="prayer-location-detail" data-prayer-location>${escapeHtml(prayerLocation?.label || 'Mencari nama wilayah…')}</p></div><button type="button" class="btn btn-ghost btn-small" data-prayer-refresh aria-label="Perbarui lokasi">Perbarui Lokasi</button></div><div class="prayer-times" data-prayer-times><span>Jadwal shalat sedang dicari dari GPS atau lokasi IP.</span></div><div class="prayer-hero-footer"><b data-prayer-countdown aria-live="polite"></b><div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-prayer-notifications>Aktifkan Notifikasi</button><button type="button" class="btn btn-ghost btn-small" data-prayer-adhan>${localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Matikan Audio Adzan' : 'Aktifkan Audio Adzan'}</button></div></div><small class="metric-note">Pengingat in-app otomatis saat aplikasi terbuka. Suara dan notifikasi sistem bergantung pada izin/kebijakan browser.</small></section>`;
+  return `<section class="prayer-hero" data-prayer-widget><div class="prayer-hero-heading"><img src="./assets/logo%20stkis.png" alt="Logo Sekolah Tahfidz Kejuruan Irman Sofran"><div><span class="eyebrow">SEKOLAH TAHFIDZ KEJURUAN IRMAN SOFRAN</span><h2>Waktu Ibadah</h2><p data-prayer-status>Meminta izin lokasi GPS akurat…</p><p class="prayer-location-detail" data-prayer-location>${escapeHtml(prayerLocation?.label || 'Nama wilayah menunggu GPS…')}</p></div></div><div class="prayer-location-actions"><button type="button" class="btn btn-primary btn-small" data-prayer-refresh>Gunakan GPS Akurat</button><div class="prayer-city-picker"><label class="sr-only" for="prayer-city-input">Pilih kota atau kabupaten di Indonesia</label><input id="prayer-city-input" data-prayer-city type="search" list="prayer-city-options" placeholder="Ketik kota/kabupaten, mis. Bandung"><datalist id="prayer-city-options"><option value="Jakarta"><option value="Bandung"><option value="Surabaya"><option value="Yogyakarta"><option value="Serang"><option value="Medan"><option value="Makassar"></datalist><button type="button" class="btn btn-ghost btn-small" data-prayer-city-load>Gunakan Kota</button></div></div><div class="prayer-times" data-prayer-times><span>Jadwal akurat akan dimuat setelah izin GPS atau pemilihan kota.</span></div><div class="prayer-times-note">Waktu terlarang shalat tepat saat Syuruq. Shalat Isyraq/Dhuha dimulai 15 menit setelah Syuruq.</div><div class="prayer-hero-footer"><b data-prayer-countdown aria-live="polite"></b><div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-prayer-notifications>Aktifkan Notifikasi</button><button type="button" class="btn btn-ghost btn-small" data-prayer-adhan>${localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan'}</button><button type="button" class="btn btn-danger btn-small" data-adhan-stop hidden>Hentikan Adzan</button></div></div><small class="metric-note">Audio Adzan menggunakan satu rekaman default.</small>${adhanAudioCredits}</section>`;
 }
 
 function qiblaWidgetMarkup() {
-  return `<section class="qibla-widget" data-qibla-widget><div class="qibla-compass" aria-label="Kompas arah kiblat"><span class="qibla-north">U</span><span class="qibla-needle" data-qibla-needle>↑</span><span class="qibla-kaaba">K</span></div><div class="qibla-copy"><span class="eyebrow">ARAH KIBLAT</span><h3 data-qibla-degree>Menentukan arah…</h3><p data-qibla-location data-prayer-location>${escapeHtml(prayerLocation?.label || 'Mencari nama wilayah…')}</p><p class="metric-note" data-qibla-heading>Arah dihitung dari lokasi GPS atau perkiraan IP.</p><button type="button" class="btn btn-ghost btn-small" data-qibla-calibrate>Aktifkan Kompas Perangkat</button></div></section>`;
+  return `<section class="qibla-widget" data-qibla-widget><div class="qibla-compass" aria-label="Kompas arah kiblat"><span class="qibla-north">U</span><span class="qibla-needle" data-qibla-needle>↑</span><span class="qibla-kaaba">K</span></div><div class="qibla-copy"><span class="eyebrow">ARAH KIBLAT</span><h3 data-qibla-degree>Menunggu GPS akurat…</h3><p data-qibla-location data-prayer-location>${escapeHtml(prayerLocation?.label || 'Izinkan akses lokasi untuk menghitung arah kiblat.')}</p><p class="metric-note" data-qibla-heading>Arah kiblat dihitung dari koordinat GPS perangkat menuju Ka’bah.</p><div class="actions-inline"><button type="button" class="btn btn-primary btn-small" data-prayer-refresh>Gunakan GPS Akurat</button><button type="button" class="btn btn-ghost btn-small" data-qibla-calibrate>Aktifkan Kompas Perangkat</button></div></div></section>`;
 }
 
 function calculateQiblaBearing(latitude, longitude) {
@@ -1220,9 +1319,20 @@ function renderPrayerWidgets() {
       return { name, date };
     }).sort((a, b) => a.date - b.date);
     const nextPrayer = candidates[0];
-    if (status) status.textContent = `${prayerLocation?.label || 'Lokasi terdeteksi'} · ${prayerLocation?.source === 'IP' ? 'perkiraan lokasi IP' : 'lokasi GPS'} · ${prayerTimings.date || now.toLocaleDateString('id-ID')}`;
+    if (status) status.textContent = `${prayerLocation?.label || 'Lokasi terdeteksi'} · ${prayerLocation?.source === 'GPS' ? 'koordinat GPS akurat' : 'kota pilihan manual'} · ${prayerTimings.date || now.toLocaleDateString('id-ID')}`;
     document.querySelectorAll('[data-prayer-location]').forEach((element) => { element.textContent = prayerLocation?.label || 'Lokasi terdeteksi'; });
-    if (times) times.innerHTML = prayerNames.map((name) => `<div class="prayer-time"><b>${prayerLabels[name]}</b><span>${escapeHtml(prayerTimings[name] || '--:--')}</span></div>`).join('');
+    if (times) {
+      const fajr = prayerTimings.Fajr || '--:--';
+      const sunrise = prayerTimings.Sunrise || prayerTimings.Sun || '--:--';
+      const imsak = prayerTimings.Imsak || shiftPrayerTime(fajr, -10);
+      const isyraq = shiftPrayerTime(sunrise, 15);
+      const schedule = [
+        ['Imsak', imsak], ['Subuh', fajr], ['Syuruq', sunrise], ['Isyraq / Dhuha', isyraq],
+        ['Dzuhur', prayerTimings.Dhuhr], ['Ashar', prayerTimings.Asr],
+        ['Maghrib', prayerTimings.Maghrib], ['Isya', prayerTimings.Isha]
+      ];
+      times.innerHTML = schedule.map(([label, value]) => `<div class="prayer-time"><b>${label}</b><span>${escapeHtml(String(value || '--:--').slice(0, 5))}</span></div>`).join('');
+    }
     if (countdown) {
       const secondsRemaining = Math.max(0, Math.floor((nextPrayer.date - now) / 1000));
       const hours = String(Math.floor(secondsRemaining / 3600)).padStart(2, '0');
@@ -1240,8 +1350,16 @@ function renderPrayerWidgets() {
   }
 }
 
+function shiftPrayerTime(value, offsetMinutes) {
+  const match = String(value || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return '--:--';
+  const minutes = (Number(match[1]) * 60 + Number(match[2]) + offsetMinutes + 1440) % 1440;
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
 function notifyPrayerTime(name) {
   const label = prayerLabels[name] || name;
+  currentAdhanPrayer = name;
   document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Waktu shalat ${label} telah tiba.`; });
   showToast(`Telah masuk waktu shalat ${label}.`, 'success');
   try {
@@ -1297,8 +1415,7 @@ function bindAudioUnlock() {
         console.warn('[BoardingPro] Audio murottal belum dapat dibuka otomatis:', error);
       });
     }
-    localStorage.setItem('boardingpro-adhan-enabled', 'true');
-    document.querySelectorAll('[data-prayer-adhan]').forEach((button) => { button.textContent = 'Matikan Audio Adzan'; });
+    document.querySelectorAll('[data-prayer-adhan]').forEach((button) => { button.textContent = localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan'; });
   };
   ['click', 'touchstart', 'scroll'].forEach((eventName) => document.addEventListener(eventName, unlock, { once: true, passive: true }));
 }
@@ -1306,23 +1423,45 @@ function bindAudioUnlock() {
 function playAdhanAudio() {
   if (localStorage.getItem('boardingpro-adhan-enabled') !== 'true') return;
   try {
-    adhanAudio = adhanAudio || new Audio('https://upload.wikimedia.org/wikipedia/commons/7/7d/The_Adhan_-_Muslim_Call_to_Prayer_-_Aaqib_Azeez.mp3');
+    const isFajr = currentAdhanPrayer === 'Fajr';
+    const source = 'https://upload.wikimedia.org/wikipedia/commons/7/7d/The_Adhan_-_Muslim_Call_to_Prayer_-_Aaqib_Azeez.mp3';
+    adhanAudio = adhanAudio || new Audio(source);
+    if (adhanAudio.src !== new URL(source, document.baseURI).href) adhanAudio.src = source;
+    adhanAudio.loop = false;
+    adhanAudio.onended = stopAdhanAudio;
+    adhanAudio.onerror = () => {
+      document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = 'Audio Adzan default tidak dapat dimuat. Periksa koneksi internet.'; });
+      document.querySelectorAll('[data-adhan-stop]').forEach((button) => { button.hidden = true; });
+    };
     adhanAudio.muted = false;
     adhanAudio.currentTime = 0;
-    adhanAudio.play().catch((error) => {
+    adhanAudio.play().then(() => {
+      document.querySelectorAll('[data-adhan-stop]').forEach((button) => { button.hidden = false; });
+      document.querySelectorAll('[data-prayer-adhan]').forEach((button) => { button.textContent = isFajr ? 'Adzan Subuh Aktif' : 'Adzan Aktif'; });
+    }).catch((error) => {
       console.warn('[BoardingPro] Browser memblokir audio Adzan otomatis:', error);
-      document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = 'Browser memblokir audio. Aktifkan kembali audio Adzan melalui tombol.'; });
+      document.querySelectorAll('[data-adhan-stop]').forEach((button) => { button.hidden = true; });
+      document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = 'Browser memblokir audio. Aktifkan audio Adzan melalui tombol.'; });
     });
   } catch (error) {
     console.warn('[BoardingPro] Audio Adzan tidak dapat diputar:', error);
   }
 }
 
-async function loadPrayerTimings(forceLocation = false) {
+function stopAdhanAudio() {
+  if (adhanAudio) {
+    adhanAudio.pause();
+    adhanAudio.currentTime = 0;
+  }
+  document.querySelectorAll('[data-adhan-stop]').forEach((button) => { button.hidden = true; });
+  document.querySelectorAll('[data-prayer-adhan]').forEach((button) => { button.textContent = localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan'; });
+}
+
+async function loadPrayerTimings(forceLocation = false, manualCity = '') {
   if (prayerTimings && !forceLocation) { renderPrayerWidgets(); return; }
   if (prayerLocationRequested && !forceLocation) return;
   prayerLocationRequested = true;
-  document.querySelectorAll('[data-prayer-status], [data-qibla-location]').forEach((element) => { element.textContent = 'Menentukan lokasi…'; });
+  document.querySelectorAll('[data-prayer-status], [data-qibla-location]').forEach((element) => { element.textContent = manualCity ? `Mencari kota “${manualCity}”…` : 'Meminta izin lokasi GPS akurat…'; });
   try {
     const fetchJsonWithTimeout = async (url, timeout = 12000) => {
       const controller = new AbortController();
@@ -1345,55 +1484,35 @@ async function loadPrayerTimings(forceLocation = false) {
         window.clearTimeout(timer);
       }
     };
-    let location = null;
-    if (navigator.geolocation) {
+    let location;
+    if (manualCity) {
+      const place = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(manualCity)}&count=1&language=id&format=json`);
+      const match = place.results?.find((item) => item.country_code === 'ID');
+      if (!match) throw new Error(`Kota/kabupaten “${manualCity}” tidak ditemukan di Indonesia. Coba nama kota lain.`);
+      location = {
+        latitude: Number(match.latitude),
+        longitude: Number(match.longitude),
+        source: 'MANUAL',
+        label: [match.name, match.admin2, match.admin1].filter(Boolean).filter((part, index, parts) => parts.indexOf(part) === index).join(', ')
+      };
+    } else {
+      if (!navigator.geolocation) throw new Error('Browser ini tidak menyediakan GPS. Pilih kota/kabupaten secara manual.');
       try {
         const position = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 10000, maximumAge: 3600000 });
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
         });
         const { latitude, longitude } = position.coords;
         location = { latitude, longitude, source: 'GPS' };
       } catch (error) {
-        console.warn('[BoardingPro] Geolokasi tidak tersedia, mencoba lokasi berbasis IP:', error.message);
+        const reason = error.code === 1 ? 'Izin lokasi ditolak.' : error.code === 3 ? 'GPS tidak merespons tepat waktu.' : 'Lokasi perangkat tidak tersedia.';
+        throw new Error(`${reason} Izinkan akses lokasi atau gunakan pemilihan kota manual.`);
       }
     }
-    if (!location) {
-      const providers = [
-        async () => {
-          const place = await fetchJsonWithTimeout('https://ipapi.co/json/');
-          if (!Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))) throw new Error('Koordinat IP tidak tersedia.');
-          return {
-            latitude: Number(place.latitude),
-            longitude: Number(place.longitude),
-            label: [place.city, place.region, place.country_name].filter(Boolean).join(', ')
-          };
-        },
-        async () => {
-          const place = await fetchJsonWithTimeout('https://ipwho.is/');
-          if (place.success === false || !Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))) throw new Error(place.message || 'Koordinat IP tidak tersedia.');
-          return {
-            latitude: Number(place.latitude),
-            longitude: Number(place.longitude),
-            label: [place.city, place.region, place.country].filter(Boolean).join(', ')
-          };
-        }
-      ];
-      let lastError;
-      for (const provider of providers) {
-        try {
-          const ipLocation = await provider();
-          location = { ...ipLocation, source: 'IP' };
-          break;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-      if (!location) throw new Error(`Lokasi GPS dan IP tidak tersedia${lastError ? `: ${lastError.message}` : '.'}`);
-    }
+    if (!Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)) throw new Error('Koordinat lokasi tidak valid.');
 
     const { latitude, longitude } = location;
     prayerLocation = { latitude, longitude, label: location.label || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`, source: location.source };
-    document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `${prayerLocation.label} · ${location.source === 'IP' ? 'perkiraan lokasi IP' : 'lokasi GPS'} · memuat jadwal…`; });
+    document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `${prayerLocation.label} · ${location.source === 'GPS' ? 'koordinat GPS akurat' : 'kota pilihan manual'} · memuat jadwal…`; });
     document.querySelectorAll('[data-prayer-location]').forEach((element) => { element.textContent = prayerLocation.label; });
     const qiblaBearing = calculateQiblaBearing(latitude, longitude);
     qiblaHeading = qiblaBearing;
@@ -1402,18 +1521,24 @@ async function loadPrayerTimings(forceLocation = false) {
     document.querySelectorAll('[data-qibla-heading]').forEach((element) => { element.textContent = 'Derajat dihitung dari koordinat lokasi menuju Ka’bah.'; });
 
     const date = Math.floor(Date.now() / 1000);
+    const placeRequest = location.source === 'GPS'
+      ? fetchJsonWithTimeout(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`)
+      : Promise.resolve(null);
     const [prayerResult, placeResult] = await Promise.allSettled([
       fetchJsonWithTimeout(`https://api.aladhan.com/v1/timings/${date}?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&method=20`),
-      fetchJsonWithTimeout(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&localityLanguage=id`)
+      placeRequest
     ]);
     if (prayerResult.status !== 'fulfilled') throw prayerResult.reason;
     const result = prayerResult.value;
     if (result.code !== 200 || !result.data?.timings) throw new Error('Data jadwal shalat tidak tersedia.');
-    if (placeResult.status === 'fulfilled') {
+    if (placeResult.status === 'fulfilled' && placeResult.value) {
       const place = placeResult.value;
-      const subdivision = (place.localityInfo?.administrative || []).map((item) => item.name).filter(Boolean);
-      const parts = [...new Set([place.locality, place.city, place.principalSubdivision, ...subdivision, place.countryName].filter(Boolean))];
-      if (parts.length) prayerLocation.label = parts.slice(0, 4).join(', ');
+      const address = place.address || {};
+      const parts = location.source === 'GPS'
+        ? [address.village || address.suburb || address.neighbourhood || address.hamlet, address.city_district || address.county, address.city || address.town || address.municipality, address.state || address.province]
+        : [location.label];
+      const distinctParts = [...new Set(parts.filter(Boolean))];
+      if (distinctParts.length) prayerLocation.label = distinctParts.join(', ');
     } else if (placeResult.status === 'rejected') {
       console.warn('[BoardingPro] Reverse geocoding tidak tersedia:', placeResult.reason);
     }
@@ -1423,13 +1548,37 @@ async function loadPrayerTimings(forceLocation = false) {
   } catch (error) {
     prayerLocationRequested = false;
     console.error('[BoardingPro] Gagal memuat lokasi/jadwal shalat:', error);
-    document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = prayerLocation ? `Jadwal shalat tidak tersedia untuk ${prayerLocation.label}: ${error.message}` : `Lokasi atau jadwal tidak dapat dimuat: ${error.message}`; });
+    document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = prayerLocation ? `Jadwal untuk ${prayerLocation.label} belum tersedia: ${error.message}` : `${error.message} Gunakan kolom kota di bawah untuk melanjutkan.`; });
     if (!prayerLocation) document.querySelectorAll('[data-qibla-degree], [data-qibla-location], [data-qibla-heading]').forEach((element) => { element.textContent = error.message; });
   }
 }
 
 function bindPrayerWidgets() {
   document.querySelectorAll('[data-prayer-refresh]').forEach((button) => { button.onclick = () => loadPrayerTimings(true); });
+  document.querySelectorAll('[data-prayer-city-load]').forEach((button) => {
+    button.onclick = () => {
+      const widget = button.closest('[data-prayer-widget]');
+      const input = widget?.querySelector('[data-prayer-city]');
+      const city = String(input?.value || '').trim();
+      if (!city) {
+        input?.focus();
+        input?.setCustomValidity('Masukkan nama kota atau kabupaten terlebih dahulu.');
+        input?.reportValidity();
+        return;
+      }
+      input.setCustomValidity('');
+      prayerTimings = null;
+      loadPrayerTimings(true, city);
+    };
+  });
+  document.querySelectorAll('[data-prayer-city]').forEach((input) => {
+    input.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        input.closest('[data-prayer-widget]')?.querySelector('[data-prayer-city-load]')?.click();
+      }
+    };
+  });
   document.querySelectorAll('[data-qibla-calibrate]').forEach((button) => { button.onclick = enableDeviceCompass; });
   document.querySelectorAll('[data-prayer-notifications]').forEach((button) => {
     button.onclick = async () => {
@@ -1444,14 +1593,18 @@ function bindPrayerWidgets() {
     };
   });
   document.querySelectorAll('[data-prayer-adhan]').forEach((button) => {
-    button.textContent = localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Matikan Audio Adzan' : 'Aktifkan Audio Adzan';
+    button.textContent = localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan';
     button.onclick = () => {
       const enabled = localStorage.getItem('boardingpro-adhan-enabled') !== 'true';
       localStorage.setItem('boardingpro-adhan-enabled', String(enabled));
-      document.querySelectorAll('[data-prayer-adhan]').forEach((item) => { item.textContent = enabled ? 'Matikan Audio Adzan' : 'Aktifkan Audio Adzan'; });
-      if (enabled) playAdhanAudio();
+      document.querySelectorAll('[data-prayer-adhan]').forEach((item) => { item.textContent = enabled ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan'; });
+      if (enabled) {
+        currentAdhanPrayer = '';
+        playAdhanAudio();
+      } else stopAdhanAudio();
     };
   });
+  document.querySelectorAll('[data-adhan-stop]').forEach((button) => { button.onclick = stopAdhanAudio; });
   if (!prayerIntervalId && document.querySelector('[data-prayer-widget], [data-qibla-widget]')) {
     prayerIntervalId = window.setInterval(() => {
       if (prayerTimingDate && prayerTimingDate !== new Date().toDateString()) {
@@ -1475,7 +1628,10 @@ function bindPrayerWidgets() {
       renderPrayerWidgets();
     }, 1000);
   }
-  if (document.querySelector('[data-prayer-widget], [data-qibla-widget]')) loadPrayerTimings();
+  if (document.querySelector('[data-prayer-widget], [data-qibla-widget]') && !prayerInitialLocationAttempted) {
+    prayerInitialLocationAttempted = true;
+    loadPrayerTimings(true);
+  }
 }
 
 function bindPersistentPlayer() {
@@ -1487,8 +1643,17 @@ function bindPersistentPlayer() {
   const selector = player.querySelector('[data-player-surah]');
   const qari = player.querySelector('[data-player-qari]');
   const surahSelect = player.querySelector('[data-player-surah]');
+  const ayahSelect = player.querySelector('[data-player-start-ayah]');
   if (qari) qari.value = persistentQari;
-  player.querySelector('[data-player-start]')?.addEventListener('click', () => playPersistentSurah(Number(surahSelect.value) - 1, qari.value));
+  if (ayahSelect) ayahSelect.value = localStorage.getItem('boardingpro-murottal-ayah') || '1';
+  ensureQuranSurahList().then((surahs) => {
+    surahSelect.innerHTML = surahs.map((surah) => `<option value="${surah.number}">${surah.number} · ${escapeHtml(surah.englishName)}</option>`).join('');
+    surahSelect.value = String(Math.min(114, persistentSurahIndex + 1));
+  }).catch((error) => {
+    console.error('[BoardingPro] Daftar surah player tidak dapat dimuat:', error);
+    if (track) track.textContent = `Daftar surah gagal dimuat: ${error.message}`;
+  });
+  player.querySelector('[data-player-start]')?.addEventListener('click', () => playPersistentSurah(Number(surahSelect.value) - 1, qari.value, false, Number(ayahSelect?.value || 1)));
   player.querySelector('[data-player-prev]')?.addEventListener('click', () => {
     if (persistentThematicQueue?.length) {
       advanceThematicPlaylist(-1, qari.value);
@@ -1535,7 +1700,11 @@ function bindPersistentPlayer() {
     localStorage.setItem('boardingpro-murottal-index', String(persistentSurahIndex));
   });
   audio?.addEventListener('ended', () => {
-    if (persistentThematicQueue?.length) {
+    if (persistentVerseContinuation) {
+      const continuation = persistentVerseContinuation;
+      persistentVerseContinuation = null;
+      playPersistentSurah(continuation.surahIndex, continuation.qari, false, continuation.ayah, false);
+    } else if (persistentThematicQueue?.length) {
       advanceThematicPlaylist(1, qari.value);
     } else if (persistentSurahIndex < 113) playPersistentSurah(persistentSurahIndex + 1, qari.value);
     else if (track) track.textContent = 'Alhamdulillah, 114 surah telah selesai diputar.';
@@ -1563,7 +1732,7 @@ function quranPanelMarkup() {
 }
 
 function murottalPanelMarkup() {
-  return `<section class="panel murottal-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Murottal 30 Juz & Tematik</h2><p>Pemutar audio terpisah dari modul Al-Qur’an. Playback memakai floating player persisten.</p></div></div></div><div class="murottal-full-play"><div class="murottal-full-copy"><h3>Murottal Lengkap 30 Juz</h3><p>Playlist 114 surah, dilanjutkan otomatis hingga selesai.</p></div><div class="quran-controls murottal-controls"><label>Mulai dari Surah<select data-murottal-surah><option value="1">Memuat daftar surah…</option></select></label><label>Qari<select data-qari><option value="saad">Syaikh Saad Al-Ghamidi</option><option value="mansour">Syaikh Mansyur Al-Salimi</option><option value="yasser">Syaikh Yasser Al-Dosari</option></select></label><button type="button" class="btn btn-primary" data-murottal-play>Putar Murottal 30 Juz</button></div></div><hr><div class="thematic-playlist-heading"><div><h3>Playlist Murottal Tematik</h3><p>Playlist akan memulai audio dari ayat yang disebutkan lalu melanjutkan ayat tematik secara berurutan.</p></div></div><div class="thematic-playlist-grid">${thematicMurottalPlaylists.map((playlist) => `<article class="thematic-playlist-card"><h4>${playlist.title}</h4><p>${playlist.references.map((reference) => reference.label).join(' · ')}</p><button class="btn btn-ghost btn-small" type="button" data-play-theme="${playlist.id}">Putar Playlist</button></article>`).join('')}</div><small class="metric-note">Saad Al-Ghamidi dan Yasser Ad-Dosary memakai rekaman per ayat. Untuk Mansyur Al-Salimi, sumber tersedia per surah; pemotongan ayat memakai perkiraan proporsi teks Arab dan bukan penanda timestamp resmi.</small></section>`;
+  return `<section class="panel murottal-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Murottal 30 Juz & Tematik</h2><p>Pemutar audio terpisah dari modul Al-Qur’an. Playback memakai floating player persisten.</p></div></div></div><div class="murottal-full-play"><div class="murottal-full-copy"><h3>Murottal Lengkap 30 Juz</h3><p>Mulai dari Juz, Surah, dan ayat yang dipilih; pemutar melanjutkan sampai akhir.</p></div><div class="quran-controls murottal-controls"><label>Mulai dari Juz<select data-murottal-juz>${juzOptionsMarkup()}</select></label><label>Surah<select data-murottal-surah><option value="1">Memuat daftar surah…</option></select></label><label>Ayat mulai<input data-murottal-ayah type="number" min="1" value="1" inputmode="numeric"></label><label>Qari<select data-qari>${qariOptionsMarkup()}</select></label><button type="button" class="btn btn-primary" data-murottal-play>Putar dari Posisi Ini</button></div></div><hr><div class="thematic-playlist-heading"><div><h3>Playlist Murottal Tematik</h3><p>Audio dimulai tepat pada ayat tematik jika sumber menyediakan audio per ayat.</p></div></div><div class="thematic-playlist-grid">${thematicMurottalPlaylists.map((playlist) => `<article class="thematic-playlist-card"><h4>${escapeHtml(playlist.title)}</h4><p>${playlist.references.map((reference) => escapeHtml(reference.label)).join(' · ')}</p><button class="btn btn-ghost btn-small" type="button" data-play-theme="${escapeHtml(playlist.id)}">Putar Playlist</button></article>`).join('')}</div><small class="metric-note">Pemotongan ayat pada rekaman per-surah yang tidak menyediakan file ayat individual menggunakan estimasi durasi berdasarkan panjang teks, bukan timestamp resmi.</small></section>`;
 }
 
 function renderQuranVerse(data) {
@@ -1681,19 +1850,72 @@ async function ensureQuranSurahList() {
 }
 
 async function getPersistentReciter(qari = persistentQari) {
+  const definition = qariDefinitions[qari];
+  if (!definition) throw new Error('Qari yang dipilih tidak dikenal.');
+  if (definition.quranComId) return { provider: 'qurancom', recitationId: definition.quranComId };
   if (!persistentQariCatalog) {
-    const response = await fetch('https://mp3quran.net/api/v3/reciters?language=ar');
+    const response = await fetch('https://www.mp3quran.net/api/v3/reciters?language=ar');
     if (!response.ok) throw new Error(`Layanan qari merespons ${response.status}.`);
     const result = await response.json();
     persistentQariCatalog = result.reciters || [];
   }
-  const definition = qariDefinitions[qari];
-  const reciter = persistentQariCatalog.find((item) => String(item.name || '').includes(definition.match) && item.moshaf?.some((mushaf) => Number(mushaf.surah_total) === 114));
-  if (!reciter) throw new Error(`Sumber audio 114 surah untuk ${definition.label} belum tersedia.`);
-  return { reciter, mushaf: reciter.moshaf.find((item) => Number(item.surah_total) === 114) };
+  const reciter = persistentQariCatalog.find((item) => String(item.name || '').includes(definition.match));
+  if (!reciter) throw new Error(`Sumber audio untuk ${definition.label} belum tersedia.`);
+  const mushaf = [...(reciter.moshaf || [])]
+    .filter((item) => item.server && Number(item.surah_total) > 0)
+    .sort((a, b) => Number(b.surah_total) - Number(a.surah_total))[0];
+  if (!mushaf) throw new Error(`Sumber audio surah untuk ${definition.label} belum tersedia.`);
+  return { reciter, mushaf };
 }
 
-async function playPersistentSurah(index = persistentSurahIndex, qari = persistentQari, preserveThematicQueue = false) {
+async function getChapterRecitationSource(recitation, surahNumber) {
+  if (recitation.provider === 'qurancom') {
+    const response = await fetch(`https://api.quran.com/api/v4/chapter_recitations/${recitation.recitationId}/${surahNumber}`);
+    if (!response.ok) throw new Error(`Sumber audio surah merespons ${response.status}.`);
+    const result = await response.json();
+    if (!result.audio_file?.audio_url) throw new Error(`Audio surah ${surahNumber} tidak tersedia untuk qari ini.`);
+    return result.audio_file.audio_url;
+  }
+  const available = String(recitation.mushaf.surah_list || '').split(',').map(Number);
+  if (available.length && !available.includes(surahNumber)) throw new Error(`Audio surah ${surahNumber} tidak tersedia untuk qari ini.`);
+  return `${recitation.mushaf.server}${String(surahNumber).padStart(3, '0')}.mp3`;
+}
+
+async function getVerseRecitationSource(recitation, surahNumber, ayahNumber) {
+  const response = await fetch(`https://api.quran.com/api/v4/recitations/${recitation.recitationId}/by_ayah/${surahNumber}:${ayahNumber}`);
+  if (!response.ok) throw new Error(`Sumber audio ayat merespons ${response.status}.`);
+  const result = await response.json();
+  const file = result.audio_files?.[0]?.url;
+  if (!file) throw new Error(`Audio ayat ${surahNumber}:${ayahNumber} tidak tersedia.`);
+  return file.startsWith('//') ? `https:${file}` : new URL(file, 'https://audio.qurancdn.com/').href;
+}
+
+async function getJuzStartReference(juzNumber) {
+  const juz = Number(juzNumber);
+  if (!Number.isInteger(juz) || juz < 1 || juz > 30) throw new Error('Pilih Juz 1 sampai 30.');
+  const response = await fetch(`https://api.quran.com/api/v4/verses/by_juz/${juz}?per_page=1&fields=verse_key`);
+  if (!response.ok) throw new Error(`Data awal Juz ${juz} tidak tersedia.`);
+  const result = await response.json();
+  const [surah, ayah] = String(result.verses?.[0]?.verse_key || '').split(':').map(Number);
+  if (!surah || !ayah) throw new Error(`Referensi awal Juz ${juz} tidak valid.`);
+  return { surah, ayah };
+}
+
+function waitForAudioMetadata(audio) {
+  if (Number.isFinite(audio.duration) && audio.duration > 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const onLoaded = () => { cleanup(); resolve(); };
+    const onError = () => { cleanup(); reject(new Error('Metadata durasi audio tidak dapat dimuat.')); };
+    const cleanup = () => {
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('error', onError);
+    };
+    audio.addEventListener('loadedmetadata', onLoaded, { once: true });
+    audio.addEventListener('error', onError, { once: true });
+  });
+}
+
+async function playPersistentSurah(index = persistentSurahIndex, qari = persistentQari, preserveThematicQueue = false, startAyah = 1, playExactStart = true) {
   const player = $('#persistent-murottal-player');
   const audio = player?.querySelector('[data-persistent-audio]');
   const trackLabel = player?.querySelector('[data-player-track]');
@@ -1707,22 +1929,41 @@ async function playPersistentSurah(index = persistentSurahIndex, qari = persiste
     const [surahs, recitation] = await Promise.all([ensureQuranSurahList(), getPersistentReciter(qari)]);
     const nextIndex = Math.min(Math.max(0, Number(index) || 0), surahs.length - 1);
     const surahNumber = nextIndex + 1;
-    const available = String(recitation.mushaf.surah_list || '').split(',').map(Number);
-    if (available.length && !available.includes(surahNumber)) throw new Error(`Audio surah ${surahNumber} tidak tersedia untuk qari ini.`);
+    const ayahNumber = Math.max(1, Number(startAyah) || 1);
+    const weights = ayahNumber > 1 ? await getSurahVerseWeights(surahNumber) : null;
+    if (weights && ayahNumber > weights.verseCount) throw new Error(`Ayat ${ayahNumber} tidak tersedia pada surah ${surahNumber}.`);
     persistentSurahIndex = nextIndex;
     persistentQari = qari;
     localStorage.setItem('boardingpro-murottal-index', String(nextIndex));
     localStorage.setItem('boardingpro-qari', qari);
+    localStorage.setItem('boardingpro-murottal-ayah', String(ayahNumber));
     player.querySelector('[data-player-qari]').value = qari;
     player.querySelector('[data-player-surah]').value = String(surahNumber);
+    const playerAyahSelect = player.querySelector('[data-player-start-ayah]');
+    if (playerAyahSelect) playerAyahSelect.value = String(ayahNumber);
     player.hidden = false;
     const activePlaylist = persistentThematicQueue?.length
       ? thematicMurottalPlaylists.find((playlist) => playlist.id === persistentThematicQueueId)
       : null;
     const referenceText = activePlaylist?.references.find((reference) => reference.surah === surahNumber)?.label;
-    trackLabel.textContent = `${activePlaylist ? `${activePlaylist.title} · ${referenceText || surahs[nextIndex].englishName}` : surahs[nextIndex].englishName} · ${qariDefinitions[qari].label}`;
-    audio.src = `${recitation.mushaf.server}${String(surahNumber).padStart(3, '0')}.mp3`;
+    trackLabel.textContent = `${activePlaylist ? `${activePlaylist.title} · ${referenceText || surahs[nextIndex].englishName}` : surahs[nextIndex].englishName} · Ayat ${ayahNumber}+ · ${qariDefinitions[qari].label}`;
+    if (playExactStart && ayahNumber > 1 && recitation.provider === 'qurancom') {
+      persistentVerseContinuation = ayahNumber < weights.verseCount
+        ? { surahIndex: nextIndex, ayah: ayahNumber + 1, qari }
+        : null;
+      audio.src = await getVerseRecitationSource(recitation, surahNumber, ayahNumber);
+      audio.load();
+      trackLabel.textContent += ' · mulai tepat di ayat';
+      await audio.play();
+      return;
+    }
+    persistentVerseContinuation = null;
+    audio.src = await getChapterRecitationSource(recitation, surahNumber);
     audio.load();
+    if (weights) {
+      await waitForAudioMetadata(audio);
+      audio.currentTime = audio.duration * weights.prefix[ayahNumber - 1] / weights.totalWeight;
+    }
     await audio.play();
   } catch (error) {
     console.error('[BoardingPro] Audio murottal tidak dapat dimulai:', error);
@@ -1804,11 +2045,19 @@ async function playCurrentThematicReference(qari = persistentQari) {
     const currentLabel = playlist?.references.find((item) => item.surah === surahNumber && reference.ayah >= item.start && reference.ayah <= item.end)?.label;
     if (track) track.textContent = `${playlist?.title || 'Murottal Tematik'} · ${currentLabel || `${surah.englishName}:${reference.ayah}`} · Ayat ${reference.ayah} · ${qariDefinitions[qari].label}`;
 
-    if (qari === 'saad' || qari === 'yasser') {
-      const directory = qari === 'saad' ? 'Ghamadi_40kbps' : 'Yasser_Ad-Dussary_128kbps';
+    if (recitation.provider === 'qurancom') {
+      persistentThematicSegment = null;
+      audio.src = await getVerseRecitationSource(recitation, surahNumber, reference.ayah);
+      audio.load();
+      await audio.play();
+      return;
+    }
+
+    const everyAyahDirectory = qariDefinitions[qari].everyAyahDirectory;
+    if (everyAyahDirectory) {
       const file = `${String(surahNumber).padStart(3, '0')}${String(reference.ayah).padStart(3, '0')}.mp3`;
       persistentThematicSegment = null;
-      audio.src = `https://everyayah.com/data/${directory}/${file}`;
+      audio.src = `https://everyayah.com/data/${everyAyahDirectory}/${file}`;
       audio.load();
       await audio.play();
       return;
@@ -1900,8 +2149,23 @@ function bindMurottalPanel(container) {
       showToast(`Daftar surah tidak dapat dimuat: ${error.message}`, 'error');
     });
   }
+  const juzSelect = container.querySelector('[data-murottal-juz]');
+  const ayahSelect = container.querySelector('[data-murottal-ayah]');
+  juzSelect?.addEventListener('change', async () => {
+    try {
+      const reference = await getJuzStartReference(juzSelect.value);
+      if (surahSelect) surahSelect.value = String(reference.surah);
+      if (ayahSelect) ayahSelect.value = String(reference.ayah);
+    } catch (error) {
+      console.error('[BoardingPro] Gagal memuat titik awal juz:', error);
+      showToast(`Titik awal juz tidak dapat dimuat: ${error.message}`, 'error');
+    }
+  });
+  surahSelect?.addEventListener('change', () => {
+    if (ayahSelect) ayahSelect.value = '1';
+  });
   container.querySelector('[data-murottal-play]')?.addEventListener('click', () => {
-    playPersistentSurah(Number(surahSelect?.value || 1) - 1, container.querySelector('[data-qari]')?.value || persistentQari);
+    playPersistentSurah(Number(surahSelect?.value || 1) - 1, container.querySelector('[data-qari]')?.value || persistentQari, false, Number(ayahSelect?.value || 1));
   });
   container.addEventListener('click', (event) => {
     const button = event.target.closest('[data-play-theme]');
@@ -1910,7 +2174,7 @@ function bindMurottalPanel(container) {
 }
 
 function navItems() {
-  const common = [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'schedule', label: 'Jadwal & Event', icon: 'calendar-days' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }];
+  const common = [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }];
   const pklItem = canViewPkl() ? { id: 'pkl', label: 'Laporan PKL Santri', icon: 'briefcase-business' } : null;
   const semesterTahfizhItem = ['yayasan', 'kepsek', 'mahad', 'maahad', 'admin', 'pembina', 'musyrif', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'tahfizh-semester', label: 'Rekap Tahfizh Semester', icon: 'book-open-check' } : null;
   const semesterAttendanceItem = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'attendance-semester', label: 'Rekap Absensi Semester', icon: 'calendar-check' } : null;
@@ -1925,7 +2189,7 @@ function navItems() {
     pembina: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     musyrif: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     security: [...common, { id: 'gate', label: 'Log Gerbang', icon: 'scan-line' }, { id: 'security-reports', label: 'Laporan Keamanan', icon: 'shield-alert' }],
-    parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'schedule', label: 'Jadwal & Event', icon: 'calendar-days' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
+    parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
     student: [...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Sanksi Saya', icon: 'shield-alert' }, { id: 'tahfizh', label: 'Tahfizh Saya', icon: 'book-open-check' }, ...(pklItem ? [pklItem] : [])]
   };
   // The real Ma'had/Admin account keeps its full navigation only in the
@@ -1958,6 +2222,7 @@ function renderShell() {
   const role = roles[effectiveRole()] || roles.yayasan;
   const items = navItems();
   const quickNav = $('#quick-nav');
+  if (state.view === 'schedule') state.view = 'kaldik';
   if (!items.some((item) => item.id === state.view)) state.view = items[0]?.id || 'dashboard';
   if ($('#role-description')) $('#role-description').textContent = role.description;
   if (quickNav) quickNav.innerHTML = items.map((item) => `<button type="button" class="${state.view === item.id ? 'active' : ''}" data-view="${item.id}">${navigationIcon(item.icon)}<span class="nav-label">${item.label}</span></button>`).join('');
@@ -2099,7 +2364,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<div class="worship-tools">${prayerWidgetMarkup()}${qiblaWidgetMarkup()}</div><div class="actions-inline quran-shortcut"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></div>${educationalQuoteWidget()}${scholarQuoteWidget()}${launchPoster()}${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<section class="worship-tools dashboard-islamic-tools" aria-label="Jadwal ibadah dan arah kiblat">${prayerWidgetMarkup()}${qiblaWidgetMarkup()}</section><div class="actions-inline quran-shortcut"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></div>${extra}`;
 }
 
 function adminDashboard() {
@@ -2121,7 +2386,7 @@ function teacherDashboard() {
 }
 
 function guardianDashboard() {
-  return commonDashboard('PEMBINA  -  PENGASUHAN & TAHFIZH', 'Pantau aktivitas asrama, kedisiplinan, dan setoran hafalan santri.', `${pembinaView()}${section('Jadwal & Event', 'Agenda boarding school untuk seluruh role.', `${activityTimeline()}${eventsTable()}`)}`);
+  return commonDashboard('PEMBINA  -  PENGASUHAN & TAHFIZH', 'Pantau aktivitas asrama, kedisiplinan, dan setoran hafalan santri.', `${pembinaView()}${section('Jadwal & Kaldik', 'Agenda boarding school untuk seluruh role.', `${activityTimeline()}${eventsTable()}<button class="btn btn-ghost btn-small" data-view="kaldik">Buka Kalender Pendidikan</button>`)}`);
 }
 
 function securityDashboard() {
@@ -2141,6 +2406,18 @@ function scheduleView() {
   return `${welcome('JADWAL & AGENDA', 'Jadwal Harian dan Event Mendatang', 'Agenda kegiatan yang diperbarui realtime.', actions)}${section('Jadwal Harian', 'Kegiatan, lokasi, dan penanggung jawab.', activityTimeline())}${section('Event Mendatang', "Agenda resmi sekolah dan ma'had.", eventsTable())}`;
 }
 
+function kaldikView() {
+  const canEdit = canManageSchool();
+  const events = [...(state.events || [])]
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  const eventCards = events.map((event) => `<article class="kaldik-event-card"><time datetime="${escapeHtml(event.date || '')}">${formatDate(event.date)}</time><div><h3>${escapeHtml(event.title || 'Agenda sekolah')}</h3><p>${escapeHtml(event.audience || 'Kegiatan sekolah')} · ${escapeHtml(event.location || 'Lokasi belum ditentukan')}</p></div><span class="badge">${escapeHtml(event.status || 'Terjadwal')}</span></article>`).join('');
+  const weeklySchedules = [...(state.schedules || [])]
+    .sort((a, b) => String(a.day || '').localeCompare(String(b.day || '')))
+    .map((item) => `<article class="kaldik-schedule-card"><b>${escapeHtml(item.day || 'Jadwal rutin')}</b><time>${escapeHtml(item.time || 'Waktu belum ditentukan')}</time><h3>${escapeHtml(item.title || 'Kegiatan')}</h3><p>${escapeHtml(item.room || 'Lokasi belum ditentukan')}${item.teacher ? ` · ${escapeHtml(item.teacher)}` : ''}</p></article>`).join('');
+  const actions = canEdit ? `<div class="actions-inline"><button type="button" class="btn btn-primary" data-action="add-event">${icon('plus')} Tambah Agenda</button><button type="button" class="btn btn-ghost" data-action="add-schedule">${icon('plus')} Tambah Jadwal Rutin</button></div>` : '';
+  return `${welcome('KALENDER PENDIDIKAN', 'Kalender Akademik & Kegiatan Santri', 'Agenda dan jadwal yang mengikuti data terbaru sekolah.', actions)}<section class="panel kaldik-panel"><div class="panel-head"><div><h2>Agenda Pendidikan</h2><p>Ujian, libur semester, kegiatan tahfidz, dan event pesantren.</p></div><span class="badge">${events.length} agenda</span></div><div class="kaldik-event-list">${eventCards || '<div class="empty-state"><p>Belum ada agenda pendidikan.</p></div>'}</div></section><section class="panel kaldik-panel"><div class="panel-head"><div><h2>Jadwal Kegiatan Rutin</h2><p>Jadwal yang dicatat oleh pengelola sekolah dan ma’had.</p></div><span class="badge">${weeklySchedules.length} jadwal</span></div><div class="kaldik-schedule-grid">${weeklySchedules || '<div class="empty-state"><p>Belum ada jadwal rutin.</p></div>'}</div></section><small class="metric-note">Data kalender menggunakan node jadwal dan event yang tersinkron dengan Firebase Realtime Database.</small>`;
+}
+
 function parentDashboard() {
   return commonDashboard('ORANG TUA / WALI - PORTAL PERSONAL', 'Ringkasan personal anak, akademik, tahfizh, dan keuangan.', `${parentView()}${section('Keuangan Anak', 'Tagihan, pembayaran, invoice, dan uang saku milik anak.', financeView())}`);
 }
@@ -2150,7 +2427,7 @@ function studentDashboard() {
   if (!student) {
     return commonDashboard('SANTRI - PORTAL PERSONAL', 'Jadwal, nilai, tahfizh, dan pengumuman untuk santri.', section('Profil & Progress Saya', 'Belum ada data santri yang terhubung ke akun ini.', '<div class="empty-state"><div class="empty-state-icon">' + icon('user-round-x', 28) + '</div><p>Profil santri belum tersedia. Silakan hubungi administrator untuk menghubungkan akun.</p></div>'));
   }
-  return commonDashboard('SANTRI - PORTAL PERSONAL', 'Jadwal, nilai, tahfizh, dan pengumuman untuk santri.', `${section('Profil & Progress Saya', `${student.className} - ${student.program}`, `${tahfizhTable(student.id)}${gradeTable(student.id)}`)}${section('Jadwal & Event', "Agenda harian dan kegiatan ma'had.", `${activityTimeline()}${eventsTable()}`)}`);
+  return commonDashboard('SANTRI - PORTAL PERSONAL', 'Jadwal, nilai, tahfizh, dan pengumuman untuk santri.', `${section('Profil & Progress Saya', `${student.className} - ${student.program}`, `${tahfizhTable(student.id)}${gradeTable(student.id)}`)}${section('Jadwal & Kaldik', "Agenda harian dan kegiatan ma'had.", `${activityTimeline()}${eventsTable()}<button class="btn btn-ghost btn-small" data-view="kaldik">Buka Kalender Pendidikan</button>`)}`);
 }
 
 function executiveDashboard() {
@@ -2176,7 +2453,7 @@ function unifiedDashboard() {
   return `${welcome(`BOARDINGPRO STKIS  -  ${role.label.toUpperCase()}`, `Assalamu'alaikum, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  Satu ruang kendali untuk menjaga amanah.`, canManageAnnouncements() ? `<button class="btn btn-primary" data-action="add-announcement">${icon('plus')} Pengumuman</button>` : '')}
     <div class="stats-grid">${stats}</div>
     <div class="grid-2">${section('Pengumuman & Feed Harian', "Kabar terbaru ma'had dan perkembangan santri", `<div class="activity-list">${announcementRows || '<div class="empty">Belum ada pengumuman.</div>'}${feed.map((item) => `<div class="activity"><span class="activity-icon green">${icon(item.type === 'tahfizh' ? 'book-open-check' : 'bell')}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div><time>${formatDate(item.date)}</time></div>`).join('')}</div>`, `<button class="btn btn-ghost btn-small" data-view="announcements">Lihat semua</button>`)}
-      ${section('Jadwal & Event', 'Agenda kegiatan boarding school', `${activityTimeline()}<div class="panel-head" style="margin-top:15px"><div><h2>Event mendatang</h2><p>Agenda resmi sekolah</p></div><button class="btn btn-ghost btn-small" data-view="schedule">Buka agenda</button></div>${eventsTable()}`)}</div>
+      ${section('Jadwal & Kaldik', 'Agenda kegiatan boarding school dan kalender pendidikan', `${activityTimeline()}<div class="panel-head" style="margin-top:15px"><div><h2>Event mendatang</h2><p>Agenda resmi sekolah</p></div><button class="btn btn-ghost btn-small" data-view="kaldik">Buka kalender</button></div>${eventsTable()}`)}</div>
     ${pocketSection}
     <div class="grid-2">${financeSection}${section('Tahfizh & Academic', 'Capaian hafalan dan hasil belajar terbaru', `${tahfizhTable()}${gradeTable()}<div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-view="academic">Lihat rekap akademik</button></div>`)}</div>
     ${canViewPkl() ? section('PKL  -  Praktik Kerja Lapangan', 'Jam kerja, status absensi, kegiatan, dan dokumentasi praktik', `${pklTable()}<div class="actions-inline"><button class="btn btn-ghost btn-small" data-view="pkl">Buka modul PKL</button></div>`) : ''}`;
@@ -2247,10 +2524,11 @@ function teacherPersonalAttendanceView() {
   const records = state.teacherAttendance.filter((item) => item.teacher === teacherName);
   const form = `<form id="teacher-attendance-form" class="form-grid"><label>Status<select name="status"><option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option></select></label><label>Jam Masuk<input name="checkIn" type="time"></label><label>Jam Pulang<input name="checkOut" type="time"></label><button type="submit" class="btn btn-primary full">Simpan Presensi Pribadi</button></form>`;
   const report = table(['Tanggal', 'Masuk', 'Pulang', 'Status'], records.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${escapeHtml(item.checkIn || '-')}</td><td>${escapeHtml(item.checkOut || '-')}</td><td>${statusBadge(item.status || 'Belum diisi')}</td></tr>`).join(''), 'Belum ada riwayat presensi');
-  return `${section('Presensi Harian Guru Mandiri', 'Hanya data presensi akun Anda yang ditampilkan.', form)}${section('Riwayat Presensi Pribadi', 'Riwayat check-in dan check-out Anda.', report)}`;
+  return `${teacherJournalView()}${section('Presensi Harian Guru Mandiri', 'Hanya data presensi akun Anda yang ditampilkan.', form)}${section('Riwayat Presensi Pribadi', 'Riwayat check-in dan check-out Anda.', report)}`;
 }
 function teacherAttendanceRecords() {
-  return (state.teacherTeachingRecords || []).filter((item) => item.date.startsWith('2026-09'));
+  const currentMonth = localISODate().slice(0, 7);
+  return (state.teacherTeachingRecords || []).filter((item) => String(item.date || '').slice(0, 7) === currentMonth);
 }
 function teacherAttendanceSummary() {
   const records = teacherAttendanceRecords();
@@ -2266,28 +2544,155 @@ function teacherAttendanceSummary() {
 }
 function teacherAttendanceTable() {
   const records = teacherAttendanceRecords();
-  const teachers = [...new Set(records.map((item) => item.teacher))];
-  const rows = teachers.map((teacher) => {
-    const items = records.filter((item) => item.teacher === teacher);
+  const groups = [...new Map(records.map((item) => [`${item.teacher}|${item.subject}`, { teacher: item.teacher, subject: item.subject }])).values()];
+  const rows = groups.map(({ teacher, subject }) => {
+    const items = records.filter((item) => item.teacher === teacher && item.subject === subject);
     const present = items.filter((item) => item.status === 'Hadir').length;
     const leave = items.filter((item) => ['Izin', 'Sakit'].includes(item.status)).length;
     const hours = items.reduce((sum, item) => sum + Number(item.hours || 0), 0);
-    const subject = items[0]?.subject || '-';
-    return `<tr><td><b>${escapeHtml(teacher)}</b></td><td>${escapeHtml(subject)}</td><td>${present} hari</td><td>${leave} hari</td><td>${hours} jam</td><td><button type="button" class="btn btn-small btn-primary" data-teacher-detail="${escapeHtml(teacher)}">Lihat Detail</button></td></tr>`;
+    const classes = [...new Set(items.map((item) => item.className).filter(Boolean))].join(', ') || '-';
+    return `<tr><td><b>${escapeHtml(teacher)}</b></td><td>${escapeHtml(subject || '-')}</td><td>${escapeHtml(classes)}</td><td>${present} sesi</td><td>${leave} sesi</td><td>${hours.toFixed(2)} jam</td><td><button type="button" class="btn btn-small btn-primary" data-teacher-detail="${escapeHtml(teacher)}" data-teacher-subject="${escapeHtml(subject || '')}">Lihat Detail</button></td></tr>`;
   }).join('');
-  return table(['Nama Guru/Ustadz', 'Mata Pelajaran', 'Total Kehadiran (Hari)', 'Total Izin/Sakit', 'Total Jam Mengajar (Bulan Ini)', 'Aksi'], rows, 'Belum ada rekap presensi guru');
+  return table(['Nama Guru/Ustadz', 'Mata Pelajaran', 'Kelas', 'Sesi Hadir', 'Izin/Sakit', 'JDM Bulan Ini', 'Aksi'], rows, 'Belum ada rekap jam mengajar bulan ini');
 }
 function teacherAttendanceAdminView() {
   const summary = teacherAttendanceSummary();
   return `${welcome('REKAP PRESENSI GURU / USTADZ', 'Kehadiran & Jam Mengajar', 'Ringkasan bulan berjalan untuk monitoring pimpinan dan admin.', '')}
-    <div class="stats-grid">${statCard('Total Jam Mengajar', `${summary.totalHours} jam`, 'Akumulasi bulan ini', 'clock-3', 'blue')}${statCard('Persentase Kehadiran', `${summary.attendance}%`, 'Dari seluruh hari mengajar', 'calendar-check', 'green')}${statCard('Total Izin / Sakit', summary.leave, 'Tidak termasuk alpa', 'file-warning', 'orange')}${statCard('Guru Terdata', summary.teachers.length, 'Dalam rekap bulan ini', 'users', 'purple')}</div>
-    ${section('Rekap Utama Guru/Ustadz', 'Klik Lihat Detail untuk histori harian dan materi KBM.', teacherAttendanceTable())}`;
+    <div class="stats-grid">${statCard('Total Jam Mengajar', `${summary.totalHours.toFixed(2)} jam`, 'Akumulasi bulan ini', 'clock-3', 'blue')}${statCard('Persentase Kehadiran', `${summary.attendance}%`, 'Sesi selesai berstatus hadir', 'calendar-check', 'green')}${statCard('Total Izin / Sakit', summary.leave, 'Tidak termasuk alpa', 'file-warning', 'orange')}${statCard('Guru Terdata', summary.teachers.length, 'Dalam rekap bulan ini', 'users', 'purple')}</div>
+    ${section('Rekap JDM per Mata Pelajaran', 'Jam dihitung dari check-in dan check-out jurnal mengajar.', teacherAttendanceTable())}`;
 }
-function openTeacherAttendanceDetail(teacherName) {
-  const records = teacherAttendanceRecords().filter((item) => item.teacher === teacherName);
-  const subject = records[0]?.subject || '-';
-  const rows = records.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${new Date(`${item.date}T00:00:00`).toLocaleDateString('id-ID', { weekday: 'long' })}</td><td>${statusBadge(item.status)}</td><td>${Number(item.hours || 0)} jam</td><td>${escapeHtml(item.note || '-')}</td></tr>`).join('');
-  openModal(`Detail Presensi - ${teacherName}`, `<p class="metric-note">Mata Pelajaran: ${escapeHtml(subject)} - ${new Date(`${today}T00:00:00`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>${table(['Tanggal', 'Hari', 'Status', 'Jam Mengajar', 'Catatan Materi KBM'], rows, 'Belum ada histori harian')}`);
+function openTeacherAttendanceDetail(teacherName, subjectName = '') {
+  const records = teacherAttendanceRecords().filter((item) => item.teacher === teacherName && (!subjectName || item.subject === subjectName));
+  const subject = subjectName || records[0]?.subject || '-';
+  const rows = records.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${new Date(`${item.date}T00:00:00`).toLocaleDateString('id-ID', { weekday: 'long' })}</td><td>${escapeHtml(item.className || '-')}</td><td>${escapeHtml(item.checkIn || '-')}</td><td>${escapeHtml(item.checkOut || '-')}</td><td>${statusBadge(item.status)}</td><td>${Number(item.hours || 0).toFixed(2)} jam</td><td>${escapeHtml(item.note || '-')}</td></tr>`).join('');
+  openModal(`Detail Presensi - ${teacherName}`, `<p class="metric-note">Mata Pelajaran: ${escapeHtml(subject)} · ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>${table(['Tanggal', 'Hari', 'Kelas', 'Masuk', 'Pulang', 'Status', 'Jam Mengajar', 'Catatan Materi KBM'], rows, 'Belum ada histori harian')}`);
+}
+
+function currentTeacherName() {
+  return currentAccount()?.name || currentAccount()?.nama || state.displayName || roles.guru.demoName;
+}
+function localISODate(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+function teacherSchedulesForToday() {
+  const weekday = new Intl.DateTimeFormat('id-ID', { weekday: 'long' }).format(new Date()).toLocaleLowerCase('id');
+  const teacher = currentTeacherName().trim().toLocaleLowerCase('id');
+  return (state.schedules || []).filter((item) =>
+    String(item.day || '').trim().toLocaleLowerCase('id') === weekday &&
+    String(item.teacher || '').trim().toLocaleLowerCase('id') === teacher
+  );
+}
+function isWithinTeachingSchedule(schedule, now = new Date()) {
+  const match = String(schedule?.time || '').match(/(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/);
+  if (!match) return false;
+  const [startHour, startMinute, endHour, endMinute] = match.slice(1).map(Number);
+  if ([startHour, endHour].some((hour) => hour > 23) || [startMinute, endMinute].some((minute) => minute > 59)) return false;
+  const start = startHour * 60 + startMinute;
+  const end = endHour * 60 + endMinute;
+  const current = now.getHours() * 60 + now.getMinutes();
+  return end >= start ? current >= start && current <= end : current >= start || current <= end;
+}
+function updateTeacherJournalControls() {
+  const select = document.querySelector('[name="scheduleId"][form="teacher-journal-form"]');
+  const button = document.querySelector('[data-action="teacher-check-in"]');
+  if (!select || !button) return;
+  const schedule = teacherSchedulesForToday().find((item) => String(item.id) === String(select.value));
+  const canStart = Boolean(schedule && isWithinTeachingSchedule(schedule));
+  button.disabled = !canStart;
+  const status = document.querySelector('[data-teacher-slot-status]');
+  if (status) status.textContent = canStart ? 'Jadwal aktif; Anda dapat memulai sesi.' : 'Check-in akan aktif pada rentang jam jadwal yang dipilih.';
+}
+function activeTeacherLesson() {
+  const teacher = currentTeacherName();
+  return (state.teacherTeachingRecords || []).find((item) => item.teacher === teacher && item.status === 'Mengajar' && !item.checkOut);
+}
+function teacherJournalView() {
+  if (!['guru', 'guru_tahfizh'].includes(effectiveRole())) return '';
+  const teacher = currentTeacherName();
+  const schedules = teacherSchedulesForToday();
+  const subjects = teacherSubjects();
+  const classes = teacherClassNames();
+  const defaultSchedule = schedules[0];
+  const selectedClass = classes.includes(defaultSchedule?.className) ? defaultSchedule.className : classes[0] || '';
+  const selectedSubject = subjects.includes(defaultSchedule?.subject) ? defaultSchedule.subject : subjects[0];
+  const active = activeTeacherLesson();
+  const scheduleOptions = schedules.map((item, index) => `<option value="${escapeHtml(item.id)}" data-subject="${escapeHtml(item.subject || '')}" data-class="${escapeHtml(item.className || '')}" ${index === 0 ? 'selected' : ''}>${escapeHtml(`${item.time || 'Waktu belum diatur'} · ${item.title || 'Jadwal mengajar'}${item.room ? ` · ${item.room}` : ''}`)}</option>`).join('');
+  const scheduleTimeValid = Boolean(defaultSchedule && isWithinTeachingSchedule(defaultSchedule));
+  const todayRecords = (state.teacherTeachingRecords || []).filter((item) => item.teacher === teacher && item.date === localISODate()).sort((a, b) => String(a.checkIn || '').localeCompare(String(b.checkIn || '')));
+  const rows = todayRecords.map((item) => `<tr><td>${escapeHtml(item.subject || '-')}</td><td>${escapeHtml(item.className || '-')}</td><td>${escapeHtml(item.checkIn || '-')}</td><td>${escapeHtml(item.checkOut || (item.status === 'Mengajar' ? 'Sedang mengajar' : '-'))}</td><td>${item.status === 'Hadir' ? `${Number(item.hours || 0).toFixed(2)} jam` : statusBadge(item.status)}</td></tr>`).join('');
+  const slotStatus = !active && schedules.length
+    ? `<p class="teacher-journal-status" data-teacher-slot-status>${scheduleTimeValid ? 'Jadwal aktif; Anda dapat memulai sesi.' : 'Check-in akan aktif pada rentang jam jadwal yang dipilih.'}</p>`
+    : '';
+  const controls = active
+    ? `<p class="teacher-journal-status">Sesi aktif: <b>${escapeHtml(active.subject || '-')}</b> · ${escapeHtml(active.className || '-')} sejak ${escapeHtml(active.checkIn || '-')}.</p><div class="teacher-journal-actions"><button type="button" class="btn btn-primary" data-action="teacher-check-out">Selesai Mengajar</button></div>`
+    : `<div class="teacher-journal-grid"><label>Jadwal Hari Ini<select name="scheduleId" form="teacher-journal-form" required>${scheduleOptions || '<option value="">Tidak ada jadwal Anda hari ini</option>'}</select></label><label>Kelas<select name="className" form="teacher-journal-form" required>${teacherClassSelectOptions(selectedClass) || '<option value="">Belum ada kelas</option>'}</select></label><label>Mata Pelajaran<select name="subject" form="teacher-journal-form" required>${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${subject === selectedSubject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label></div><div class="teacher-journal-actions"><button type="button" class="btn btn-primary" data-action="teacher-check-in" ${scheduleTimeValid ? '' : 'disabled'}>Mulai Mengajar</button></div>`;
+  return section('Jurnal & Presensi Mengajar Guru', 'Check-in dan check-out mengajar hanya dapat dilakukan dalam rentang jadwal harian.', `<form id="teacher-journal-form"></form>${controls}${slotStatus}${!active && !schedules.length ? '<p class="teacher-journal-status">Belum ada jadwal mengajar yang ditugaskan untuk hari ini. Minta pengelola memperbarui Jadwal & Kaldik.</p>' : ''}${active && active.date !== localISODate() ? '<p class="teacher-journal-status">Sesi lintas hari masih aktif; selesaikan sesi tersebut sebelum memulai jadwal baru.</p>' : ''}${table(['Mata Pelajaran', 'Kelas', 'Mulai', 'Selesai', 'Durasi / Status'], rows, 'Belum ada jurnal mengajar hari ini')}`);
+}
+function startTeacherLesson() {
+  if (!['guru', 'guru_tahfizh'].includes(effectiveRole())) return;
+  const form = $('#teacher-journal-form');
+  if (!form) return;
+  const values = new FormData(form);
+  const teacher = currentTeacherName();
+  const schedule = teacherSchedulesForToday().find((item) => String(item.id) === String(values.get('scheduleId')));
+  const className = String(values.get('className') || '');
+  const subject = String(values.get('subject') || '');
+  if (!schedule || !teacherClassNames().includes(className) || !teacherSubjects().includes(subject)) {
+    showToast('Pilih jadwal, kelas, dan mata pelajaran yang valid.', 'error');
+    return;
+  }
+  if (!isWithinTeachingSchedule(schedule)) {
+    showToast('Check-in hanya dapat dilakukan selama rentang waktu jadwal yang dipilih.', 'error');
+    return;
+  }
+  if (schedule.subject && schedule.subject !== subject) {
+    showToast('Mata pelajaran tidak sesuai dengan jadwal yang dipilih.', 'error');
+    return;
+  }
+  if (schedule.className && schedule.className !== className) {
+    showToast('Kelas tidak sesuai dengan jadwal yang dipilih.', 'error');
+    return;
+  }
+  if (activeTeacherLesson()) {
+    showToast('Selesaikan sesi mengajar yang masih aktif terlebih dahulu.', 'error');
+    return;
+  }
+  const date = localISODate();
+  if (state.teacherTeachingRecords.some((item) => item.teacher === teacher && item.date === date && item.scheduleId === schedule.id)) {
+    showToast('Jadwal ini sudah memiliki jurnal hari ini.', 'error');
+    return;
+  }
+  const now = new Date();
+  const checkIn = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  state.teacherTeachingRecords.unshift({
+    id: `TTR-${Date.now()}`, teacher, subject, className,
+    date, scheduleId: schedule.id, scheduleTitle: schedule.title || '',
+    status: 'Mengajar', checkIn, checkInAt: now.toISOString(),
+    checkOut: '', hours: 0, note: ''
+  });
+  persist();
+  render();
+  showToast('Check-in mengajar berhasil dicatat.', 'success');
+}
+function finishTeacherLesson() {
+  const active = activeTeacherLesson();
+  if (!active) {
+    showToast('Tidak ada sesi mengajar aktif untuk diselesaikan.', 'error');
+    return;
+  }
+  const now = new Date();
+  const startedAt = Date.parse(active.checkInAt || `${active.date}T${active.checkIn || '00:00'}:00`);
+  if (!Number.isFinite(startedAt) || startedAt > now.getTime()) {
+    showToast('Waktu mulai sesi tidak valid. Hubungi administrator sebelum menyimpan checkout.', 'error');
+    return;
+  }
+  active.checkOut = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  active.checkOutAt = now.toISOString();
+  active.hours = Math.round(((now.getTime() - startedAt) / 3600000) * 100) / 100;
+  active.status = 'Hadir';
+  persist();
+  render();
+  showToast(`Check-out tercatat: ${active.hours.toFixed(2)} jam mengajar.`, 'success');
 }
 function pembinaView() {
   return `${welcome('PENGAWASAN ASRAMA & TAHFIZH', 'Dashboard Pembina', 'Pantau kedisiplinan, presensi jamaah, dan hafalan santri binaan.', canManageDormitory() ? `<button class="btn btn-primary" data-action="add-point">${icon('plus')} Input Poin</button><button class="btn btn-primary" data-action="add-tahfizh-attendance">${icon('plus')} Absensi Tahfizh</button>` : '')}
@@ -2373,15 +2778,17 @@ function tahfizhMonthlySummary() {
   return `<div class="stats-grid">${statCard('Bulan Berjalan', new Date(`${today}T00:00:00`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }), 'Rekap aktif', 'calendar', 'green')}${statCard('Total Juz', totalJuz, 'Akumulasi setoran', 'book-open', 'blue')}${statCard('Total Halaman', totalPages, 'Jika tercatat', 'file-text', 'orange')}</div>`;
 }
 function gradeTable(studentId) {
-  const selectedSubject = state.teacherAcademicFilter?.subject;
+  const selectedSubject = ['guru', 'guru_tahfizh'].includes(effectiveRole())
+    ? (teacherSubjects().includes(state.teacherAcademicFilter?.subject) ? state.teacherAcademicFilter.subject : teacherSubjects()[0])
+    : state.teacherAcademicFilter?.subject;
   const selectedClass = state.teacherAcademicFilter?.className;
-  const records = state.grades.filter((grade) => (!studentId || grade.studentId === studentId) && (!selectedSubject || grade.subject === selectedSubject) && (!selectedClass || studentById(grade.studentId).className === selectedClass));
+  const records = state.grades.filter((grade) => (!studentId || grade.studentId === studentId) && (!selectedSubject || grade.subject === selectedSubject) && (!selectedClass || (grade.className || studentById(grade.studentId).className) === selectedClass));
   if (studentId || ['parent', 'student'].includes(effectiveRole())) return table(['Santri', 'Mata Pelajaran', 'Nilai', 'Catatan'], records.map((grade) => `<tr><td>${escapeHtml(studentById(grade.studentId).name)}</td><td>${escapeHtml(grade.subject || '-')}</td><td><span class="score">${grade.score}</span></td><td>${escapeHtml(grade.note || '-')}</td></tr>`).join(''), 'Belum ada nilai');
   return groupedStudentRecords(records, (grade) => `<div class="accordion-record"><b>${escapeHtml(studentById(grade.studentId).name)}</b><span>${escapeHtml(grade.subject || '-')} - Nilai ${escapeHtml(grade.score)}</span><small>${escapeHtml(grade.note || '-')}</small></div>`);
 }
 function teacherSubjects() {
   const account = currentAccount();
-  const subjects = Array.isArray(account?.subjects) ? account.subjects : String(account?.subject || '').split(',').map((item) => item.trim()).filter(Boolean);
+  const subjects = Array.isArray(account?.subjects) ? [...account.subjects] : String(account?.subject || '').split(',').map((item) => item.trim()).filter(Boolean);
   state.teacherTeachingRecords.filter((item) => item.teacher === (account?.name || account?.nama)).forEach((item) => { if (item.subject) subjects.push(item.subject); });
   return [...new Set(subjects)].length ? [...new Set(subjects)] : ['Umum'];
 }
@@ -2403,19 +2810,34 @@ function teacherScopedStudents() {
   const filter = state.teacherAcademicFilter || {};
   return state.students.filter((student) => !filter.className || student.className === filter.className);
 }
+function teacherClassNames() {
+  return [...new Set(state.students.map((student) => String(student.className || '').trim()).filter(Boolean))].sort();
+}
+function teacherClassSelectOptions(selected = '') {
+  return teacherClassNames().map((className) => `<option value="${escapeHtml(className)}" ${className === selected ? 'selected' : ''}>${escapeHtml(className)}</option>`).join('');
+}
+function teacherStudentSelectOptions(className, selectedId = '') {
+  return state.students
+    .filter((student) => !className || student.className === className)
+    .map((student) => `<option value="${escapeHtml(student.id)}" ${String(student.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`)
+    .join('') || '<option value="" disabled selected>Tidak ada santri di kelas ini</option>';
+}
 function teacherAcademicView() {
   const subjects = teacherSubjects();
-  const classes = [...new Set(state.students.map((student) => student.className).filter(Boolean))].sort();
-  const filter = state.teacherAcademicFilter || { subject: subjects[0], className: '' };
+  const classes = teacherClassNames();
+  const filter = { subject: subjects.includes(state.teacherAcademicFilter?.subject) ? state.teacherAcademicFilter.subject : subjects[0], className: state.teacherAcademicFilter?.className || '' };
   const filterForm = `<form id="teacher-academic-filter" class="form-grid teacher-filter"><label>Mata Pelajaran<select name="subject">${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${filter.subject === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Kelas<select name="className"><option value="">Semua Kelas</option>${classes.map((className) => `<option value="${escapeHtml(className)}" ${filter.className === className ? 'selected' : ''}>${escapeHtml(className)}</option>`).join('')}</select></label><button class="btn btn-primary" type="submit">Terapkan Filter</button></form>`;
-  const attendance = state.attendance.filter((item) => item.type === 'kelas' && (!filter.subject || item.subject === filter.subject) && (!filter.className || studentById(item.studentId).className === filter.className));
+  const attendance = state.attendance.filter((item) => item.type === 'kelas' && (!filter.subject || item.subject === filter.subject) && (!filter.className || (item.className || studentById(item.studentId).className) === filter.className));
   const attendanceTableHtml = table(['Santri', 'Kelas', 'Mapel', 'Tanggal', 'Status', 'Pencatat'], attendance.map((item) => `<tr><td>${escapeHtml(studentById(item.studentId).name)}</td><td>${escapeHtml(studentById(item.studentId).className || '-')}</td><td>${escapeHtml(item.subject || '-')}</td><td>${formatDate(item.date)}</td><td>${statusBadge(item.status)}</td><td>${escapeHtml(item.by || '-')}</td></tr>`).join(''), 'Belum ada presensi mapel ini');
-  return `${welcome('KBM GURU', 'Presensi dan Nilai Multi-Mapel', 'Pilih mapel dan kelas untuk mengisolasi input serta rekap.', '')}${section('Filter Kelas & Mata Pelajaran', 'Data tersimpan terpisah berdasarkan kombinasi mapel dan kelas.', filterForm)}${section('Input Presensi Siswa', 'Presensi KBM mengikuti filter aktif.', `<button type="button" class="btn btn-primary" data-action="add-teacher-student-attendance">${icon('plus')} Input Presensi</button>${attendanceTableHtml}`)}${section('Input Nilai Pelajaran', 'Nilai hanya tampil untuk mapel dan kelas aktif.', gradeTable(), `<button type="button" class="btn btn-primary" data-action="add-grade">${icon('plus')} Input Nilai</button>`)}`;
+  return `${welcome('KBM GURU', 'Presensi dan Nilai Multi-Mapel', 'Pilih mapel dan kelas untuk mengisolasi input serta rekap.', '')}${section('Filter Kelas & Mata Pelajaran', 'Data tersimpan terpisah berdasarkan kombinasi mapel dan kelas.', filterForm)}${teacherJournalView()}${section('Input Presensi Siswa', 'Presensi KBM mengikuti filter aktif.', `<button type="button" class="btn btn-primary" data-action="add-teacher-student-attendance">${icon('plus')} Input Presensi</button>${attendanceTableHtml}`)}${section('Input Nilai Pelajaran', 'Nilai hanya tampil untuk mapel dan kelas aktif.', gradeTable(), `<button type="button" class="btn btn-primary" data-action="add-grade">${icon('plus')} Input Nilai</button>`)}`;
 }
 function attendanceTable(type = 'kelas') {
   if (type === 'tahfizh' && !hasTahfizhAccess() && !['parent', 'student'].includes(effectiveRole())) return '<div class="notice">Akses presensi jam Tahfizh hanya untuk Guru Tahfizh, Pembina/Musyrif, atau Administrator.</div>';
   const halaqohId = type === 'tahfizh' ? activeHalaqohId() : '';
-  const data = state.attendance.filter((item) => item.type === type && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId)).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const academicFilter = ['guru', 'guru_tahfizh'].includes(effectiveRole())
+    ? { subject: teacherSubjects().includes(state.teacherAcademicFilter?.subject) ? state.teacherAcademicFilter.subject : teacherSubjects()[0], className: state.teacherAcademicFilter?.className || '' }
+    : {};
+  const data = state.attendance.filter((item) => item.type === type && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId) && (type !== 'kelas' || (!academicFilter.subject || item.subject === academicFilter.subject) && (!academicFilter.className || (item.className || studentById(item.studentId).className) === academicFilter.className))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   if (['parent', 'student'].includes(effectiveRole())) return table(['Santri', 'Tanggal', 'Status', 'Pencatat'], data.filter((item) => item.studentId === currentStudent().id).map((item) => `<tr><td>${studentById(item.studentId).name}</td><td>${formatDate(item.date)}</td><td>${statusBadge(item.status)}</td><td>${item.by || 'Pembina'}</td></tr>`).join(''));
   return groupedStudentRecords(data, (item) => `<div class="accordion-record"><b>${escapeHtml(studentById(item.studentId).name)}</b><span>${formatDate(item.date)} - ${escapeHtml(item.status || '-')}</span><small>${escapeHtml(item.by || 'Pembina')}</small></div>`);
 }
@@ -2713,7 +3135,8 @@ function renderView() {
   }
   else if (state.view === 'tahfizh') html = section('Program Tahfizh', 'Rekap capaian hafalan dan setoran santri', `<div class="notice"><b>Halaqoh: ${escapeHtml(halaqohLabel())}</b><p class="metric-note">Data presensi dan progres dibatasi sesuai kelompok halaqoh pengampu.</p></div>${tahfizhMonthlySummary()}${tahfizhTable()}`, (currentRoleIsAdmin() || hasTahfizhAccess()) ? `<button type="button" class="btn btn-primary" data-action="add-tahfizh">${icon('plus')} Input Setoran</button>` : '');
   else if (state.view === 'gate') html = gateView();
-  else if (state.view === 'schedule') html = scheduleView();
+  else if (state.view === 'schedule') html = kaldikView();
+  else if (state.view === 'kaldik') html = kaldikView();
   else if (state.view === 'security-reports') html = securityReportsView();
   else if (state.view === 'announcements') html = announcementsView();
   else if (state.view === 'permit-form') html = permitForm();
@@ -3174,7 +3597,7 @@ function bindActions() {
   document.querySelectorAll('[data-action="export-tahfizh-semester"]').forEach((button) => button.addEventListener('click', () => exportSemesterReport('tahfizh')));
   document.querySelectorAll('[data-action="export-attendance-semester"]').forEach((button) => button.addEventListener('click', () => exportSemesterReport('attendance')));
   document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => {
-    state.view = button.dataset.view;
+    state.view = button.dataset.view === 'schedule' ? 'kaldik' : button.dataset.view;
     render();
   }));
   const disciplineFormElement = $('#discipline-form');
@@ -3289,7 +3712,19 @@ function bindActions() {
   document.querySelectorAll('[data-document="print"]').forEach((button) => button.addEventListener('click', () => openDocument(button.dataset.invoice, button.dataset.receipt, true)));
   document.querySelectorAll('[data-gate]').forEach((button) => button.addEventListener('click', () => { const permit = state.permits.find((item) => item.id === button.dataset.gate); if (!permit) return; const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }); const action = permit.checkout ? 'Check-in' : 'Checkout'; if (!permit.checkout) permit.checkout = time; else permit.checkin = time; state.gateEvents.push({ time, action, studentId: permit.studentId, operator: roles.security.demoName }); persist(); render(); }));
   document.querySelectorAll('[data-attendance]').forEach((button) => button.addEventListener('click', () => { const record = state.attendance.find((item) => item.id === button.dataset.attendance); if (record) { record.status = record.status === 'Hadir' ? 'Izin' : record.status === 'Izin' ? 'Alpa' : 'Hadir'; persist(); render(); } }));
-  document.querySelectorAll('[data-teacher-detail]').forEach((button) => button.addEventListener('click', () => openTeacherAttendanceDetail(button.dataset.teacherDetail)));
+  document.querySelectorAll('[data-teacher-detail]').forEach((button) => button.addEventListener('click', () => openTeacherAttendanceDetail(button.dataset.teacherDetail, button.dataset.teacherSubject)));
+  document.querySelectorAll('[data-action="teacher-check-in"]').forEach((button) => button.addEventListener('click', startTeacherLesson));
+  document.querySelectorAll('[data-action="teacher-check-out"]').forEach((button) => button.addEventListener('click', finishTeacherLesson));
+  document.querySelectorAll('[name="scheduleId"]').forEach((select) => {
+    select.addEventListener('change', () => {
+      const option = select.selectedOptions[0];
+      const subject = document.querySelector('[name="subject"][form="teacher-journal-form"]');
+      const className = document.querySelector('[name="className"][form="teacher-journal-form"]');
+      if (subject && [...subject.options].some((item) => item.value === option?.dataset.subject)) subject.value = option.dataset.subject;
+      if (className && [...className.options].some((item) => item.value === option?.dataset.class)) className.value = option.dataset.class;
+      updateTeacherJournalControls();
+    });
+  });
   document.querySelectorAll('[data-action="add-student"]').forEach((button) => button.addEventListener('click', openStudentModal));
   document.querySelectorAll('[data-action="promote-students"]').forEach((button) => button.addEventListener('click', promoteStudents));
   document.querySelectorAll('[data-action="bulk-delete-students"]').forEach((button) => button.addEventListener('click', () => {
@@ -3775,17 +4210,49 @@ function openPointModal() {
 }
 function openGradeModal() {
   if (!['mahad', 'admin', 'kepsek', 'guru', 'guru_tahfizh'].includes(effectiveRole())) return;
-  const subjects = effectiveRole() === 'guru' ? teacherSubjects() : [...new Set(state.grades.map((item) => item.subject).filter(Boolean))];
+  const subjects = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? teacherSubjects() : [...new Set(state.grades.map((item) => item.subject).filter(Boolean)), 'Umum'];
   const filter = state.teacherAcademicFilter || {};
-  openModal('Input Nilai Pelajaran', `<form id="grade-modal-form" class="form-grid"><label>Santri<select name="studentId">${teacherScopedStudents().map((student) => `<option value="${student.id}">${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`).join('')}</select></label><label>Mata Pelajaran<select name="subject">${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${filter.subject === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Nilai<input name="score" type="number" min="0" max="100" required></label><label class="full">Catatan<input name="note"></label><button class="btn btn-primary full">Simpan Nilai</button></form>`);
-  $('#grade-modal-form').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.target); const student = studentById(form.get('studentId')); state.grades.unshift({ id: `GR-${Date.now()}`, studentId: form.get('studentId'), className: student.className || '', subject: form.get('subject'), score: Number(form.get('score')), note: form.get('note'), teacher: currentAccount()?.name || currentAccount()?.nama || '' }); persist(); closeModal(); render(); });
+  const classes = teacherClassNames();
+  const className = classes.includes(filter.className) ? filter.className : classes[0] || '';
+  openModal('Input Nilai Pelajaran', `<form id="grade-modal-form" class="form-grid"><label>Kelas<select name="className" required>${teacherClassSelectOptions(className) || '<option value="">Belum ada kelas</option>'}</select></label><label>Mata Pelajaran<select name="subject" required>${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${filter.subject === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Santri<select name="studentId" required>${teacherStudentSelectOptions(className)}</select></label><label>Nilai<input name="score" type="number" min="0" max="100" required></label><label class="full">Catatan<input name="note"></label><button class="btn btn-primary full">Simpan Nilai</button></form>`);
+  const formElement = $('#grade-modal-form');
+  const classSelect = formElement.querySelector('[name="className"]');
+  const studentSelect = formElement.querySelector('[name="studentId"]');
+  classSelect.addEventListener('change', () => {
+    studentSelect.innerHTML = teacherStudentSelectOptions(classSelect.value);
+  });
+  formElement.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = new FormData(formElement);
+    const student = studentById(form.get('studentId'));
+    const subject = String(form.get('subject') || '');
+    if (!student.id || student.className !== form.get('className') || !subjects.includes(subject)) return;
+    state.grades.unshift({ id: `GR-${Date.now()}`, studentId: form.get('studentId'), className: form.get('className'), subject, score: Number(form.get('score')), note: form.get('note'), teacher: currentAccount()?.name || currentAccount()?.nama || '' });
+    persist(); closeModal(); render();
+  });
 }
 function openTeacherStudentAttendanceModal() {
   if (!['guru', 'guru_tahfizh'].includes(effectiveRole())) return;
   const subjects = teacherSubjects();
   const filter = state.teacherAcademicFilter || {};
-  openModal('Input Presensi Siswa', `<form id="teacher-student-attendance-form" class="form-grid"><label>Santri<select name="studentId">${teacherScopedStudents().map((student) => `<option value="${student.id}">${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`).join('')}</select></label><label>Mata Pelajaran<select name="subject">${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${filter.subject === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Tanggal<input name="date" type="date" value="${today}" required></label><label>Status<select name="status"><option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option></select></label><label class="full">Catatan<input name="note"></label><button class="btn btn-primary full">Simpan Presensi</button></form>`);
-  $('#teacher-student-attendance-form').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.target); const student = studentById(form.get('studentId')); state.attendance.unshift({ id: `ATT-${Date.now()}`, type: 'kelas', studentId: form.get('studentId'), className: student.className || '', subject: form.get('subject'), date: form.get('date'), status: form.get('status'), by: currentAccount()?.name || currentAccount()?.nama || roles.guru.demoName, note: form.get('note') || '' }); persist(); closeModal(); render(); });
+  const classes = teacherClassNames();
+  const className = classes.includes(filter.className) ? filter.className : classes[0] || '';
+  openModal('Input Presensi Siswa', `<form id="teacher-student-attendance-form" class="form-grid"><label>Kelas<select name="className" required>${teacherClassSelectOptions(className) || '<option value="">Belum ada kelas</option>'}</select></label><label>Mata Pelajaran<select name="subject" required>${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${filter.subject === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Santri<select name="studentId" required>${teacherStudentSelectOptions(className)}</select></label><label>Tanggal<input name="date" type="date" value="${today}" required></label><label>Status<select name="status"><option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option></select></label><label class="full">Catatan<input name="note"></label><button class="btn btn-primary full">Simpan Presensi</button></form>`);
+  const formElement = $('#teacher-student-attendance-form');
+  const classSelect = formElement.querySelector('[name="className"]');
+  const studentSelect = formElement.querySelector('[name="studentId"]');
+  classSelect.addEventListener('change', () => {
+    studentSelect.innerHTML = teacherStudentSelectOptions(classSelect.value);
+  });
+  formElement.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = new FormData(formElement);
+    const student = studentById(form.get('studentId'));
+    const subject = String(form.get('subject') || '');
+    if (!student.id || student.className !== form.get('className') || !subjects.includes(subject)) return;
+    state.attendance.unshift({ id: `ATT-${Date.now()}`, type: 'kelas', studentId: form.get('studentId'), className: form.get('className'), subject, date: form.get('date'), status: form.get('status'), by: currentAccount()?.name || currentAccount()?.nama || roles.guru.demoName, note: form.get('note') || '' });
+    persist(); closeModal(); render();
+  });
 }
 function normalizeTahfizhSurah(value) {
   return String(value || '').trim().toLocaleLowerCase('id').replace(/^surah\s+/, '').replace(/\s+/g, ' ');
@@ -3930,7 +4397,7 @@ function openScheduleModal(kind) {
   const isSchedule = kind === 'schedule';
   const title = isSchedule ? 'Tambah Jadwal Harian' : 'Tambah Event Mendatang';
   const content = isSchedule
-    ? `<form id="schedule-modal-form" class="form-grid"><label>Hari<input name="day" required></label><label>Waktu / Jam<input name="time" required placeholder="07:00-08:30"></label><label>Nama Kegiatan<input name="title" required></label><label>Lokasi<input name="room" required></label><label class="full">Pengampu / Penanggung Jawab<input name="teacher" required></label><button class="btn btn-primary full">Simpan Jadwal</button></form>`
+    ? `<form id="schedule-modal-form" class="form-grid"><label>Hari<input name="day" required placeholder="Senin, Selasa, ..."></label><label>Waktu / Jam<input name="time" required placeholder="07:00-08:30"></label><label>Nama Kegiatan<input name="title" required></label><label>Lokasi<input name="room" required></label><label>Pengampu / Penanggung Jawab<input name="teacher" required></label><label>Mata Pelajaran<input name="subject" placeholder="Opsional, contoh: Bahasa Arab"></label><label>Kelas<input name="className" placeholder="Opsional, contoh: XI TKJ"></label><button class="btn btn-primary full">Simpan Jadwal</button></form>`
     : `<form id="schedule-modal-form" class="form-grid"><label>Nama Agenda<input name="title" required></label><label>Tanggal Pelaksanaan<input name="date" type="date" required></label><label>Kategori Event<input name="audience" required placeholder="Akademik, Asrama, Umum"></label><label class="full">Keterangan<input name="location" required></label><button class="btn btn-primary full">Simpan Event</button></form>`;
   openModal(title, content);
   $('#schedule-modal-form').addEventListener('submit', (event) => {
@@ -3966,6 +4433,7 @@ function showLanding() {
   landing.hidden = false;
   shell.hidden = true;
   updateCopyrightYear();
+  updateLandingClock();
   const selector = $('#demo-role');
   const preview = $('#demo-role-preview');
   if (!selector || !preview) return;
@@ -3975,6 +4443,12 @@ function showLanding() {
   updatePreview();
 }
 document.addEventListener('DOMContentLoaded', () => {
+  updateLandingClock();
+  window.setInterval(() => {
+    updateLandingClock();
+    updateTeacherJournalControls();
+    document.querySelectorAll('[data-live-dashboard-date]').forEach((element) => { element.textContent = formatDashboardDate(); });
+  }, 1000);
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch((error) => console.error('[BoardingPro] Service worker gagal didaftarkan:', error));
   }
@@ -3992,19 +4466,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
   const landingScholarQuotes = $('#landing-scholar-quotes');
-  if (landingScholarQuotes) landingScholarQuotes.innerHTML = scholarQuoteWidget();
-  document.addEventListener('click', (event) => {
-    const stepButton = event.target.closest('[data-scholar-step]');
-    if (!stepButton) return;
-    const slider = stepButton.closest('[data-scholar-slider]');
-    if (!slider) return;
-    const slides = [...slider.querySelectorAll('[data-scholar-slide]')];
-    if (!slides.length) return;
-    const currentIndex = slides.findIndex((slide) => !slide.hidden);
-    const step = Number(stepButton.dataset.scholarStep);
-    const nextIndex = (Math.max(0, currentIndex) + step + slides.length) % slides.length;
-    slides.forEach((slide, index) => { slide.hidden = index !== nextIndex; });
-  });
+  if (landingScholarQuotes) {
+    landingScholarQuotes.innerHTML = scholarQuoteWidget();
+    bindScholarSlider(landingScholarQuotes.querySelector('[data-scholar-slider]'));
+  }
   bindAudioUnlock();
   bindPersistentPlayer();
   bindPrayerWidgets();
