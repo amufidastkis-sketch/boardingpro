@@ -1030,6 +1030,8 @@ window.addEventListener('storage', (event) => {
   }
 });
 let deferredInstallPrompt = null;
+let installModalDismissTimer = null;
+const PWA_INSTALL_DISMISSED_KEY = 'boardingpro-install-dismissed-session';
 window.addEventListener('beforeinstallprompt', (event) => {
   if (isPwaInstalled()) return;
   event.preventDefault();
@@ -1049,16 +1051,34 @@ function isPwaInstalled() {
 function showInstallModal(message) {
   const modal = $('#pwa-install-modal');
   const status = $('#pwa-install-status');
-  if (!modal || isPwaInstalled()) return;
+  if (!modal || isPwaInstalled() || sessionStorage.getItem(PWA_INSTALL_DISMISSED_KEY) === 'true') return;
+  window.clearTimeout(installModalDismissTimer);
+  modal.classList.remove('is-closing');
   if (status) status.textContent = message;
   modal.hidden = false;
   document.body.classList.add('pwa-install-required');
   modal.querySelector('[data-pwa-install]')?.focus();
 }
-function hideInstallModal() {
+function hideInstallModal(animate = false) {
   const modal = $('#pwa-install-modal');
-  if (modal) modal.hidden = true;
+  if (modal) {
+    if (animate && !modal.hidden) {
+      modal.classList.add('is-closing');
+      installModalDismissTimer = window.setTimeout(() => {
+        modal.hidden = true;
+        modal.classList.remove('is-closing');
+      }, 180);
+    } else {
+      window.clearTimeout(installModalDismissTimer);
+      modal.hidden = true;
+      modal.classList.remove('is-closing');
+    }
+  }
   document.body.classList.remove('pwa-install-required');
+}
+function dismissInstallPrompt() {
+  sessionStorage.setItem(PWA_INSTALL_DISMISSED_KEY, 'true');
+  hideInstallModal(true);
 }
 async function installPwa() {
   const status = $('#pwa-install-status');
@@ -1954,8 +1974,9 @@ function bindPersistentPlayer() {
   });
 }
 
-function quranPanelMarkup() {
-  return `<section class="panel quran-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Mushaf per surah, ayat, atau halaman; teks tematik dengan terjemahan dan audio.</p></div></div></div><div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="mushaf">Mushaf</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="mushaf"><div class="quran-controls"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat<input data-quran-ayah type="number" min="1" value="1"></label><label>Halaman<input data-quran-page type="number" min="1" max="604" placeholder="1–604"></label></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls quran-select-grid"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
+function quranPanelMarkup(includeBanner = true) {
+  const banner = includeBanner ? `<div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Mushaf per surah, ayat, atau halaman; teks tematik dengan terjemahan dan audio.</p></div></div></div>` : '';
+  return `<section class="panel quran-panel">${banner}<div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="mushaf">Mushaf</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="mushaf"><div class="quran-controls quran-nav-grid"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat<input data-quran-ayah type="number" min="1" value="1"></label><label>Halaman<input data-quran-page type="number" min="1" max="604" placeholder="1–604"></label></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls quran-select-grid"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
 }
 
 function murottalPanelMarkup() {
@@ -1967,7 +1988,7 @@ function renderQuranVerse(data) {
   const translation = data?.translation || '';
   const latin = data?.latin || '';
   const reference = `${data?.surah?.number || ''}:${data?.numberInSurah || ''}`;
-  return `<article class="quran-verse" id="quran-verse-${escapeHtml(reference.replace(':', '-'))}"><span class="badge badge-success">${escapeHtml(reference)}</span><p lang="ar" dir="rtl" class="quran-arabic">${escapeHtml(arabic)}</p><p class="quran-latin">${escapeHtml(latin)}</p><p class="quran-translation">${escapeHtml(translation)}</p><button class="btn btn-small btn-ghost" type="button" data-quran-tafsir="${escapeHtml(reference)}">Tafsir Ibnu Katsir (Inggris)</button></article>`;
+  return `<article class="quran-verse" id="quran-verse-${escapeHtml(reference.replace(':', '-'))}"><div class="quran-verse-head"><span class="badge badge-success">${escapeHtml(reference)}</span></div><p lang="ar" dir="rtl" class="quran-arabic font-quran">${escapeHtml(arabic)}</p><p class="quran-latin">${escapeHtml(latin)}</p><p class="quran-translation">${escapeHtml(translation)}</p><div class="quran-verse-actions"><button class="btn btn-small btn-ghost" type="button" data-quran-play-verse="${escapeHtml(reference)}">Putar Ayat</button><button class="btn btn-small btn-ghost" type="button" data-quran-tafsir="${escapeHtml(reference)}">Tafsir Ibnu Katsir</button></div></article>`;
 }
 
 let quranSurahs = [];
@@ -2090,6 +2111,18 @@ async function loadQuranContent(container = document) {
     console.error('[BoardingPro] Gagal memuat ayat Al-Qur’an:', error);
     if (status) status.textContent = `Ayat tidak dapat dimuat: ${error.message}`;
   }
+}
+
+function playQuranVerse(reference, qari = persistentQari) {
+  const [surah, ayah] = String(reference || '').split(':').map(Number);
+  if (!Number.isInteger(surah) || surah < 1 || surah > 114 || !Number.isInteger(ayah) || ayah < 1) {
+    showToast('Referensi surah dan ayat tidak valid.', 'error');
+    return;
+  }
+  persistentThematicQueue = [{ surah, ayah, label: `${surah}:${ayah}` }];
+  persistentThematicQueuePosition = 0;
+  persistentThematicQueueId = null;
+  playCurrentThematicReference(qari);
 }
 
 async function loadQuranTafsir(reference, container = document) {
@@ -2413,7 +2446,7 @@ async function playCurrentThematicReference(qari = persistentQari) {
 }
 
 function openQuranModal() {
-  openModal('Al-Qur’an Digital STKIS', quranPanelMarkup());
+  openModal('Al-Qur’an Digital STKIS', quranPanelMarkup(false));
   const panel = $('#modal-root .quran-panel');
   bindQuranPanel(panel);
 }
@@ -2471,8 +2504,15 @@ function bindQuranPanel(container) {
     });
   });
   container.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-quran-tafsir]');
-    if (button) loadQuranTafsir(button.dataset.quranTafsir, container);
+    const tafsirButton = event.target.closest('[data-quran-tafsir]');
+    if (tafsirButton) {
+      loadQuranTafsir(tafsirButton.dataset.quranTafsir, container);
+      return;
+    }
+    const audioButton = event.target.closest('[data-quran-play-verse]');
+    if (audioButton) {
+      playQuranVerse(audioButton.dataset.quranPlayVerse, container.querySelector('[data-theme-qari]')?.value || persistentQari);
+    }
   });
   loadQuranSurahList(container);
 }
@@ -4877,6 +4917,7 @@ function showLanding() {
 document.addEventListener('DOMContentLoaded', () => {
   const installModal = $('#pwa-install-modal');
   installModal?.querySelector('[data-pwa-install]')?.addEventListener('click', installPwa);
+  installModal?.querySelectorAll('[data-pwa-dismiss]')?.forEach((button) => button.addEventListener('click', dismissInstallPrompt));
   installModal?.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') event.preventDefault();
   });

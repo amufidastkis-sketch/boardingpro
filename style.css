@@ -146,6 +146,46 @@
   gap: 12px;
 }
 
+.quran-controls.quran-nav-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 12px;
+}
+
+.quran-nav-grid label {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.quran-nav-grid input,
+.quran-nav-grid select {
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid #a7f3d0;
+  border-radius: 12px;
+  color: #0f172a;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.quran-nav-grid input:focus,
+.quran-nav-grid select:focus {
+  border-color: #10b981;
+  outline: 2px solid rgba(16, 185, 129, .2);
+  outline-offset: 1px;
+}
+
 .quran-select-grid label {
   display: block;
   min-width: 0;
@@ -206,24 +246,51 @@
 .quran-verses {
   display: grid;
   gap: 10px;
-  max-height: 65vh;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .quran-verse {
+  min-width: 0;
   padding: 14px;
   border: 1px solid #d1fae5;
   border-radius: 12px;
   background: #fcfffd;
 }
 
+.quran-verse-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
 .quran-arabic {
   margin: 12px 0;
   color: #064e3b;
-  font-family: serif;
-  font-size: clamp(23px, 5vw, 32px);
-  line-height: 1.9;
+  font-family: "Noto Naskh Arabic", "Traditional Arabic", serif;
+  font-size: clamp(30px, 5vw, 40px);
+  line-height: 2;
   overflow-wrap: anywhere;
+}
+
+.quran-verse-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #d1fae5;
+}
+
+.quran-verse-actions .btn {
+  min-height: 40px;
+}
+
+@media (min-width: 640px) {
+  .quran-controls.quran-nav-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .quran-translation,
