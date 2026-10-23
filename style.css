@@ -944,6 +944,85 @@ body {
   }
 }
 
+.prayer-location-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 9px;
+}
+
+.prayer-location-actions > *,
+.prayer-city-field,
+.prayer-city-field input {
+  width: 100%;
+  min-width: 0;
+}
+
+.prayer-city-field input {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cbded1;
+  border-radius: 9px;
+  color: #0f172a;
+  background: #fff;
+  font: inherit;
+  font-size: 10px;
+}
+
+.prayer-location-hint {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  color: #475569;
+  font-size: 10px;
+}
+
+.prayer-time.is-active {
+  border-color: #059669;
+  background: #d1fae5;
+  box-shadow: inset 0 0 0 1px #059669, 0 5px 14px #04785720;
+}
+
+.prayer-time.is-next {
+  border-color: #0d9488;
+  background: #ccfbf1;
+  box-shadow: inset 0 0 0 1px #0d9488, 0 5px 14px #0f766e20;
+}
+
+.prayer-time.is-active b::after,
+.prayer-time.is-next b::after {
+  display: block;
+  width: fit-content;
+  margin: 0 auto 2px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: #fff;
+  background: #047857;
+  font-size: 8px;
+  line-height: 1.2;
+}
+
+.prayer-time.is-active b::after {
+  content: "WAKTU AKTIF";
+}
+
+.prayer-time.is-next b::after {
+  content: "BERIKUTNYA";
+  background: #0f766e;
+}
+
+@media (min-width: 640px) {
+  .prayer-location-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .prayer-location-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 641px) and (max-width: 1023px) {
   .landing {
     padding: 36px 24px;
@@ -1531,5 +1610,140 @@ body {
 
   .murottal-controls {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 640px) {
+  .prayer-hero .prayer-location-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .prayer-hero .prayer-location-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.prayer-location-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.prayer-location-actions label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.prayer-location-actions select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 28px 8px 10px;
+  border: 1px solid #cbded1;
+  border-radius: 9px;
+  color: #0f172a;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.prayer-location-actions select:disabled {
+  color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.prayer-hero .prayer-times {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0 12px;
+  overflow: visible;
+}
+
+.prayer-schedule-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed #a7f3d0;
+  border-radius: 12px;
+  color: #64748b;
+  text-align: center;
+  font-size: 12px;
+}
+
+.quran-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #d1fae5;
+}
+
+.quran-tabs [role="tab"] {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid #cbded1;
+  border-radius: 9px;
+  color: #334155;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quran-tabs [role="tab"][aria-selected="true"] {
+  border-color: #047857;
+  color: #fff;
+  background: #047857;
+}
+
+.thematic-reference + .thematic-reference {
+  margin-top: 18px;
+}
+
+.thematic-reference > h3 {
+  margin: 8px 0;
+  color: #047857;
+  font-size: 13px;
+}
+
+.thematic-text-output {
+  max-height: 55vh;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+.thematic-playlist-card .actions-inline {
+  flex-wrap: wrap;
+}
+
+.thematic-load-error {
+  padding: 10px;
+  border-radius: 8px;
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+@media (min-width: 640px) {
+  .prayer-location-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prayer-hero .prayer-times {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .prayer-location-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

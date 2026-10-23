@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./assets/logo stkis.png">
-  <link rel="stylesheet" href="./style.css?v=6026">
+  <link rel="stylesheet" href="./style.css?v=6030">
   <title>BoardingPro STKIS - Sistem Informasi Smart Boarding</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -262,7 +262,7 @@
       <button class="landing-feature-card" type="button" data-landing-tool="quran"><span class="landing-feature-icon"><i class="fa-solid fa-book-quran" aria-hidden="true"></i></span><b>Al-Qur’an Digital</b><small>Terjemahan Kemenag & tafsir</small></button>
       <button class="landing-feature-card" type="button" data-landing-tool="murottal"><span class="landing-feature-icon"><i class="fa-solid fa-headphones" aria-hidden="true"></i></span><b>Murottal 30 Juz</b><small>Playlist penuh & tematik</small></button>
       <button class="landing-feature-card" type="button" data-landing-tool="prayer"><span class="landing-feature-icon"><i class="fa-solid fa-mosque" aria-hidden="true"></i></span><b>Waktu Shalat</b><small>Jadwal & pengingat Adzan</small></button>
-      <button class="landing-feature-card" type="button" data-landing-tool="qibla"><span class="landing-feature-icon"><i class="fa-solid fa-compass" aria-hidden="true"></i></span><b>Arah Kiblat</b><small>Kompas dari lokasi perangkat</small></button>
+      <button class="landing-feature-card" type="button" data-landing-tool="qibla"><span class="landing-feature-icon"><i class="fa-solid fa-compass" aria-hidden="true"></i></span><b>Arah Kiblat</b><small>Kompas dari lokasi manual</small></button>
     </div>
     <div id="landing-scholar-quotes"></div>
     <div class="landing-copy">
@@ -293,6 +293,16 @@
     </main>
   </div>
   <div id="modal-root"></div>
+  <section id="pwa-install-modal" class="pwa-install-backdrop" role="dialog" aria-modal="true" aria-labelledby="pwa-install-title" aria-describedby="pwa-install-status" hidden>
+    <div class="pwa-install-card">
+      <img src="./assets/logo%20stkis.png" alt="" class="pwa-install-logo">
+      <p class="pwa-install-kicker">BOARDINGPRO STKIS</p>
+      <h2 id="pwa-install-title">Wajib Install Aplikasi STKIS</h2>
+      <p id="pwa-install-status" class="pwa-install-status" aria-live="polite">Aplikasi BoardingPro STKIS belum terpasang di perangkat ini.</p>
+      <button type="button" class="btn btn-primary pwa-install-button" data-pwa-install>Install Sekarang</button>
+      <small>Instalasi membuat aplikasi lebih mudah diakses dari layar utama perangkat.</small>
+    </div>
+  </section>
   <aside id="persistent-murottal-player" class="persistent-murottal player-minimized" hidden aria-label="Pemutar Murottal Al-Qur'an"><div class="persistent-player-header"><img src="./assets/logo%20stkis.png" alt=""><div><b>Murottal 30 Juz</b><small data-player-track>Pilih qari untuk mulai</small></div><button type="button" class="icon-btn" data-player-hide aria-label="Luaskan kontrol pemutar">+</button></div><div class="persistent-player-controls"><label>Qari<select data-player-qari><optgroup label="Ziyadah & Muroja’ah"><option value="sudais">Syekh Abdurrahman Al-Sudais</option><option value="ossi">Syekh Abdul Rahman Al-Ossi</option><option value="islamSobhi">Syaikh Islam Sobhi</option><option value="maher">Syekh Maher Al-Muaiqly</option><option value="mishary">Syekh Mishary Rashid Alafasy</option><option value="mansour">Syaikh Mansour Al Salimi</option><option value="yasser">Syaikh Yasser Al Dosari</option><option value="saad">Syaikh Saad Al Ghamidi</option></optgroup><optgroup label="Keaslian Tajwid & Tahsin"><option value="husary">Syekh Mahmoud Khalil Al-Hussary</option><option value="minshawi">Syekh Muhammad Siddiq Al-Minshawi</option><option value="abdulbasit">Syekh Abdul Basit Abdul Samad</option></optgroup></select></label><label>Mulai dari Surah<select data-player-surah><option value="1">1 · Al-Fatihah</option></select></label><label>Ayat mulai<input data-player-start-ayah type="number" min="1" value="1" inputmode="numeric"></label></div><audio data-persistent-audio controls preload="none"></audio><div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-player-prev>Surah Sebelumnya</button><button type="button" class="btn btn-primary btn-small" data-player-start>Putar / Lanjutkan</button><button type="button" class="btn btn-ghost btn-small" data-player-next>Surah Berikutnya</button><button type="button" class="btn btn-ghost btn-small" data-player-stop>Matikan Audio</button></div><small class="metric-note">Playback persisten; ayat mulai pada rekaman surah panjang menggunakan estimasi durasi teks.</small></aside>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -312,7 +322,7 @@
   }
 </script>
   <script src="data.js?v=6025"></script>
-  <script src="app.js?v=6026"></script>
+  <script src="app.js?v=6031"></script>
 
 <!-- Modal Rincian Kehadiran Guru -->
 <div id="modal-detail-guru" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
@@ -352,6 +362,16 @@
 <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
 <style>
+  .pwa-install-backdrop{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:20px;background:rgba(2,24,20,.78);backdrop-filter:blur(7px)}
+  .pwa-install-backdrop[hidden]{display:none}
+  .pwa-install-card{width:min(100%,420px);padding:28px 24px;border:1px solid #a7f3d0;border-radius:22px;background:#fff;text-align:center;box-shadow:0 24px 70px rgba(2,44,34,.35)}
+  .pwa-install-logo{display:block;width:78px;height:78px;margin:0 auto 12px;object-fit:contain}
+  .pwa-install-kicker{margin:0 0 8px;color:#047857;font-size:11px;font-weight:800;letter-spacing:1.8px}
+  .pwa-install-card h2{margin:0;color:#064e3b;font-size:clamp(21px,5vw,26px);line-height:1.2}
+  .pwa-install-status{min-height:42px;margin:12px 0 18px;color:#475569;font-size:13px;line-height:1.55}
+  .pwa-install-button{width:100%;min-height:46px;font-size:14px}
+  .pwa-install-card>small{display:block;margin-top:12px;color:#64748b;font-size:11px;line-height:1.45}
+  body.pwa-install-required{overflow:hidden}
   #landing .landing-brand .brand-mark{width:64px;height:64px;flex:none;padding:7px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;box-shadow:0 7px 18px #0002}
   #landing .landing-brand .brand-mark img{display:block;width:100%;height:100%;object-fit:contain}
   .document-container.invoice-document{width:100%;max-width:210mm;min-height:0;padding:clamp(16px,4vw,40px);overflow:visible}
