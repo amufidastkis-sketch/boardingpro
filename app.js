@@ -1259,6 +1259,11 @@ let prayerIntervalId = null;
 let prayerLocationRequested = false;
 let prayerRequestId = 0;
 const prayerRegionCache = new Map();
+const prayerRegionRequests = new Map();
+const PRAYER_DATA_DB_NAME = 'boardingpro-prayer-data';
+const PRAYER_DATA_STORE_NAME = 'cache';
+const prayerDataMemoryCache = new Map();
+let prayerDataDbPromise = null;
 const localPrayerRegionFallback = {
   provinces: [
     ['11', 'Aceh'], ['12', 'Sumatera Utara'], ['13', 'Sumatera Barat'], ['14', 'Riau'],
@@ -1269,7 +1274,7 @@ const localPrayerRegionFallback = {
     ['61', 'Kalimantan Barat'], ['62', 'Kalimantan Tengah'], ['63', 'Kalimantan Selatan'], ['64', 'Kalimantan Timur'],
     ['65', 'Kalimantan Utara'], ['71', 'Sulawesi Utara'], ['72', 'Sulawesi Tengah'], ['73', 'Sulawesi Selatan'],
     ['74', 'Sulawesi Tenggara'], ['75', 'Gorontalo'], ['76', 'Sulawesi Barat'], ['81', 'Maluku'],
-    ['82', 'Maluku Utara'], ['91', 'Papua'], ['92', 'Papua Barat'], ['93', 'Papua Selatan'],
+    ['82', 'Maluku Utara'], ['91', 'Papua Barat'], ['92', 'Papua'], ['93', 'Papua Selatan'],
     ['94', 'Papua Tengah'], ['95', 'Papua Pegunungan'], ['96', 'Papua Barat Daya']
   ].map(([code, name]) => ({ code, name })),
   regencies: {
@@ -1289,7 +1294,110 @@ function localPrayerRegionOptions(endpoint) {
   if (endpoint === 'provinces.json') return localPrayerRegionFallback.provinces;
   const [, collection, parentCode] = endpoint.match(/^(regencies|districts|villages)\/([^/]+)\.json$/) || [];
   const key = collection === 'regencies' ? 'regencies' : collection === 'districts' ? 'districts' : 'villages';
-  return parentCode ? (localPrayerRegionFallback[key][parentCode] || []) : [];
+  const normalizedParent = String(parentCode || '').replace(/\D/g, '');
+  const localKey = Object.keys(localPrayerRegionFallback[key]).find((code) => code.replace(/\D/g, '') === normalizedParent);
+  return localKey ? localPrayerRegionFallback[key][localKey] : [];
+}
+function openPrayerDataDb() {
+  if (!('indexedDB' in window)) return Promise.resolve(null);
+  if (!prayerDataDbPromise) {
+    prayerDataDbPromise = new Promise((resolve) => {
+      let request;
+      try {
+        request = indexedDB.open(PRAYER_DATA_DB_NAME, 1);
+      } catch (error) {
+        console.warn('[BoardingPro] Penyimpanan wilayah offline tidak tersedia:', error);
+        resolve(null);
+        return;
+      }
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(PRAYER_DATA_STORE_NAME)) db.createObjectStore(PRAYER_DATA_STORE_NAME, { keyPath: 'key' });
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => {
+        console.warn('[BoardingPro] Database cache wilayah gagal dibuka:', request.error);
+        resolve(null);
+      };
+      request.onblocked = () => {
+        console.warn('[BoardingPro] Database cache wilayah sedang digunakan tab lain.');
+        resolve(null);
+      };
+    });
+  }
+  return prayerDataDbPromise;
+}
+async function getPrayerCachedData(key) {
+  if (prayerDataMemoryCache.has(key)) return prayerDataMemoryCache.get(key);
+  const db = await openPrayerDataDb();
+  if (db) {
+    try {
+      const value = await new Promise((resolve, reject) => {
+        const request = db.transaction(PRAYER_DATA_STORE_NAME, 'readonly').objectStore(PRAYER_DATA_STORE_NAME).get(key);
+        request.onsuccess = () => resolve(request.result?.value);
+        request.onerror = () => reject(request.error);
+      });
+      if (value !== undefined) {
+        prayerDataMemoryCache.set(key, value);
+        return value;
+      }
+    } catch (error) {
+      console.warn('[BoardingPro] Cache IndexedDB wilayah gagal dibaca:', error);
+    }
+  }
+  try {
+    const value = localStorage.getItem(`boardingpro-prayer-cache:${key}`);
+    if (value !== null) {
+      const parsed = JSON.parse(value);
+      prayerDataMemoryCache.set(key, parsed);
+      return parsed;
+    }
+  } catch (error) {
+    console.warn('[BoardingPro] Cache lokal wilayah gagal dibaca:', error);
+  }
+  return undefined;
+}
+async function setPrayerCachedData(key, value) {
+  prayerDataMemoryCache.set(key, value);
+  const db = await openPrayerDataDb();
+  if (db) {
+    try {
+      await new Promise((resolve, reject) => {
+        const request = db.transaction(PRAYER_DATA_STORE_NAME, 'readwrite').objectStore(PRAYER_DATA_STORE_NAME).put({ key, value, cachedAt: Date.now() });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+      return;
+    } catch (error) {
+      console.warn('[BoardingPro] Data tidak dapat ditulis ke IndexedDB wilayah:', error);
+    }
+  }
+  try {
+    localStorage.setItem(`boardingpro-prayer-cache:${key}`, JSON.stringify(value));
+  } catch (error) {
+    console.warn('[BoardingPro] Cache lokal wilayah penuh atau tidak tersedia:', error);
+  }
+}
+function delay(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+async function fetchJsonWithRetry(url, attempts = 2, timeout = 7000) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timeoutId = controller ? window.setTimeout(() => controller.abort(), timeout) : null;
+    try {
+      const response = await fetch(url, { signal: controller?.signal, cache: 'no-cache' });
+      if (!response.ok) throw new Error(`Layanan merespons ${response.status}.`);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) await delay(350 * (attempt + 1));
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    }
+  }
+  throw lastError || new Error('Permintaan data gagal.');
 }
 let currentAdhanPrayer = '';
 let prayerNotificationPermission = typeof Notification === 'undefined' ? 'denied' : Notification.permission;
@@ -1520,7 +1628,7 @@ function renderPrayerWidgets() {
       date: item.date <= now ? new Date(item.date.getTime() + 86400000) : item.date
     })).sort((a, b) => a.date - b.date);
     const nextPrayer = candidates[0];
-    if (status) status.textContent = `${prayerLocation?.label || 'Lokasi belum dipilih'} · jadwal ${prayerTimings.date || now.toLocaleDateString('id-ID')}`;
+    if (status) status.textContent = `${prayerLocation?.label || 'Lokasi belum dipilih'} · jadwal ${prayerTimings.date || now.toLocaleDateString('id-ID')}${prayerTimings.source ? ` · sumber ${prayerTimings.source}` : ''}`;
     document.querySelectorAll('[data-prayer-location]').forEach((element) => { element.textContent = prayerLocation?.label || 'Lokasi belum dipilih'; });
     if (times) {
       const fajr = prayerTimings.Fajr || '--:--';
@@ -1663,34 +1771,88 @@ function stopAdhanAudio() {
 
 async function loadPrayerRegionOptions(select, endpoint, placeholder) {
   if (!select) return [];
-  select.disabled = true;
-  select.innerHTML = `<option value="">Memuat ${escapeHtml(placeholder.toLowerCase())}…</option>`;
-  try {
-    let regions = prayerRegionCache.get(endpoint);
-    if (!regions) {
-      const response = await fetch(`https://wilayah.id/api/${endpoint}`);
-      if (!response.ok) throw new Error(`Layanan data wilayah merespons ${response.status}.`);
-      const result = await response.json();
-      if (!Array.isArray(result.data)) throw new Error('Format data wilayah tidak dikenali.');
-      regions = result.data;
-      prayerRegionCache.set(endpoint, regions);
-    }
+  const setOptions = (regions) => {
+    const selectedValue = select.value;
     select.innerHTML = `<option value="">Pilih ${escapeHtml(placeholder.toLowerCase())}</option>${regions.map((region) => `<option value="${escapeHtml(region.code)}">${escapeHtml(region.name)}</option>`).join('')}`;
     select.disabled = false;
+    const selectedRegion = regions.find((region) => region.code === selectedValue
+      || region.code.replace(/\D/g, '') === selectedValue.replace(/\D/g, ''));
+    if (selectedRegion) select.value = selectedRegion.code;
+  };
+  select.disabled = false;
+  select.innerHTML = `<option value="">Memuat ${escapeHtml(placeholder.toLowerCase())}…</option>`;
+  let cachedRegions = prayerRegionCache.get(endpoint);
+  if (!cachedRegions) {
+    const cached = await getPrayerCachedData(`region:${endpoint}`);
+    if (Array.isArray(cached)) cachedRegions = cached;
+  }
+  const fallbackRegions = localPrayerRegionOptions(endpoint);
+  const immediateRegions = cachedRegions?.length ? cachedRegions : fallbackRegions;
+  if (immediateRegions.length) {
+    setOptions(immediateRegions);
+  } else {
+    select.innerHTML = `<option value="">${escapeHtml(placeholder)} sedang dimuat…</option>`;
+  }
+  const fetchFreshRegions = async () => {
+    const existingRequest = prayerRegionRequests.get(endpoint);
+    if (existingRequest) return existingRequest;
+    const request = (async () => {
+      const [, collection, rawParentCode] = endpoint.match(/^(regencies|districts|villages)\/([^/]+)\.json$/) || [];
+      const emsifaEndpoint = collection ? `${collection}/${rawParentCode.replace(/\./g, '')}.json` : 'provinces.json';
+      const endpoints = [
+        `https://wilayah.id/api/${endpoint}`,
+        `https://www.emsifa.com/api-wilayah-indonesia/api/${emsifaEndpoint}`
+      ];
+      let lastError;
+      for (const url of endpoints) {
+        try {
+          const result = await fetchJsonWithRetry(url, 2);
+          const rows = Array.isArray(result) ? result : result?.data;
+          if (!Array.isArray(rows)) throw new Error('Format data wilayah tidak dikenali.');
+          const regions = rows.map((region) => ({
+            code: String(region.code ?? region.id ?? ''),
+            name: String(region.name ?? '').trim()
+          })).filter((region) => region.code && region.name);
+          if (!regions.length) throw new Error('Layanan mengembalikan daftar wilayah kosong.');
+          prayerRegionCache.set(endpoint, regions);
+          await setPrayerCachedData(`region:${endpoint}`, regions);
+          return regions;
+        } catch (error) {
+          lastError = error;
+          console.warn(`[BoardingPro] Sumber data wilayah gagal (${url}); mencoba sumber berikutnya:`, error);
+        }
+      }
+      throw lastError || new Error('Semua sumber data wilayah tidak tersedia.');
+    })();
+    prayerRegionRequests.set(endpoint, request);
+    try {
+      return await request;
+    } finally {
+      prayerRegionRequests.delete(endpoint);
+    }
+  };
+  if (cachedRegions?.length) {
+    prayerRegionCache.set(endpoint, cachedRegions);
+    fetchFreshRegions().then((regions) => {
+      if (!select.isConnected) return;
+      setOptions(regions);
+    }).catch((error) => console.warn(`[BoardingPro] Gagal memperbarui cache ${placeholder}; data tersimpan tetap digunakan:`, error));
+    return cachedRegions;
+  }
+  try {
+    const regions = await fetchFreshRegions();
+    setOptions(regions);
     return regions;
   } catch (error) {
-    const fallbackRegions = localPrayerRegionOptions(endpoint);
     if (fallbackRegions.length) {
-      console.warn(`[BoardingPro] Memakai data lokal untuk ${placeholder}; layanan wilayah tidak tersedia:`, error);
-      prayerRegionCache.set(endpoint, fallbackRegions);
-      select.innerHTML = `<option value="">Pilih ${escapeHtml(placeholder.toLowerCase())}</option>${fallbackRegions.map((region) => `<option value="${escapeHtml(region.code)}">${escapeHtml(region.name)}</option>`).join('')}`;
-      select.disabled = false;
+      console.warn(`[BoardingPro] Memakai data wilayah tersimpan lokal untuk ${placeholder}; sumber daring gagal:`, error);
+      setOptions(fallbackRegions);
       document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Layanan wilayah tidak tersedia; daftar ${placeholder.toLowerCase()} lokal dapat digunakan.`; });
       return fallbackRegions;
     }
     console.error('[BoardingPro] Data wilayah online dan fallback lokal tidak tersedia:', error);
-    select.innerHTML = `<option value="">${escapeHtml(placeholder)} tidak tersedia di fallback lokal</option>`;
     select.disabled = false;
+    select.innerHTML = `<option value="">${escapeHtml(placeholder)} belum tersimpan; sambungkan internet untuk memuat data</option>`;
     document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Daftar ${placeholder.toLowerCase()} lokal untuk wilayah ini belum tersedia. Periksa koneksi internet untuk memuat data lengkap.`; });
     return [];
   }
@@ -1707,6 +1869,78 @@ function prayerRegionLabel(widget) {
     selectedName('[data-prayer-district]') && `Kec. ${selectedName('[data-prayer-district]')}`,
     selectedName('[data-prayer-village]') && `Desa/Kel. ${selectedName('[data-prayer-village]')}`
   ].filter(Boolean).join(', ');
+}
+
+function prayerDateIso(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+function normalizePrayerAreaName(value) {
+  return String(value || '').toLocaleLowerCase('id-ID')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/^(?:kabupaten(?: administrasi)?|kab\.?|kota(?: administrasi| adm\.?)?|provinsi)\s*/i, '')
+    .replace(/\bdaerah khusus\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+function prayerAreaType(value) {
+  const name = String(value || '').trim().toLocaleLowerCase('id-ID');
+  if (/^(kabupaten|kab\.|kab\b)/.test(name)) return 'kabupaten';
+  if (/^kota/.test(name)) return 'kota';
+  return '';
+}
+async function findMyQuranCityId(city) {
+  const cacheKey = 'myquran:city-list';
+  let cityList = await getPrayerCachedData(cacheKey);
+  try {
+    const result = await fetchJsonWithRetry('https://api.myquran.com/v2/sholat/kota/semua', 2);
+    if (result.status !== true || !Array.isArray(result.data)) throw new Error('Daftar lokasi MyQuran tidak dikenali.');
+    cityList = result.data;
+    await setPrayerCachedData(cacheKey, cityList);
+  } catch (error) {
+    if (!Array.isArray(cityList)) throw error;
+    console.warn('[BoardingPro] Menggunakan daftar kota MyQuran tersimpan:', error);
+  }
+  const wantedName = normalizePrayerAreaName(city);
+  const wantedType = prayerAreaType(city);
+  const match = cityList.find((entry) => normalizePrayerAreaName(entry.lokasi) === wantedName
+    && (!wantedType || prayerAreaType(entry.lokasi) === wantedType));
+  if (!match?.id) throw new Error(`Kabupaten/Kota "${city}" tidak ditemukan pada daftar jadwal MyQuran.`);
+  return String(match.id);
+}
+function normalizeMyQuranTimings(schedule) {
+  if (!schedule?.subuh || !schedule?.terbit || !schedule?.dzuhur || !schedule?.ashar || !schedule?.maghrib || !schedule?.isya) {
+    throw new Error('Jadwal MyQuran belum memiliki waktu sholat lengkap.');
+  }
+  return {
+    Imsak: schedule.imsak || shiftPrayerTime(schedule.subuh, -10),
+    Fajr: schedule.subuh,
+    Sunrise: schedule.terbit,
+    Dhuhr: schedule.dzuhur,
+    Asr: schedule.ashar,
+    Maghrib: schedule.maghrib,
+    Isha: schedule.isya,
+    date: schedule.tanggal || schedule.date || '',
+    source: 'MyQuran'
+  };
+}
+async function fetchMyQuranTimings(cityId, date) {
+  const [year, month, day] = date.split('-');
+  const result = await fetchJsonWithRetry(`https://api.myquran.com/v2/sholat/jadwal/${encodeURIComponent(cityId)}/${year}/${month}/${day}`, 2);
+  if (result.status !== true || !result.data?.jadwal) throw new Error('Jadwal MyQuran untuk tanggal ini tidak tersedia.');
+  return normalizeMyQuranTimings(result.data.jadwal);
+}
+async function fetchKemenagCoordinateTimings(date, coordinates) {
+  if (!coordinates) throw new Error('Koordinat kabupaten/kota tidak ditemukan untuk kalkulasi jadwal.');
+  const [year, month, day] = date.split('-');
+  const responseDate = `${day}-${month}-${year}`;
+  const url = `https://api.aladhan.com/v1/timings/${responseDate}?latitude=${encodeURIComponent(coordinates.latitude)}&longitude=${encodeURIComponent(coordinates.longitude)}&method=20`;
+  const result = await fetchJsonWithRetry(url, 2);
+  if (result.code !== 200 || !result.data?.timings) throw new Error('Adhan Engine tidak mengembalikan jadwal Kemenag.');
+  return {
+    ...result.data.timings,
+    date: result.data.date?.readable || date,
+    source: 'Adhan Engine · Kemenag RI (metode 20)',
+    ...coordinates
+  };
 }
 
 function updatePrayerRegionLabel(widget) {
@@ -1739,14 +1973,12 @@ async function restorePrayerRegionSelection(widget) {
 
 async function findManualCoordinates(city, provinceName) {
   const searchName = city.replace(/^(kabupaten|kota(?: administrasi)?)\s+/i, '').trim();
-  const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchName)}&count=10&language=id&format=json`);
-  if (!response.ok) throw new Error(`Layanan koordinat wilayah merespons ${response.status}.`);
-  const result = await response.json();
+  const result = await fetchJsonWithRetry(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchName)}&count=10&language=id&format=json`, 2);
   const normalize = (value) => String(value || '').toLocaleLowerCase('id-ID').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^(kabupaten|kota(?: administrasi)?|provinsi)\s+/i, '').trim();
   const candidates = (result.results || []).filter((place) => place.country_code === 'ID');
   const exact = candidates.filter((place) => normalize(place.name) === normalize(city) || normalize(place.name) === normalize(searchName));
   const inProvince = exact.filter((place) => normalize(place.admin1) === normalize(provinceName));
-  const match = inProvince[0] || exact[0] || candidates.find((place) => normalize(place.admin1) === normalize(provinceName));
+  const match = inProvince[0] || exact[0];
   if (!match || !Number.isFinite(Number(match.latitude)) || !Number.isFinite(Number(match.longitude))) return null;
   return { latitude: Number(match.latitude), longitude: Number(match.longitude) };
 }
@@ -1758,34 +1990,51 @@ async function loadPrayerTimings(city = prayerLocation?.city || '', label = pray
   prayerLocation = { ...(prayerLocation || {}), city, label };
   prayerTimings = null;
   const selectedProvince = prayerLocation.regionNames?.province || '';
-  findManualCoordinates(city, selectedProvince).then((coordinates) => {
+  const coordinatesPromise = findManualCoordinates(city, selectedProvince).then((coordinates) => {
     if (requestId !== prayerRequestId || !coordinates) return;
     Object.assign(prayerLocation, coordinates);
     renderPrayerWidgets();
   }).catch((error) => {
     console.warn('[BoardingPro] Koordinat wilayah manual tidak tersedia untuk kompas:', error);
+    return null;
   });
+  const prayerDate = prayerDateIso();
+  const scheduleCacheKey = `schedule:${prayerAreaType(city)}:${normalizePrayerAreaName(city)}:${prayerDate}`;
   document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Memuat jadwal sholat untuk ${label || city}…`; });
   document.querySelectorAll('[data-prayer-location]').forEach((element) => { element.textContent = label || city; });
   document.querySelectorAll('[data-prayer-times]').forEach((element) => { element.innerHTML = '<p class="prayer-schedule-empty">Memuat jadwal sholat hari ini…</p>'; });
   try {
-    const cityQuery = city.replace(/^(kabupaten|kota(?: administrasi)?)\s+/i, '').trim();
-    const today = new Date();
-    const prayerDate = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`;
-    const response = await fetch(`https://api.aladhan.com/v1/timingsByCity/${prayerDate}?city=${encodeURIComponent(cityQuery)}&country=Indonesia&method=20`);
-    if (!response.ok) throw new Error(`Layanan jadwal sholat merespons ${response.status}.`);
-    const result = await response.json();
     if (requestId !== prayerRequestId) return;
-    if (result.code !== 200 || !result.data?.timings) throw new Error('Jadwal untuk kabupaten/kota yang dipilih tidak tersedia.');
-    prayerTimings = { ...result.data.timings, date: result.data.date?.readable || '' };
+    try {
+      const cityId = await findMyQuranCityId(city);
+      if (requestId !== prayerRequestId) return;
+      prayerTimings = await fetchMyQuranTimings(cityId, prayerDate);
+      prayerTimings.cityId = cityId;
+    } catch (error) {
+      console.warn('[BoardingPro] Jadwal MyQuran gagal; mencoba koordinat Kemenag:', error);
+      if (requestId !== prayerRequestId) return;
+      const coordinates = await coordinatesPromise;
+      prayerTimings = await fetchKemenagCoordinateTimings(prayerDate, coordinates);
+    }
+    if (requestId !== prayerRequestId) return;
+    await setPrayerCachedData(scheduleCacheKey, prayerTimings);
     prayerTimingDate = new Date().toDateString();
     renderPrayerWidgets();
   } catch (error) {
     if (requestId !== prayerRequestId) return;
-    prayerTimings = null;
-    console.error('[BoardingPro] Gagal memuat jadwal sholat:', error);
-    document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Jadwal ${label || city} tidak dapat dimuat: ${error.message}`; });
-    document.querySelectorAll('[data-prayer-times]').forEach((element) => { element.innerHTML = '<p class="prayer-schedule-empty">Jadwal tidak tersedia. Pilih ulang kabupaten/kota atau coba beberapa saat lagi.</p>'; });
+    const cachedSchedule = await getPrayerCachedData(scheduleCacheKey);
+    if (cachedSchedule && requestId === prayerRequestId) {
+      prayerTimings = cachedSchedule;
+      prayerTimingDate = new Date().toDateString();
+      renderPrayerWidgets();
+      document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `${label || city} · jadwal tersimpan ${cachedSchedule.date || prayerDate} · koneksi API tidak tersedia`; });
+      console.warn('[BoardingPro] Menampilkan jadwal sholat hari ini dari cache lokal:', error);
+    } else {
+      prayerTimings = null;
+      console.error('[BoardingPro] Gagal memuat jadwal sholat dari MyQuran maupun kalkulasi koordinat Kemenag:', error);
+      document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Jadwal ${label || city} tidak dapat dimuat: ${error.message}`; });
+      document.querySelectorAll('[data-prayer-times]').forEach((element) => { element.innerHTML = '<p class="prayer-schedule-empty">Jadwal resmi dan cache lokal tidak tersedia. Periksa koneksi lalu pilih ulang kabupaten/kota.</p>'; });
+    }
   } finally {
     if (requestId === prayerRequestId) prayerLocationRequested = false;
   }
