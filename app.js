@@ -537,6 +537,10 @@ const documentLayoutStyles = `
   .document-container{width:794px!important;min-height:1123px!important;padding:30px!important;margin:0 auto!important;background:#fff!important;color:#333!important;box-shadow:none!important;display:block!important;visibility:visible!important;page-break-after:avoid!important;break-after:avoid-page!important}
   .kop-container,.kop-surat{display:grid;grid-template-columns:110px minmax(0,1fr);align-items:center;width:100%;gap:18px;border-bottom:5px double #333!important;padding:0 0 14px!important;margin:0 0 22px!important;text-align:left}
   .kop-container .logo-wrapper,.kop-surat .logo-wrapper{width:110px;height:110px}
+  .permit-letter .kop-surat{display:grid!important;grid-template-columns:100px minmax(0,1fr)!important;align-items:center!important;gap:16px!important;border-bottom:5px double #0f172a!important;padding:0 0 12px!important;margin:0 0 20px!important}
+  .permit-letter .kop-surat .logo-wrapper{width:100px!important;height:100px!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+  .permit-letter .kop-surat .logo-wrapper img{border-radius:0!important}
+  .permit-letter .kop-surat .kop-text,.permit-letter .kop-surat .kop-text *{text-align:center!important}
   .kop-text{min-width:0;color:#333;text-align:left}.kop-text b,.kop-text h1,.kop-text p,.kop-text small{text-align:left}.kop-text p,.kop-text small{color:#333!important}
   .document-container table{width:100%;border-collapse:collapse;table-layout:fixed;margin:16px 0;page-break-inside:avoid;break-inside:avoid}
   .document-container th,.document-container td{border:1px solid #ddd!important;padding:9px 10px!important;color:#333!important;vertical-align:top;overflow-wrap:break-word}
@@ -545,7 +549,7 @@ const documentLayoutStyles = `
   .document-container .currency,.document-container td.currency{text-align:right!important;white-space:nowrap}
   .document-container .signature-grid,.document-container .discipline-signatures{display:grid!important;grid-template-columns:1fr 1fr!important;gap:24px!important;page-break-inside:avoid;break-inside:avoid;page-break-after:avoid;break-after:avoid-page}
   .document-action-buttons,.document-actions{display:none!important}
-  @media print{@page{size:A4 portrait;margin:10mm}.document-container{width:190mm!important;max-width:190mm!important;min-height:277mm!important;padding:0!important;margin:0 auto!important;overflow:visible!important;page-break-after:avoid!important;break-after:avoid-page!important;page-break-inside:avoid}.kop-container,.kop-surat{grid-template-columns:100px minmax(0,1fr)!important;gap:14px!important}.kop-container .logo-wrapper,.kop-surat .logo-wrapper{width:100px;height:100px}.invoice-table-wrap{overflow:visible!important}.invoice-document .clean-table{min-width:0!important}.invoice-document .signature-grid{grid-template-columns:1fr 1fr!important}.signature-card img{width:150px!important;max-width:150px!important;height:auto!important}}
+  @media print{@page{size:A4 portrait;margin:10mm}.document-container{width:190mm!important;max-width:190mm!important;min-height:277mm!important;padding:0!important;margin:0 auto!important;overflow:visible!important;page-break-after:avoid!important;break-after:avoid-page!important;page-break-inside:avoid}.kop-container,.kop-surat{grid-template-columns:100px minmax(0,1fr)!important;gap:14px!important}.kop-container .logo-wrapper,.kop-surat .logo-wrapper{width:100px;height:100px}.permit-letter .kop-surat .logo-wrapper{padding:0!important;background:transparent!important;box-shadow:none!important}.invoice-table-wrap{overflow:visible!important}.invoice-document .clean-table{min-width:0!important}.invoice-document .signature-grid{grid-template-columns:1fr 1fr!important}.signature-card img{width:150px!important;max-width:150px!important;height:auto!important}}
 `;
 function normalizeDocumentVisibility(root) {
   if (!root) throw new Error('Konten dokumen tidak tersedia.');
@@ -750,6 +754,14 @@ function isQuotaDeducted(permit) {
   return permit?.is_quota_deducted !== false
     && !quotaFreeCategories.includes(category)
     && ['Keluar Kompleks', 'Keluar Mandiri'].includes(category);
+}
+function permitEndDate(permit, approvedDays = permit?.approvedDays || permit?.requestedDays || 1) {
+  const end = new Date(`${permit?.date || today}T00:00:00`);
+  const hasExitTimes = !isHomeLeavePermit(permit) && permit?.departureTime && permit?.returnTime;
+  const crossesMidnight = hasExitTimes && permit.returnTime < permit.departureTime;
+  const days = hasExitTimes ? (crossesMidnight ? 2 : 1) : Math.max(1, Math.trunc(Number(approvedDays) || 1));
+  end.setDate(end.getDate() + days - 1);
+  return Number.isNaN(end.getTime()) ? null : end.toISOString().slice(0, 10);
 }
 function resetWeeklyExitQuota(referenceDate = today) {
   const weekStart = startOfWeek(referenceDate);
@@ -3158,7 +3170,10 @@ function permitTable(actions = false) {
     const letter = approved ? `<button type="button" class="btn btn-small btn-ghost" data-permit-letter="${permit.id}">Lihat Surat</button>` : '';
     const quotaNote = isQuotaDeducted(permit) ? `Kuota minggu ini: ${weeklyQuotaUsed(permit.studentId, permit.date)}/${QUOTA_LIMIT}` : 'Tidak memotong kuota';
     const approval = actions && canApprove ? `<td>${permit.status === 'Pending' ? `<button type="button" class="icon-btn approve" title="${escapeHtml(quotaNote)}" data-permit="${permit.id}" data-status="Approved">${icon('check', 16)}</button><button type="button" class="icon-btn reject" data-permit="${permit.id}" data-status="Rejected">${icon('x', 16)}</button>` : letter}</td>` : `<td>${letter}</td>`;
-    return `<tr><td><div class="person"><span class="avatar">${initials(studentById(permit.studentId).name)}</span><b>${studentById(permit.studentId).name}</b></div></td><td>${escapeHtml(permit.kategori_izin || permit.type)}</td><td>${formatDate(permit.date)}${permit.endDate ? ` s.d. ${formatDate(permit.endDate)}` : ''}</td><td>${escapeHtml(permit.reason)}<small>${escapeHtml(permit.rejectionReason || quotaNote)}</small></td><td>${statusBadge(permit.status)}<small>${permit.approvedDays || permit.requestedDays || 1} hari</small></td>${approval}</tr>`;
+    const durationDetails = isHomeLeavePermit(permit)
+      ? `${permit.approvedDays || permit.requestedDays || 1} hari`
+      : `Keluar ${permit.departureTime || '—'} · Kembali ${permit.returnTime || '—'}`;
+    return `<tr><td><div class="person"><span class="avatar">${initials(studentById(permit.studentId).name)}</span><b>${studentById(permit.studentId).name}</b></div></td><td>${escapeHtml(permit.kategori_izin || permit.type)}</td><td>${formatDate(permit.date)}${permit.endDate && permit.endDate !== permit.date ? ` s.d. ${formatDate(permit.endDate)}` : ''}</td><td>${escapeHtml(permit.reason)}<small>${escapeHtml(permit.rejectionReason || quotaNote)}</small></td><td>${statusBadge(permit.status)}<small>${escapeHtml(durationDetails)}</small></td>${approval}</tr>`;
   }).join('');
   return table(['Santri', 'Jenis', 'Tanggal', 'Alasan', 'Status', 'Surat / Aksi'], rows);
 }
@@ -3860,7 +3875,7 @@ function exportSemesterReport(type) {
 function permitForm() {
   const student = currentStudent();
   if (effectiveRole() !== 'parent') return section('Perizinan Santri', 'Pengajuan izin dilakukan oleh Orang Tua / Wali.', '<div class="notice">Akun siswa hanya dapat melihat status izin melalui portalnya. Silakan minta Orang Tua/Wali mengajukan izin.</div>');
-  return section('Ajukan Perizinan Santri', "Pengajuan maksimal 3 hari; Admin/Mahad dapat menyesuaikan durasi saat verifikasi.", `<form id="permit-form" class="form-grid"><label>Santri<input value="${escapeHtml(student.name)}  -  ${escapeHtml(student.className)}" disabled><input type="hidden" name="studentId" value="${escapeHtml(student.id)}"></label><label>Jenis Izin<select name="type"><option value="Keluar Kompleks">Izin Keluar Kompleks</option><option value="Pulang / Mudik">Izin Pulang / Mudik</option></select></label><label>Tanggal Mulai<input name="date" type="date" value="${today}" required></label><label>Durasi Diajukan (hari)<input name="requestedDays" type="number" min="1" max="3" value="1" required></label><label class="full">Alasan<textarea name="reason" required placeholder="Contoh: Keperluan keluarga..."></textarea></label><div class="full"><button class="btn btn-primary" type="submit">${icon('send')} Kirim Pengajuan</button></div></form>${section('Riwayat Izin Anak', 'Surat digital tersedia setelah disetujui.', permitTable(false))}`);
+  return section('Ajukan Perizinan Santri', 'Izin pulang dapat diajukan sesuai kebutuhan; izin keluar kompleks menggunakan estimasi waktu kembali.', `<form id="permit-form" class="form-grid"><label>Santri<input value="${escapeHtml(student.name)}  -  ${escapeHtml(student.className)}" disabled><input type="hidden" name="studentId" value="${escapeHtml(student.id)}"></label><label>Jenis Izin<select name="type"><option value="Keluar Kompleks">Izin Keluar Kompleks</option><option value="Pulang / Mudik">Izin Pulang / Mudik</option></select></label><label>Tanggal Mulai<input name="date" type="date" value="${today}" required></label><label data-permit-days-field hidden>Durasi Izin Pulang (hari)<input name="requestedDays" type="number" min="1" step="1" value="1" disabled></label><label data-permit-times-field>Jam Keluar<input name="departureTime" type="time" required></label><label data-permit-times-field>Rencana Jam Kembali<input name="returnTime" type="time" required></label><label class="full">Alasan<textarea name="reason" required placeholder="Contoh: Keperluan keluarga..."></textarea></label><div class="full"><button class="btn btn-primary" type="submit">${icon('send')} Kirim Pengajuan</button></div></form>${section('Riwayat Izin Anak', 'Surat digital tersedia setelah disetujui.', permitTable(false))}`);
 }
 function paymentForm() {
   const categories = [financeCategories.spp, financeCategories.foundation, ...financeCategories.maahadNonSpp, financeCategories.pocketMoney, financeCategories.custom];
@@ -4109,6 +4124,11 @@ function bindActions() {
     if (!permit) return;
     if (button.dataset.status === 'Approved' && !canApprovePermit(permit)) { alert('Kuota Keluar Mandiri Minggu Ini Habis'); return; }
     const finish = (rejectionReason, approvedDays) => {
+      const endDate = button.dataset.status === 'Approved' ? permitEndDate(permit, approvedDays) : null;
+      if (button.dataset.status === 'Approved' && !endDate) {
+        alert('Tanggal akhir izin tidak valid. Periksa durasi izin yang disetujui.');
+        return;
+      }
       permit.status = button.dataset.status;
       permit.approvedBy = roles[effectiveRole()]?.label || roles.mahad.label;
       permit.approvedAt = new Date().toISOString();
@@ -4117,9 +4137,7 @@ function bindActions() {
       if (permit.status === 'Approved') {
         permit.approvedDays = approvedDays;
         permit.weekly_quota_used = weeklyQuotaUsed(permit.studentId, permit.date) + (isQuotaDeducted(permit) ? 1 : 0);
-        const end = new Date(`${permit.date}T00:00:00`);
-        end.setDate(end.getDate() + approvedDays - 1);
-        permit.endDate = end.toISOString().slice(0, 10);
+        permit.endDate = endDate;
         permit.letterNumber = permit.letterNumber || generatePermitNumber(permit.id);
         permit.verifiedAt = permit.approvedAt;
       }
@@ -4129,7 +4147,18 @@ function bindActions() {
     if (permit.status === 'Pending' && button.dataset.status === 'Rejected') {
       openInputModal('Tolak Pengajuan Izin', 'Alasan penolakan', '', (reason) => finish(reason, 0), { required: false });
     } else if (permit.status === 'Pending' && button.dataset.status === 'Approved') {
-      openInputModal('Durasi Izin', 'Durasi izin (hari)', permit.requestedDays || 1, (value) => finish('', Math.min(3, Math.max(1, Number(value) || 1))), { type: 'number' });
+      if (isHomeLeavePermit(permit)) {
+        openInputModal('Durasi Izin Pulang', 'Durasi izin pulang (hari)', permit.requestedDays || 1, (value) => {
+          const days = Number(value);
+          if (!Number.isSafeInteger(days) || days < 1 || !permitEndDate(permit, days)) {
+            alert('Durasi harus berupa jumlah hari bulat yang valid dan lebih dari 0.');
+            return;
+          }
+          finish('', days);
+        }, { type: 'number' });
+      } else {
+        finish('', 1);
+      }
     } else {
       finish('', permit.requestedDays || 1);
     }
@@ -4362,30 +4391,62 @@ function bindActions() {
     }
   }));
   const permit = $('#permit-form');
-  if (permit) permit.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const form = new FormData(permit);
-    const studentId = sanitizeInput(form.get('studentId'));
-    const type = sanitizeInput(form.get('type'));
-    const date = sanitizeInput(form.get('date'));
-    if (isQuotaDeducted({ type }) && weeklyQuotaUsed(studentId, date) >= QUOTA_LIMIT) {
-      alert('Kuota Keluar Kompleks minggu ini sudah mencapai 3 kali.');
-      return;
-    }
-    const requestedDays = Math.min(3, Math.max(1, Number(form.get('requestedDays') || 1)));
-    const submittedAt = new Date().toISOString();
-    const permitId = `IZN-${Date.now()}`;
-    const parent = currentAccount();
-    state.permits.unshift({
-      id: permitId, studentId, type, reason: sanitizeInput(form.get('reason')), date, requestedDays,
-      is_quota_deducted: isQuotaDeducted({ type }), approvedDays: null, endDate: null, status: 'Pending',
-      approvedBy: null, approvedAt: null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali', applicantSignedAt: submittedAt,
-      applicantQrPayload: { documentId: permitId, documentType: 'permit', role: 'parent' }, checkout: null, checkin: null
+  if (permit) {
+    const permitType = permit.querySelector('[name="type"]');
+    const daysField = permit.querySelector('[data-permit-days-field]');
+    const requestedDaysInput = permit.querySelector('[name="requestedDays"]');
+    const timesFields = Array.from(permit.querySelectorAll('[data-permit-times-field]'));
+    const timeInputs = timesFields.map((field) => field.querySelector('input'));
+    const updatePermitFields = () => {
+      const homeLeave = isHomeLeavePermit({ type: permitType.value });
+      daysField.hidden = !homeLeave;
+      requestedDaysInput.disabled = !homeLeave;
+      requestedDaysInput.required = homeLeave;
+      timesFields.forEach((field) => { field.hidden = homeLeave; });
+      timeInputs.forEach((input) => {
+        input.disabled = homeLeave;
+        input.required = !homeLeave;
+      });
+    };
+    permitType.addEventListener('change', updatePermitFields);
+    updatePermitFields();
+    permit.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const form = new FormData(permit);
+      const studentId = sanitizeInput(form.get('studentId'));
+      const type = sanitizeInput(form.get('type'));
+      const date = sanitizeInput(form.get('date'));
+      const homeLeave = isHomeLeavePermit({ type });
+      if (isQuotaDeducted({ type }) && weeklyQuotaUsed(studentId, date) >= QUOTA_LIMIT) {
+        alert('Kuota Keluar Kompleks minggu ini sudah mencapai 3 kali.');
+        return;
+      }
+      const requestedDays = homeLeave ? Number(form.get('requestedDays')) : 1;
+      if (homeLeave && (!Number.isSafeInteger(requestedDays) || requestedDays < 1 || !permitEndDate({ date, type }, requestedDays))) {
+        alert('Durasi izin pulang harus berupa jumlah hari bulat yang valid dan lebih dari 0.');
+        return;
+      }
+      const departureTime = homeLeave ? '' : sanitizeInput(form.get('departureTime'));
+      const returnTime = homeLeave ? '' : sanitizeInput(form.get('returnTime'));
+      if (!homeLeave && (!departureTime || !returnTime)) {
+        alert('Jam keluar dan rencana jam kembali wajib diisi.');
+        return;
+      }
+      const submittedAt = new Date().toISOString();
+      const permitId = `IZN-${Date.now()}`;
+      const parent = currentAccount();
+      state.permits.unshift({
+        id: permitId, studentId, type, reason: sanitizeInput(form.get('reason')), date,
+        requestedDays: homeLeave ? requestedDays : 1, departureTime, returnTime,
+        is_quota_deducted: isQuotaDeducted({ type }), approvedDays: null, endDate: null, status: 'Pending',
+        approvedBy: null, approvedAt: null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali', applicantSignedAt: submittedAt,
+        applicantQrPayload: { documentId: permitId, documentType: 'permit', role: 'parent' }, checkout: null, checkin: null
+      });
+      persist();
+      alert('Pengajuan izin berhasil dikirim.');
+      render();
     });
-    persist();
-    alert('Pengajuan izin berhasil dikirim.');
-    render();
-  });
+  }
   const musyrifPermit = $('#musyrif-permit-form');
   if (musyrifPermit) musyrifPermit.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -4851,12 +4912,16 @@ function renderPermitLetter(permitId, print = false) {
   if (!permit || !['approved', 'terverifikasi'].includes(String(permit.status).toLowerCase())) return;
   if (!permit.letterNumber) { permit.letterNumber = generatePermitNumber(permit.id); persist(); }
   const student = studentById(permit.studentId);
-  const endDate = permit.endDate || permit.date;
+  const endDate = permit.endDate || permitEndDate(permit) || permit.date;
   const institution = state.config?.institution || {};
   const securityHash = permit.securityHash || `STKIS-${btoa(`${permit.id}|${permit.letterNumber}|${student.nis}`).replace(/[^A-Z0-9]/gi, '').slice(0, 16).toUpperCase()}`;
   permit.securityHash = securityHash;
   const signatureBlock = `<div class="signature-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:28px;max-width:100%">${signatureQrHtml('Pemohon', permit.applicantName || student.parent || 'Orang Tua / Wali', permit.applicantSignedAt, permit.applicantQrPayload || { documentId: permit.id, documentType: 'permit', role: 'parent' })}${signatureQrHtml('Mengetahui & Menyetujui', permit.approvedBy || 'Belum diverifikasi', permit.approvedAt || permit.verifiedAt || new Date().toISOString(), permit.verifierQrPayload || { documentId: permit.id, documentType: 'permit', role: 'verifier' })}</div>`;
-  const html = `<article class="permit-letter document-container">${kopSuratHtml()}<div style="text-align:center;margin:24px 0 18px"><h1 style="font-size:16px;text-decoration:underline;margin:0">SURAT IZIN KELUAR / PULANG SANTRI</h1><p>Nomor: ${escapeHtml(permit.letterNumber)}</p></div><p>Yang bertanda tangan di bawah ini, Pengasuhan ${escapeHtml(institution.school)}, memberikan izin kepada santri berikut:</p><table style="width:100%;line-height:1.8"><tr><td>Nama Santri</td><td>: <b>${escapeHtml(student.name)}</b></td></tr><tr><td>NIS / NISN</td><td>: ${escapeHtml(student.nis || student.nisn || '-')}</td></tr><tr><td>Kelas / Program</td><td>: ${escapeHtml(student.className || '-')} / ${escapeHtml(student.program || 'Reguler')}</td></tr><tr><td>Orang Tua / Wali</td><td>: ${escapeHtml(student.parent || '-')}</td></tr></table><p>Dengan ketentuan izin sebagai berikut:</p><table style="width:100%;line-height:1.8"><tr><td>Alasan Keperluan</td><td>: ${escapeHtml(permit.reason || '-')}</td></tr><tr><td>Tanggal Berangkat</td><td>: ${formatDate(permit.date)}${permit.departureTime ? `, pukul ${escapeHtml(permit.departureTime)}` : ''}</td></tr><tr><td>Wajib Kembali</td><td>: ${formatDate(endDate)}${permit.returnTime ? `, paling lambat pukul ${escapeHtml(permit.returnTime)}` : ''}</td></tr><tr><td>Total Durasi</td><td>: <b>${permit.approvedDays || permit.requestedDays || 1} hari</b></td></tr></table><div style="border:1px solid #555;padding:10px;margin-top:18px"><b>Catatan:</b> Santri wajib kembali sesuai batas waktu yang ditetapkan.</div>${signatureBlock}<div style="margin-top:38px;text-align:center;font-size:9px">Security Hash: ${escapeHtml(securityHash)}</div></article>${documentActionButtons('permit', permit.id, 'Print Surat')}`;
+  const homeLeave = isHomeLeavePermit(permit);
+  const durationRow = homeLeave
+    ? `<tr><td>Total Durasi</td><td>: <b>${Number(permit.approvedDays || permit.requestedDays || 1)} hari</b></td></tr>`
+    : '';
+  const html = `<article class="permit-letter document-container">${kopSuratHtml()}<div style="text-align:center;margin:24px 0 18px"><h1 style="font-size:16px;text-decoration:underline;margin:0">SURAT IZIN KELUAR / PULANG SANTRI</h1><p>Nomor: ${escapeHtml(permit.letterNumber)}</p></div><p>Yang bertanda tangan di bawah ini, Pengasuhan ${escapeHtml(institution.school)}, memberikan izin kepada santri berikut:</p><table style="width:100%;line-height:1.8"><tr><td>Nama Santri</td><td>: <b>${escapeHtml(student.name)}</b></td></tr><tr><td>NIS / NISN</td><td>: ${escapeHtml(student.nis || student.nisn || '-')}</td></tr><tr><td>Kelas / Program</td><td>: ${escapeHtml(student.className || '-')} / ${escapeHtml(student.program || 'Reguler')}</td></tr><tr><td>Orang Tua / Wali</td><td>: ${escapeHtml(student.parent || '-')}</td></tr></table><p>Dengan ketentuan izin sebagai berikut:</p><table style="width:100%;line-height:1.8"><tr><td>Alasan Keperluan</td><td>: ${escapeHtml(permit.reason || '-')}</td></tr><tr><td>${homeLeave ? 'Tanggal Berangkat' : 'Jam Keluar'}</td><td>: ${formatDate(permit.date)}${permit.departureTime ? `, pukul ${escapeHtml(permit.departureTime)}` : ''}</td></tr><tr><td>${homeLeave ? 'Wajib Kembali' : 'Rencana Kembali'}</td><td>: ${formatDate(endDate)}${permit.returnTime ? `, paling lambat pukul ${escapeHtml(permit.returnTime)}` : ''}</td></tr>${durationRow}</table><div style="border:1px solid #555;padding:10px;margin-top:18px"><b>Catatan:</b> Santri wajib kembali sesuai batas waktu yang ditetapkan.</div>${signatureBlock}<div style="margin-top:38px;text-align:center;font-size:9px">Security Hash: ${escapeHtml(securityHash)}</div></article>${documentActionButtons('permit', permit.id, 'Print Surat')}`;
   if (print) {
     printDocumentInFrame(html, `Surat Izin - ${permit.letterNumber}`, '@page{size:A4 portrait;margin:15mm}');
     return;
