@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#064e3b">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="./manifest.json">
-  <link rel="apple-touch-icon" href="./assets/icon-192.png">
-  <link rel="stylesheet" href="./style.css?v=6024">
+  <link rel="apple-touch-icon" href="./assets/logo stkis.png">
+  <link rel="stylesheet" href="./style.css?v=6026">
   <title>BoardingPro STKIS - Sistem Informasi Smart Boarding</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -274,6 +274,7 @@
     <div class="login-card">
       <div class="login-head"><span class="login-icon"><i class="fa-solid fa-book-open-reader"></i></span><div><h2>Selamat datang</h2><p>Masuk dengan akun terdaftar</p></div></div>
       <form id="account-login-form" class="form-grid login-form"><label>Username<input id="login-username" name="username" autocomplete="username" required></label><label>Password<input id="login-password" name="password" type="password" autocomplete="current-password" required></label><button type="submit" class="btn btn-primary full login-button">Login</button></form>
+      <p class="login-demo-note">Akun demo: ID Staf/NIP <b>DEMO-STKIS-2026</b> · Password <b>demo12345</b></p>
       <div id="login-error" class="login-error" role="alert" hidden></div>
       <div class="login-footer">© <span class="copyright-year"></span> Sekolah Tahfidz Kejuruan Irman Sofran. All rights reserved.</div>
     </div>
@@ -310,8 +311,8 @@
       firebase.initializeApp(window.firebaseConfig);
   }
 </script>
-  <script src="data.js?v=6024"></script>
-  <script src="app.js?v=6024"></script>
+  <script src="data.js?v=6025"></script>
+  <script src="app.js?v=6026"></script>
 
 <!-- Modal Rincian Kehadiran Guru -->
 <div id="modal-detail-guru" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">

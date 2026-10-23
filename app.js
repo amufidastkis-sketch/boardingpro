@@ -173,6 +173,7 @@ function accountMatchesResetGroup(account, group) {
   return accountRoles.some((role) => ['guru', 'guru_tahfizh', 'pembina', 'musyrif', 'security'].includes(role));
 }
 async function resetSelectedModules(selectedKeys) {
+  if (isDemoSession()) throw new Error('Reset data dinonaktifkan pada akun demo.');
   if (!currentRoleIsAdmin()) throw new Error('Hanya Admin atau Ma\'had yang dapat mereset data.');
   const modules = selectedKeys.map((key) => selectiveResetModules[key]).filter(Boolean);
   if (!modules.length) throw new Error('Pilih minimal satu modul untuk direset.');
@@ -749,6 +750,12 @@ function requestRuntimeRender() {
 }
 const persist = () => {
   normalizeStateCollections();
+  if (isDemoSession()) {
+    window.appData.state = state;
+    window.appData.currentSantri = currentStudent();
+    requestRuntimeRender();
+    return Promise.resolve(true);
+  }
   if (!firebaseState.ready) {
     secureStorage.set('boardingpro-state', state).catch((error) => console.error('[BoardingPro] Gagal menyimpan state fallback terenkripsi:', error));
   }
@@ -857,9 +864,24 @@ const currentStudent = () => {
     status: 'Aktif'
   };
 };
+const DEMO_ACCOUNT_CREDENTIALS = Object.freeze({ username: 'DEMO-STKIS-2026', password: 'demo12345' });
+const DEMO_SESSION_STORAGE_KEY = 'boardingpro-demo-role';
+const DEMO_ROLE_OPTIONS = Object.freeze([
+  { value: 'yayasan', label: 'Yayasan' },
+  { value: 'kepsek', label: 'Kepala Sekolah' },
+  { value: 'mahad', label: "Ma'had / Admin (Operasional)" },
+  { value: 'guru', label: 'Guru / Ustadz' },
+  { value: 'pembina', label: 'Pembina / Musyrif' },
+  { value: 'security', label: 'Security' },
+  { value: 'parent', label: 'Orang Tua / Wali & Siswa / Santri' }
+]);
+function createDemoAccount() {
+  return { id: DEMO_ACCOUNT_CREDENTIALS.username, role: 'mahad', username: DEMO_ACCOUNT_CREDENTIALS.username, name: 'Demo BoardingPro STKIS', status: 'Aktif', isDemo: true };
+}
+const isDemoSession = () => currentAccount()?.isDemo === true;
 const isMasterAdminSession = () => {
   const account = currentAccount();
-  return account?.role === 'mahad';
+  return account?.role === 'mahad' || isDemoSession();
 };
 const canonicalRole = (role) => role === 'santri' ? 'student' : role === 'wali' ? 'parent' : role === 'master_admin' ? 'mahad' : role;
 const effectiveRole = () => {
@@ -1046,6 +1068,7 @@ async function initializeFirebase() {
 }
 
 async function syncFirebaseFinance() {
+  if (isDemoSession()) return true;
   if (!firebaseState.ready && firebaseRuntimeConfig?.databaseURL && firebaseState.initPromise) {
     await firebaseState.initPromise;
   }
@@ -1135,8 +1158,8 @@ let persistentSurahIndex = Number(localStorage.getItem('boardingpro-murottal-ind
 let persistentThematicQueue = null;
 let persistentThematicQueuePosition = 0;
 let persistentThematicQueueId = null;
-let persistentThematicSegment = null;
 let persistentVerseContinuation = null;
+let persistentPlaybackRequestId = 0;
 const quranSurahMetadataCache = new Map();
 let quranPlaylist = [];
 let persistentPlayerBound = false;
@@ -1669,12 +1692,12 @@ function bindPersistentPlayer() {
     playPersistentSurah(Math.min(113, persistentSurahIndex + 1), qari.value);
   });
   player.querySelector('[data-player-stop]')?.addEventListener('click', () => {
+    ++persistentPlaybackRequestId;
     audio.pause();
     audio.removeAttribute('src');
     audio.load();
     persistentThematicQueue = null;
     persistentThematicQueueId = null;
-    persistentThematicSegment = null;
     player.hidden = true;
     localStorage.setItem('boardingpro-murottal-stopped', 'true');
     if (track) track.textContent = 'Audio dimatikan oleh pengguna.';
@@ -1687,15 +1710,13 @@ function bindPersistentPlayer() {
   qari?.addEventListener('change', () => {
     persistentQari = qari.value;
     localStorage.setItem('boardingpro-qari', persistentQari);
-    if (audio.src && !audio.paused) {
-      if (persistentThematicQueue?.length) playCurrentThematicReference(persistentQari);
-      else playPersistentSurah(persistentSurahIndex, persistentQari);
-    }
+    if (persistentThematicQueue?.length) playCurrentThematicReference(persistentQari);
+    else if (audio.src && !audio.paused) playPersistentSurah(persistentSurahIndex, persistentQari);
   });
   selector?.addEventListener('change', () => {
     persistentThematicQueue = null;
     persistentThematicQueueId = null;
-    persistentThematicSegment = null;
+    ++persistentPlaybackRequestId;
     persistentSurahIndex = Math.max(0, Number(selector.value) - 1);
     localStorage.setItem('boardingpro-murottal-index', String(persistentSurahIndex));
   });
@@ -1709,14 +1730,8 @@ function bindPersistentPlayer() {
     } else if (persistentSurahIndex < 113) playPersistentSurah(persistentSurahIndex + 1, qari.value);
     else if (track) track.textContent = 'Alhamdulillah, 114 surah telah selesai diputar.';
   });
-  audio?.addEventListener('timeupdate', () => {
-    if (!persistentThematicSegment || audio.currentTime < persistentThematicSegment.end) return;
-    persistentThematicSegment = null;
-    audio.pause();
-    if (persistentThematicQueue?.length) advanceThematicPlaylist(1, qari.value);
-  });
   audio?.addEventListener('error', () => {
-    if (audio.currentSrc && track) track.textContent = 'Audio surah gagal dimuat. Coba qari lain atau periksa koneksi.';
+    if (audio.currentSrc && track) track.textContent = 'Audio gagal dimuat. Coba qari lain atau periksa koneksi.';
   });
   ensureQuranSurahList().then((surahs) => {
     surahSelect.innerHTML = surahs.map((surah) => `<option value="${surah.number}">${surah.number} · ${escapeHtml(surah.englishName)}</option>`).join('');
@@ -1732,7 +1747,7 @@ function quranPanelMarkup() {
 }
 
 function murottalPanelMarkup() {
-  return `<section class="panel murottal-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Murottal 30 Juz & Tematik</h2><p>Pemutar audio terpisah dari modul Al-Qur’an. Playback memakai floating player persisten.</p></div></div></div><div class="murottal-full-play"><div class="murottal-full-copy"><h3>Murottal Lengkap 30 Juz</h3><p>Mulai dari Juz, Surah, dan ayat yang dipilih; pemutar melanjutkan sampai akhir.</p></div><div class="quran-controls murottal-controls"><label>Mulai dari Juz<select data-murottal-juz>${juzOptionsMarkup()}</select></label><label>Surah<select data-murottal-surah><option value="1">Memuat daftar surah…</option></select></label><label>Ayat mulai<input data-murottal-ayah type="number" min="1" value="1" inputmode="numeric"></label><label>Qari<select data-qari>${qariOptionsMarkup()}</select></label><button type="button" class="btn btn-primary" data-murottal-play>Putar dari Posisi Ini</button></div></div><hr><div class="thematic-playlist-heading"><div><h3>Playlist Murottal Tematik</h3><p>Audio dimulai tepat pada ayat tematik jika sumber menyediakan audio per ayat.</p></div></div><div class="thematic-playlist-grid">${thematicMurottalPlaylists.map((playlist) => `<article class="thematic-playlist-card"><h4>${escapeHtml(playlist.title)}</h4><p>${playlist.references.map((reference) => escapeHtml(reference.label)).join(' · ')}</p><button class="btn btn-ghost btn-small" type="button" data-play-theme="${escapeHtml(playlist.id)}">Putar Playlist</button></article>`).join('')}</div><small class="metric-note">Pemotongan ayat pada rekaman per-surah yang tidak menyediakan file ayat individual menggunakan estimasi durasi berdasarkan panjang teks, bukan timestamp resmi.</small></section>`;
+  return `<section class="panel murottal-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Murottal 30 Juz & Tematik</h2><p>Pemutar audio terpisah dari modul Al-Qur’an. Playback memakai floating player persisten.</p></div></div></div><div class="murottal-full-play"><div class="murottal-full-copy"><h3>Murottal Lengkap 30 Juz</h3><p>Mulai dari Juz, Surah, dan ayat yang dipilih; pemutar melanjutkan sampai akhir.</p></div><div class="quran-controls murottal-controls"><label>Mulai dari Juz<select data-murottal-juz>${juzOptionsMarkup()}</select></label><label>Surah<select data-murottal-surah><option value="1">Memuat daftar surah…</option></select></label><label>Ayat mulai<input data-murottal-ayah type="number" min="1" value="1" inputmode="numeric"></label><label>Qari<select data-qari>${qariOptionsMarkup()}</select></label><button type="button" class="btn btn-primary" data-murottal-play>Putar dari Posisi Ini</button></div></div><hr><div class="thematic-playlist-heading"><div><h3>Playlist Murottal Tematik</h3><p>Playlist memutar audio per ayat sesuai surat, ayat, dan qari yang dipilih.</p></div></div><div class="thematic-playlist-grid">${thematicMurottalPlaylists.map((playlist) => `<article class="thematic-playlist-card"><h4>${escapeHtml(playlist.title)}</h4><p>${playlist.references.map((reference) => escapeHtml(reference.label)).join(' · ')}</p><button class="btn btn-ghost btn-small" type="button" data-play-theme="${escapeHtml(playlist.id)}">Putar Playlist</button></article>`).join('')}</div><small class="metric-note">Jika sumber audio per ayat tidak tersedia untuk qari yang dipilih, pemutar akan menampilkan pemberitahuan dan tidak menggantinya dengan potongan perkiraan.</small></section>`;
 }
 
 function renderQuranVerse(data) {
@@ -1916,6 +1931,7 @@ function waitForAudioMetadata(audio) {
 }
 
 async function playPersistentSurah(index = persistentSurahIndex, qari = persistentQari, preserveThematicQueue = false, startAyah = 1, playExactStart = true) {
+  const requestId = ++persistentPlaybackRequestId;
   const player = $('#persistent-murottal-player');
   const audio = player?.querySelector('[data-persistent-audio]');
   const trackLabel = player?.querySelector('[data-player-track]');
@@ -1925,12 +1941,13 @@ async function playPersistentSurah(index = persistentSurahIndex, qari = persiste
       persistentThematicQueue = null;
       persistentThematicQueueId = null;
     }
-    persistentThematicSegment = null;
     const [surahs, recitation] = await Promise.all([ensureQuranSurahList(), getPersistentReciter(qari)]);
+    if (requestId !== persistentPlaybackRequestId) return;
     const nextIndex = Math.min(Math.max(0, Number(index) || 0), surahs.length - 1);
     const surahNumber = nextIndex + 1;
     const ayahNumber = Math.max(1, Number(startAyah) || 1);
     const weights = ayahNumber > 1 ? await getSurahVerseWeights(surahNumber) : null;
+    if (requestId !== persistentPlaybackRequestId) return;
     if (weights && ayahNumber > weights.verseCount) throw new Error(`Ayat ${ayahNumber} tidak tersedia pada surah ${surahNumber}.`);
     persistentSurahIndex = nextIndex;
     persistentQari = qari;
@@ -1951,21 +1968,27 @@ async function playPersistentSurah(index = persistentSurahIndex, qari = persiste
       persistentVerseContinuation = ayahNumber < weights.verseCount
         ? { surahIndex: nextIndex, ayah: ayahNumber + 1, qari }
         : null;
-      audio.src = await getVerseRecitationSource(recitation, surahNumber, ayahNumber);
+      const source = await getVerseRecitationSource(recitation, surahNumber, ayahNumber);
+      if (requestId !== persistentPlaybackRequestId) return;
+      audio.src = source;
       audio.load();
       trackLabel.textContent += ' · mulai tepat di ayat';
       await audio.play();
       return;
     }
     persistentVerseContinuation = null;
-    audio.src = await getChapterRecitationSource(recitation, surahNumber);
+    const source = await getChapterRecitationSource(recitation, surahNumber);
+    if (requestId !== persistentPlaybackRequestId) return;
+    audio.src = source;
     audio.load();
     if (weights) {
       await waitForAudioMetadata(audio);
+      if (requestId !== persistentPlaybackRequestId) return;
       audio.currentTime = audio.duration * weights.prefix[ayahNumber - 1] / weights.totalWeight;
     }
     await audio.play();
   } catch (error) {
+    if (requestId !== persistentPlaybackRequestId) return;
     console.error('[BoardingPro] Audio murottal tidak dapat dimulai:', error);
     if (trackLabel) trackLabel.textContent = `Audio gagal dimuat: ${error.message}`;
     showToast(`Murottal tidak dapat diputar: ${error.message}`, 'error');
@@ -1979,11 +2002,60 @@ async function playThematicPlaylist(playlistId, qari = persistentQari) {
     showToast('Playlist murottal tematik tidak ditemukan.', 'error');
     return;
   }
-  persistentThematicQueue = playlist.references.flatMap((reference) => {
+  const hasInvalidReference = playlist.references.some((reference) => {
+    const start = Number(reference.start);
+    const end = Number(reference.end);
+    const surah = Number(reference.surah);
+    return !Number.isInteger(surah) || surah < 1 || surah > 114
+      || !Number.isInteger(start) || start < 1
+      || !Number.isInteger(end) || end < start;
+  });
+  if (hasInvalidReference) {
+    showToast(`Referensi ayat pada playlist ${playlist.title} tidak valid.`, 'error');
+    return;
+  }
+  const references = playlist.references.flatMap((reference) => {
     const start = Math.max(1, Number(reference.start) || 1);
     const end = Math.max(start, Number(reference.end) || start);
-    return Array.from({ length: end - start + 1 }, (_, index) => ({ surah: reference.surah, ayah: start + index }));
+    return Array.from({ length: end - start + 1 }, (_, index) => ({
+      surah: Number(reference.surah),
+      ayah: start + index,
+      label: reference.label
+    }));
   });
+  const playerAudio = $('#persistent-murottal-player [data-persistent-audio]');
+  if (!playerAudio) {
+    showToast('Pemutar audio Murottal tidak tersedia.', 'error');
+    return;
+  }
+  const requestId = ++persistentPlaybackRequestId;
+  playerAudio.pause();
+  playerAudio.removeAttribute('src');
+  playerAudio.load();
+  persistentThematicQueue = null;
+  persistentThematicQueueId = null;
+  persistentVerseContinuation = null;
+  try {
+    const surahNumbers = [...new Set(references.map((reference) => reference.surah))];
+    const verseCounts = await Promise.all(surahNumbers.map(async (surahNumber) => {
+      const metadata = await getSurahVerseWeights(surahNumber);
+      return [surahNumber, metadata.verseCount];
+    }));
+    if (requestId !== persistentPlaybackRequestId) return;
+    const verseCountBySurah = new Map(verseCounts);
+    const invalidReference = references.find((reference) => reference.ayah > verseCountBySurah.get(reference.surah));
+    if (!references.length || invalidReference) {
+      throw new Error(invalidReference
+        ? `Ayat ${invalidReference.surah}:${invalidReference.ayah} tidak ada dalam surah tersebut.`
+        : 'Daftar ayat pada playlist tidak valid.');
+    }
+  } catch (error) {
+    if (requestId !== persistentPlaybackRequestId) return;
+    console.error('[BoardingPro] Referensi playlist tematik tidak valid:', error);
+    showToast(`Playlist tematik tidak dapat diputar: ${error.message}`, 'error');
+    return;
+  }
+  persistentThematicQueue = references;
   persistentThematicQueuePosition = 0;
   persistentThematicQueueId = playlist.id;
   await playCurrentThematicReference(qari);
@@ -1994,9 +2066,9 @@ function advanceThematicPlaylist(direction, qari = persistentQari) {
   const nextPosition = persistentThematicQueuePosition + direction;
   if (nextPosition < 0) return;
   if (nextPosition >= persistentThematicQueue.length) {
+    ++persistentPlaybackRequestId;
     persistentThematicQueue = null;
     persistentThematicQueueId = null;
-    persistentThematicSegment = null;
     const audio = $('#persistent-murottal-player [data-persistent-audio]');
     audio?.pause();
     const track = $('#persistent-murottal-player [data-player-track]');
@@ -2023,13 +2095,25 @@ async function getSurahVerseWeights(surahNumber) {
 }
 
 async function playCurrentThematicReference(qari = persistentQari) {
+  const requestId = ++persistentPlaybackRequestId;
   const reference = persistentThematicQueue?.[persistentThematicQueuePosition];
   const player = $('#persistent-murottal-player');
   const audio = player?.querySelector('[data-persistent-audio]');
   const track = player?.querySelector('[data-player-track]');
   if (!reference || !player || !audio) return;
+  audio.pause();
+  audio.removeAttribute('src');
+  audio.load();
   try {
-    const [surahs, recitation] = await Promise.all([ensureQuranSurahList(), getPersistentReciter(qari)]);
+    const definition = qariDefinitions[qari];
+    if (!definition) throw new Error('Qari yang dipilih tidak dikenal.');
+    const recitationPromise = definition.quranComId
+      ? Promise.resolve({ provider: 'qurancom', recitationId: definition.quranComId })
+      : definition.everyAyahDirectory
+        ? Promise.resolve({ provider: 'everyayah' })
+        : Promise.reject(new Error(`Sumber audio ayat yang presisi belum tersedia untuk ${definition.label}. Pilih qari yang mendukung audio per ayat.`));
+    const [surahs, recitation] = await Promise.all([ensureQuranSurahList(), recitationPromise]);
+    if (requestId !== persistentPlaybackRequestId) return;
     const surahNumber = reference.surah;
     const surahIndex = surahNumber - 1;
     const surah = surahs[surahIndex];
@@ -2042,54 +2126,31 @@ async function playCurrentThematicReference(qari = persistentQari) {
     player.querySelector('[data-player-surah]').value = String(surahNumber);
     player.hidden = false;
     const playlist = thematicMurottalPlaylists.find((item) => item.id === persistentThematicQueueId);
-    const currentLabel = playlist?.references.find((item) => item.surah === surahNumber && reference.ayah >= item.start && reference.ayah <= item.end)?.label;
-    if (track) track.textContent = `${playlist?.title || 'Murottal Tematik'} · ${currentLabel || `${surah.englishName}:${reference.ayah}`} · Ayat ${reference.ayah} · ${qariDefinitions[qari].label}`;
+    const currentLabel = reference.label || `${surah.englishName}:${reference.ayah}`;
+    if (track) track.textContent = `${playlist?.title || 'Murottal Tematik'} · ${currentLabel} (${surahNumber}:${reference.ayah}) · ${qariDefinitions[qari].label}`;
 
     if (recitation.provider === 'qurancom') {
-      persistentThematicSegment = null;
-      audio.src = await getVerseRecitationSource(recitation, surahNumber, reference.ayah);
+      const source = await getVerseRecitationSource(recitation, surahNumber, reference.ayah);
+      if (requestId !== persistentPlaybackRequestId) return;
+      audio.src = source;
       audio.load();
       await audio.play();
       return;
     }
 
-    const everyAyahDirectory = qariDefinitions[qari].everyAyahDirectory;
-    if (everyAyahDirectory) {
+    if (recitation.provider === 'everyayah') {
       const file = `${String(surahNumber).padStart(3, '0')}${String(reference.ayah).padStart(3, '0')}.mp3`;
-      persistentThematicSegment = null;
-      audio.src = `https://everyayah.com/data/${everyAyahDirectory}/${file}`;
+      const source = `https://everyayah.com/data/${definition.everyAyahDirectory}/${file}`;
+      if (requestId !== persistentPlaybackRequestId) return;
+      audio.src = source;
       audio.load();
       await audio.play();
       return;
     }
 
-    const available = String(recitation.mushaf.surah_list || '').split(',').map(Number);
-    if (available.length && !available.includes(surahNumber)) throw new Error(`Audio surah ${surahNumber} tidak tersedia untuk qari ini.`);
-    const weights = await getSurahVerseWeights(surahNumber);
-    if (reference.ayah > weights.verseCount) throw new Error(`Ayat ${reference.ayah} tidak tersedia pada surah ${surahNumber}.`);
-    const startRatio = weights.prefix[reference.ayah - 1] / weights.totalWeight;
-    const endRatio = weights.prefix[reference.ayah] / weights.totalWeight;
-    await new Promise((resolve, reject) => {
-      const onLoaded = () => {
-        audio.removeEventListener('error', onError);
-        const start = audio.duration * startRatio;
-        const end = audio.duration * endRatio;
-        persistentThematicSegment = { end: Math.max(start + 1, end) };
-        audio.currentTime = start;
-        resolve();
-      };
-      const onError = () => {
-        audio.removeEventListener('loadedmetadata', onLoaded);
-        reject(new Error('Audio qari atau metadata durasi surah tidak dapat dimuat.'));
-      };
-      audio.addEventListener('loadedmetadata', onLoaded, { once: true });
-      audio.addEventListener('error', onError, { once: true });
-      audio.src = `${recitation.mushaf.server}${String(surahNumber).padStart(3, '0')}.mp3`;
-      audio.load();
-    });
-    await audio.play();
+    throw new Error('Penyedia audio ayat tidak didukung.');
   } catch (error) {
-    persistentThematicSegment = null;
+    if (requestId !== persistentPlaybackRequestId) return;
     console.error('[BoardingPro] Audio ayat tematik tidak dapat dimulai:', error);
     if (track) track.textContent = `Audio ayat ${reference.ayah} tidak dapat dimuat: ${error.message}`;
     showToast(`Audio ayat tematik tidak dapat diputar: ${error.message}`, 'error');
@@ -2136,6 +2197,9 @@ function bindMurottalPanel(container) {
       persistentQari = select.value;
       localStorage.setItem('boardingpro-qari', persistentQari);
       qariSelectors.forEach((other) => { other.value = persistentQari; });
+      const playerQari = $('#persistent-murottal-player [data-player-qari]');
+      if (playerQari) playerQari.value = persistentQari;
+      if (persistentThematicQueue?.length) playCurrentThematicReference(persistentQari);
     });
   });
   const surahSelect = container.querySelector('[data-murottal-surah]');
@@ -2234,8 +2298,11 @@ function renderShell() {
   if ($('#user-avatar')) $('#user-avatar').textContent = initials(role.demoName);
   const switcher = $('#role-switcher');
   const emulatorRoles = ['mahad', 'yayasan', 'kepsek', 'guru', 'pembina', 'security', 'parent', 'student'];
+  const switcherOptions = isDemoSession()
+    ? DEMO_ROLE_OPTIONS.map(({ value, label }) => `<option value="${value}" ${value === effectiveRole() ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')
+    : emulatorRoles.map((item) => `<option value="${item}" ${item === effectiveRole() ? 'selected' : ''}>${roles[item]?.label || item}</option>`).join('');
   if (switcher) switcher.innerHTML = isMasterAdminSession()
-    ? `<label class="role-switch-label">Tampilan Sebagai: <select id="active-role-view">${emulatorRoles.map((item) => `<option value="${item}" ${item === effectiveRole() ? 'selected' : ''}>${roles[item]?.label || item}</option>`).join('')}</select></label>`
+    ? `<label class="role-switch-label">Tampilan Sebagai: <select id="active-role-view">${switcherOptions}</select></label>`
     : '';
   const presentationToggle = $('#presentation-toggle');
   const presentationRoles = ['yayasan', 'mahad', 'admin', 'kepsek', 'guru', 'guru_tahfizh'];
@@ -2257,8 +2324,14 @@ function renderShell() {
   const roleView = $('#active-role-view');
   if (roleView) roleView.onchange = (event) => {
     const nextRole = String(event.target.value || 'mahad');
+    const allowedDemoRoles = DEMO_ROLE_OPTIONS.map((item) => item.value);
+    if (isDemoSession() && !allowedDemoRoles.includes(nextRole)) {
+      console.error('[BoardingPro] Peran yang dipilih tidak tersedia untuk akun demo.');
+      return;
+    }
     if (nextRole === effectiveRole() && !state.activeRoleView) return;
     state.activeRoleView = nextRole === 'mahad' ? null : nextRole;
+    if (isDemoSession()) localStorage.setItem(DEMO_SESSION_STORAGE_KEY, nextRole);
     state.view = 'dashboard';
     closeModal();
     persist();
@@ -2364,7 +2437,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<section class="worship-tools dashboard-islamic-tools" aria-label="Jadwal ibadah dan arah kiblat">${prayerWidgetMarkup()}${qiblaWidgetMarkup()}</section><div class="actions-inline quran-shortcut"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></div>${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<nav class="dashboard-learning-shortcuts" aria-label="Akses pembelajaran"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></nav>${extra}`;
 }
 
 function adminDashboard() {
@@ -4488,13 +4561,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const form = new FormData(accountLogin);
     const username = String(form.get('username') || '').trim();
     const password = String(form.get('password') || '');
-    const account = state.users.find((item) => item.username.toLowerCase() === username.toLowerCase() && item.password === password && item.status !== 'Nonaktif');
+    const isDemoLogin = username.toLowerCase() === DEMO_ACCOUNT_CREDENTIALS.username.toLowerCase() && password === DEMO_ACCOUNT_CREDENTIALS.password;
+    const account = isDemoLogin
+      ? createDemoAccount()
+      : state.users.find((item) => item.username.toLowerCase() === username.toLowerCase() && item.password === password && item.status !== 'Nonaktif');
     const error = $('#login-error');
     if (!account) {
       if (error) { error.hidden = false; error.textContent = 'Username atau password tidak sesuai.'; }
       return;
     }
     if (error) error.hidden = true;
+    if (isDemoLogin) localStorage.setItem(DEMO_SESSION_STORAGE_KEY, 'mahad');
+    else localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
     const active = readActiveSession();
     if (active?.username?.toLowerCase() === account.username.toLowerCase() && active.token !== sessionToken) {
       // A new login takes over the account; the prior tab is notified through storage.
@@ -4520,12 +4598,28 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const logout = $('#logout');
   if (logout) logout.addEventListener('click', () => {
+    const wasDemoSession = isDemoSession();
     endSingleSession();
     localStorage.removeItem('boardingpro-auth');
+    localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
     secureStorage.set('boardingpro-user', null).catch((error) => console.error('[BoardingPro] Gagal menghapus sesi terenkripsi:', error));
+    if (wasDemoSession) {
+      window.location.reload();
+      return;
+    }
     showLanding();
   });
   if (localStorage.getItem('boardingpro-auth') === 'true') {
+    const savedDemoRole = localStorage.getItem(DEMO_SESSION_STORAGE_KEY);
+    if (savedDemoRole) {
+      const allowedRoles = DEMO_ROLE_OPTIONS.map((item) => item.value);
+      const demoRole = allowedRoles.includes(savedDemoRole) ? savedDemoRole : 'mahad';
+      state.username = DEMO_ACCOUNT_CREDENTIALS.username;
+      state.displayName = 'Demo BoardingPro STKIS';
+      state.role = 'mahad';
+      state.activeRoleView = demoRole === 'mahad' ? null : demoRole;
+      state.currentUser = createDemoAccount();
+    }
     activateSingleSession(currentAccount());
     saveAuthenticatedUser();
     showDashboard();
