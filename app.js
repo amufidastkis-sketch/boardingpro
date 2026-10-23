@@ -1227,6 +1227,38 @@ let prayerIntervalId = null;
 let prayerLocationRequested = false;
 let prayerRequestId = 0;
 const prayerRegionCache = new Map();
+const localPrayerRegionFallback = {
+  provinces: [
+    ['11', 'Aceh'], ['12', 'Sumatera Utara'], ['13', 'Sumatera Barat'], ['14', 'Riau'],
+    ['15', 'Jambi'], ['16', 'Sumatera Selatan'], ['17', 'Bengkulu'], ['18', 'Lampung'],
+    ['19', 'Kepulauan Bangka Belitung'], ['21', 'Kepulauan Riau'], ['31', 'Daerah Khusus Ibukota Jakarta'],
+    ['32', 'Jawa Barat'], ['33', 'Jawa Tengah'], ['34', 'Daerah Istimewa Yogyakarta'], ['35', 'Jawa Timur'],
+    ['36', 'Banten'], ['51', 'Bali'], ['52', 'Nusa Tenggara Barat'], ['53', 'Nusa Tenggara Timur'],
+    ['61', 'Kalimantan Barat'], ['62', 'Kalimantan Tengah'], ['63', 'Kalimantan Selatan'], ['64', 'Kalimantan Timur'],
+    ['65', 'Kalimantan Utara'], ['71', 'Sulawesi Utara'], ['72', 'Sulawesi Tengah'], ['73', 'Sulawesi Selatan'],
+    ['74', 'Sulawesi Tenggara'], ['75', 'Gorontalo'], ['76', 'Sulawesi Barat'], ['81', 'Maluku'],
+    ['82', 'Maluku Utara'], ['91', 'Papua'], ['92', 'Papua Barat'], ['93', 'Papua Selatan'],
+    ['94', 'Papua Tengah'], ['95', 'Papua Pegunungan'], ['96', 'Papua Barat Daya']
+  ].map(([code, name]) => ({ code, name })),
+  regencies: {
+    '31': [['3101', 'Kabupaten Administrasi Kepulauan Seribu'], ['3171', 'Kota Administrasi Jakarta Selatan'], ['3172', 'Kota Administrasi Jakarta Timur'], ['3173', 'Kota Administrasi Jakarta Pusat'], ['3174', 'Kota Administrasi Jakarta Barat'], ['3175', 'Kota Administrasi Jakarta Utara']].map(([code, name]) => ({ code, name })),
+    '32': [['3201', 'Kabupaten Bogor'], ['3202', 'Kabupaten Sukabumi'], ['3203', 'Kabupaten Cianjur'], ['3204', 'Kabupaten Bandung'], ['3205', 'Kabupaten Garut'], ['3206', 'Kabupaten Tasikmalaya'], ['3207', 'Kabupaten Ciamis'], ['3208', 'Kabupaten Kuningan'], ['3209', 'Kabupaten Cirebon'], ['3210', 'Kabupaten Majalengka'], ['3211', 'Kabupaten Sumedang'], ['3212', 'Kabupaten Indramayu'], ['3213', 'Kabupaten Subang'], ['3214', 'Kabupaten Purwakarta'], ['3215', 'Kabupaten Karawang'], ['3216', 'Kabupaten Bekasi'], ['3217', 'Kabupaten Bandung Barat'], ['3218', 'Kabupaten Pangandaran'], ['3271', 'Kota Bogor'], ['3272', 'Kota Sukabumi'], ['3273', 'Kota Bandung'], ['3274', 'Kota Cirebon'], ['3275', 'Kota Bekasi'], ['3276', 'Kota Depok'], ['3277', 'Kota Cimahi'], ['3278', 'Kota Tasikmalaya'], ['3279', 'Kota Banjar']].map(([code, name]) => ({ code, name })),
+    '36': [['3601', 'Kabupaten Pandeglang'], ['3602', 'Kabupaten Lebak'], ['3603', 'Kabupaten Tangerang'], ['3604', 'Kabupaten Serang'], ['3671', 'Kota Tangerang'], ['3672', 'Kota Cilegon'], ['3673', 'Kota Serang'], ['3674', 'Kota Tangerang Selatan']].map(([code, name]) => ({ code, name }))
+  },
+  districts: {
+    '3604': [['360405', 'Kramatwatu'], ['360406', 'Waringinkurung'], ['360407', 'Bojonegara'], ['360408', 'Pulo Ampel'], ['360409', 'Ciruas'], ['360411', 'Kragilan'], ['360412', 'Pontang'], ['360413', 'Tirtayasa'], ['360414', 'Tanara'], ['360415', 'Cikande'], ['360416', 'Kibin'], ['360417', 'Carenang'], ['360418', 'Binuang'], ['360419', 'Petir'], ['360420', 'Tunjung Teja'], ['360422', 'Baros'], ['360423', 'Cikeusal'], ['360424', 'Pamarayan'], ['360425', 'Kopo'], ['360426', 'Jawilan'], ['360427', 'Ciomas'], ['360428', 'Pabuaran'], ['360429', 'Padarincang'], ['360430', 'Anyar'], ['360431', 'Cinangka'], ['360432', 'Mancak'], ['360433', 'Gunungsari'], ['360434', 'Bandung'], ['360435', 'Lebak Wangi']].map(([code, name]) => ({ code, name })),
+    '3673': [['367301', 'Serang'], ['367302', 'Kasemen'], ['367303', 'Walantaka'], ['367304', 'Curug'], ['367305', 'Cipocok Jaya'], ['367306', 'Taktakan']].map(([code, name]) => ({ code, name }))
+  },
+  villages: {
+    '360430': ['Anyar', 'Bandulu', 'Bunihara', 'Cikoneng', 'Grogol Indah', 'Kosambi Ronyok', 'Mekarsari', 'Sindang Karya', 'Sindang Mandi', 'Tambang Ayam', 'Tanjung Manis'].map((name) => ({ code: `360430-${name.toLowerCase().replace(/\s+/g, '-')}`, name }))
+  }
+};
+function localPrayerRegionOptions(endpoint) {
+  if (endpoint === 'provinces.json') return localPrayerRegionFallback.provinces;
+  const [, collection, parentCode] = endpoint.match(/^(regencies|districts|villages)\/([^/]+)\.json$/) || [];
+  const key = collection === 'regencies' ? 'regencies' : collection === 'districts' ? 'districts' : 'villages';
+  return parentCode ? (localPrayerRegionFallback[key][parentCode] || []) : [];
+}
 let currentAdhanPrayer = '';
 let prayerNotificationPermission = typeof Notification === 'undefined' ? 'denied' : Notification.permission;
 let qiblaHeading = null;
@@ -1313,14 +1345,26 @@ const scholarLearningQuotes = [
 ];
 const adhanAudioCredits = '<small class="metric-note">Sumber audio default: <a href="https://commons.wikimedia.org/wiki/File:The_Adhan_-_Muslim_Call_to_Prayer_-_Aaqib_Azeez.mp3" target="_blank" rel="noopener noreferrer">Atcovi (CC BY-SA 4.0)</a>.</small>';
 
-function qariOptionsMarkup(selected = persistentQari) {
+function qariOptionsMarkup(selected = persistentQari, verseAudioOnly = false) {
   const groups = [
     ['zyadah', 'Ziyadah & Muroja’ah · Irama dan kelancaran hafalan'],
     ['tajwid', 'Keaslian Tajwid & Tahsin · Bacaan dan makhraj']
   ];
-  return groups.map(([category, label]) => `<optgroup label="${escapeHtml(label)}">${Object.entries(qariDefinitions)
+  const options = Object.entries(qariDefinitions).filter(([, definition]) => !verseAudioOnly || definition.quranComId || definition.everyAyahDirectory);
+  const selectedAvailable = options.some(([id]) => id === selected) ? selected : (options[0]?.[0] || '');
+  return groups.map(([category, label]) => `<optgroup label="${escapeHtml(label)}">${options
     .filter(([, definition]) => definition.category === category)
-    .map(([id, definition]) => `<option value="${id}" ${id === selected ? 'selected' : ''}>${escapeHtml(definition.label)}</option>`).join('')}</optgroup>`).join('');
+    .map(([id, definition]) => `<option value="${id}" ${id === selectedAvailable ? 'selected' : ''}>${escapeHtml(definition.label)}</option>`).join('')}</optgroup>`).join('');
+}
+
+function setPersistentQari(qari, restartThematic = true) {
+  if (!qariDefinitions[qari]) throw new Error('Qari yang dipilih tidak dikenal.');
+  persistentQari = qari;
+  localStorage.setItem('boardingpro-qari', qari);
+  document.querySelectorAll('[data-theme-qari], [data-qari], [data-player-qari]').forEach((select) => {
+    if ([...select.options].some((option) => option.value === qari && !option.disabled)) select.value = qari;
+  });
+  if (restartThematic && persistentThematicQueue?.length) playCurrentThematicReference(qari);
 }
 
 function juzOptionsMarkup(selected = '1') {
@@ -1603,9 +1647,19 @@ async function loadPrayerRegionOptions(select, endpoint, placeholder) {
     select.disabled = false;
     return regions;
   } catch (error) {
-    console.error('[BoardingPro] Gagal memuat pilihan wilayah:', error);
-    select.innerHTML = `<option value="">${escapeHtml(placeholder)} tidak tersedia</option>`;
-    document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Daftar wilayah tidak dapat dimuat: ${error.message}`; });
+    const fallbackRegions = localPrayerRegionOptions(endpoint);
+    if (fallbackRegions.length) {
+      console.warn(`[BoardingPro] Memakai data lokal untuk ${placeholder}; layanan wilayah tidak tersedia:`, error);
+      prayerRegionCache.set(endpoint, fallbackRegions);
+      select.innerHTML = `<option value="">Pilih ${escapeHtml(placeholder.toLowerCase())}</option>${fallbackRegions.map((region) => `<option value="${escapeHtml(region.code)}">${escapeHtml(region.name)}</option>`).join('')}`;
+      select.disabled = false;
+      document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Layanan wilayah tidak tersedia; daftar ${placeholder.toLowerCase()} lokal dapat digunakan.`; });
+      return fallbackRegions;
+    }
+    console.error('[BoardingPro] Data wilayah online dan fallback lokal tidak tersedia:', error);
+    select.innerHTML = `<option value="">${escapeHtml(placeholder)} tidak tersedia di fallback lokal</option>`;
+    select.disabled = false;
+    document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Daftar ${placeholder.toLowerCase()} lokal untuk wilayah ini belum tersedia. Periksa koneksi internet untuk memuat data lengkap.`; });
     return [];
   }
 }
@@ -1861,10 +1915,15 @@ function bindPersistentPlayer() {
     event.currentTarget.setAttribute('aria-label', minimized ? 'Luaskan kontrol pemutar' : 'Minimalkan pemutar');
   });
   qari?.addEventListener('change', () => {
-    persistentQari = qari.value;
-    localStorage.setItem('boardingpro-qari', persistentQari);
-    if (persistentThematicQueue?.length) playCurrentThematicReference(persistentQari);
-    else if (audio.src && !audio.paused) playPersistentSurah(persistentSurahIndex, persistentQari);
+    try {
+      const wasPlaying = !audio.paused;
+      setPersistentQari(qari.value, false);
+      if (persistentThematicQueue?.length) playCurrentThematicReference(persistentQari);
+      else if (wasPlaying) playPersistentSurah(persistentSurahIndex, persistentQari, false, Number(ayahSelect?.value || 1));
+    } catch (error) {
+      console.error('[BoardingPro] Qari pemutar tidak dapat diganti:', error);
+      showToast(`Qari tidak dapat dipilih: ${error.message}`, 'error');
+    }
   });
   selector?.addEventListener('change', () => {
     persistentThematicQueue = null;
@@ -1896,11 +1955,11 @@ function bindPersistentPlayer() {
 }
 
 function quranPanelMarkup() {
-  return `<section class="panel quran-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Mushaf per surah, ayat, atau halaman; teks tematik dengan terjemahan dan audio.</p></div></div></div><div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="mushaf">Mushaf</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="mushaf"><div class="quran-controls"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat<input data-quran-ayah type="number" min="1" value="1"></label><label>Halaman<input data-quran-page type="number" min="1" max="604" placeholder="1–604"></label></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><button class="btn btn-ghost" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
+  return `<section class="panel quran-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Mushaf per surah, ayat, atau halaman; teks tematik dengan terjemahan dan audio.</p></div></div></div><div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="mushaf">Mushaf</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="mushaf"><div class="quran-controls"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat<input data-quran-ayah type="number" min="1" value="1"></label><label>Halaman<input data-quran-page type="number" min="1" max="604" placeholder="1–604"></label></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls quran-select-grid"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
 }
 
 function murottalPanelMarkup() {
-  return `<section class="panel murottal-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Murottal 30 Juz & Tematik</h2><p>Pemutar audio terpisah dari modul Al-Qur’an. Playback memakai floating player persisten.</p></div></div></div><div class="murottal-full-play"><div class="murottal-full-copy"><h3>Murottal Lengkap 30 Juz</h3><p>Mulai dari Juz, Surah, dan ayat yang dipilih; pemutar melanjutkan sampai akhir.</p></div><div class="quran-controls murottal-controls"><label>Mulai dari Juz<select data-murottal-juz>${juzOptionsMarkup()}</select></label><label>Surah<select data-murottal-surah><option value="1">Memuat daftar surah…</option></select></label><label>Ayat mulai<input data-murottal-ayah type="number" min="1" value="1" inputmode="numeric"></label><label>Qari<select data-qari>${qariOptionsMarkup()}</select></label><button type="button" class="btn btn-primary" data-murottal-play>Putar dari Posisi Ini</button></div></div><hr><div class="thematic-playlist-heading"><div><h3>Playlist Murottal Tematik</h3><p>Setiap tema menyediakan audio serta teks Arab, latin, dan terjemahan Indonesia.</p></div></div><div class="thematic-playlist-grid">${thematicMurottalPlaylists.map((playlist) => `<article class="thematic-playlist-card"><h4>${escapeHtml(playlist.title)}</h4><p>${playlist.references.map((reference) => escapeHtml(reference.label)).join(' · ')}</p><div class="actions-inline"><button class="btn btn-primary btn-small" type="button" data-play-theme="${escapeHtml(playlist.id)}">Putar Playlist</button><button class="btn btn-ghost btn-small" type="button" data-theme-text="${escapeHtml(playlist.id)}" aria-expanded="false">Tampilkan Ayat</button></div><div class="thematic-text-output" data-theme-text-output="${escapeHtml(playlist.id)}" hidden></div></article>`).join('')}</div><small class="metric-note">Jika sumber audio per ayat tidak tersedia untuk qari yang dipilih, pemutar akan menampilkan pemberitahuan dan tidak menggantinya dengan potongan perkiraan.</small></section>`;
+  return `<section class="panel murottal-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Murottal 30 Juz & Tematik</h2><p>Pemutar audio terpisah dari modul Al-Qur’an. Playback memakai floating player persisten.</p></div></div></div><div class="murottal-full-play"><div class="murottal-full-copy"><h3>Murottal Lengkap 30 Juz</h3><p>Mulai dari Juz, Surah, dan ayat yang dipilih; pemutar melanjutkan sampai akhir.</p></div><div class="quran-controls murottal-controls"><label>Mulai dari Juz<select data-murottal-juz>${juzOptionsMarkup()}</select></label><label>Surah<select data-murottal-surah><option value="1">Memuat daftar surah…</option></select></label><label>Ayat mulai<input data-murottal-ayah type="number" min="1" value="1" inputmode="numeric"></label><label>Qari<select data-qari>${qariOptionsMarkup()}</select></label><button type="button" class="btn btn-primary" data-murottal-play>Putar dari Posisi Ini</button></div></div><hr><div class="thematic-playlist-heading"><div><h3>Playlist Murottal Tematik</h3><p>Setiap tema menyediakan audio serta teks Arab, latin, dan terjemahan Indonesia.</p></div></div><div class="quran-controls quran-select-grid thematic-picker-grid"><label>Tema<select data-theme-playlist>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-play-selected-theme>Putar Tema</button></div><div class="thematic-playlist-grid">${thematicMurottalPlaylists.map((playlist) => `<article class="thematic-playlist-card"><h4>${escapeHtml(playlist.title)}</h4><p>${playlist.references.map((reference) => escapeHtml(reference.label)).join(' · ')}</p><div class="actions-inline"><button class="btn btn-primary btn-small" type="button" data-play-theme="${escapeHtml(playlist.id)}">Putar Playlist</button><button class="btn btn-ghost btn-small" type="button" data-theme-text="${escapeHtml(playlist.id)}" aria-expanded="false">Tampilkan Ayat</button></div><div class="thematic-text-output" data-theme-text-output="${escapeHtml(playlist.id)}" hidden></div></article>`).join('')}</div><small class="metric-note">Qari yang tersedia untuk audio per ayat ditampilkan pada pemilih playlist; audio dicocokkan dengan nomor surah dan ayat.</small></section>`;
 }
 
 function renderQuranVerse(data) {
@@ -2394,8 +2453,15 @@ function bindQuranPanel(container) {
       showToast(`Ayat tematik gagal dimuat: ${error.message}`, 'error');
     }
   });
+  container.querySelector('[data-theme-qari]')?.addEventListener('change', (event) => {
+    try {
+      setPersistentQari(event.currentTarget.value);
+    } catch (error) {
+      showToast(`Qari tidak dapat dipilih: ${error.message}`, 'error');
+    }
+  });
   container.querySelector('[data-quran-theme-play]')?.addEventListener('click', () => {
-    playThematicPlaylist(container.querySelector('[data-quran-theme]')?.value || '', persistentQari);
+    playThematicPlaylist(container.querySelector('[data-quran-theme]')?.value || '', container.querySelector('[data-theme-qari]')?.value || persistentQari);
   });
   container.querySelectorAll('[data-quran-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -2415,14 +2481,14 @@ function bindMurottalPanel(container) {
   if (!container) return;
   const qariSelectors = container.querySelectorAll('[data-theme-qari], [data-qari]');
   qariSelectors.forEach((select) => {
-    select.value = persistentQari;
+    if ([...select.options].some((option) => option.value === persistentQari && !option.disabled)) select.value = persistentQari;
     select.addEventListener('change', () => {
-      persistentQari = select.value;
-      localStorage.setItem('boardingpro-qari', persistentQari);
-      qariSelectors.forEach((other) => { other.value = persistentQari; });
-      const playerQari = $('#persistent-murottal-player [data-player-qari]');
-      if (playerQari) playerQari.value = persistentQari;
-      if (persistentThematicQueue?.length) playCurrentThematicReference(persistentQari);
+      try {
+        setPersistentQari(select.value);
+        qariSelectors.forEach((other) => { other.value = persistentQari; });
+      } catch (error) {
+        showToast(`Qari tidak dapat dipilih: ${error.message}`, 'error');
+      }
     });
   });
   const surahSelect = container.querySelector('[data-murottal-surah]');
@@ -2453,6 +2519,9 @@ function bindMurottalPanel(container) {
   });
   container.querySelector('[data-murottal-play]')?.addEventListener('click', () => {
     playPersistentSurah(Number(surahSelect?.value || 1) - 1, container.querySelector('[data-qari]')?.value || persistentQari, false, Number(ayahSelect?.value || 1));
+  });
+  container.querySelector('[data-play-selected-theme]')?.addEventListener('click', () => {
+    playThematicPlaylist(container.querySelector('[data-theme-playlist]')?.value || '', container.querySelector('[data-theme-qari]')?.value || persistentQari);
   });
   container.addEventListener('click', (event) => {
     const button = event.target.closest('[data-play-theme]');

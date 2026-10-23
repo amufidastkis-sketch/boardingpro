@@ -11,6 +11,13 @@
   background: #ffffff !important;
 }
 
+.app-logo {
+  border: 1px solid #d1fae5;
+  border-radius: 16px !important;
+  object-fit: contain;
+  box-shadow: 0 5px 14px rgba(6, 78, 59, .14) !important;
+}
+
 .reset-options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -107,9 +114,11 @@
   width: 48px;
   height: 48px;
   padding: 3px;
-  border-radius: 50%;
+  border: 1px solid #d1fae5;
+  border-radius: 16px;
   object-fit: contain;
   background: #fff;
+  box-shadow: 0 5px 14px rgba(6, 78, 59, .14);
 }
 
 .quran-controls {
@@ -128,6 +137,58 @@
 .quran-controls input,
 .quran-controls select {
   width: 100%;
+}
+
+.quran-controls.quran-select-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 12px;
+}
+
+.quran-select-grid label {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.quran-select-grid select {
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 10px 40px 10px 12px;
+  overflow: hidden;
+  border: 1px solid #a7f3d0;
+  border-radius: 12px;
+  color: #0f172a;
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quran-select-grid select:focus {
+  border-color: #10b981;
+  outline: 2px solid rgba(16, 185, 129, .2);
+  outline-offset: 1px;
+}
+
+.quran-select-action {
+  width: 100%;
+  min-height: 44px;
+}
+
+.thematic-picker-grid {
+  margin-top: 12px;
 }
 
 .quran-panel hr {
@@ -260,6 +321,7 @@ body {
   border-radius: 16px;
   object-fit: contain;
   background: #fff;
+  box-shadow: 0 5px 14px rgba(6, 78, 59, .14);
 }
 
 .prayer-hero-heading > div {
@@ -723,6 +785,19 @@ body {
   font-weight: 700;
 }
 
+@media (min-width: 640px) {
+  .quran-controls.quran-select-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quran-select-grid .quran-select-action {
+    grid-column: 1 / -1;
+    justify-self: start;
+    width: auto;
+    min-width: 160px;
+  }
+}
+
 .thematic-playlist-heading select {
   width: 100%;
   min-height: 40px;
@@ -1076,12 +1151,12 @@ body {
   flex: none;
   width: 48px;
   height: 48px;
-  padding: 4px;
-  border: 0;
-  border-radius: 0;
+  padding: 3px;
+  border: 1px solid #d1fae5;
+  border-radius: 16px;
   object-fit: contain;
-  background: #fff;
-  box-shadow: none;
+  background: #fff !important;
+  box-shadow: 0 5px 14px rgba(6, 78, 59, .14);
   opacity: 1;
   filter: none;
   mix-blend-mode: normal;
@@ -1504,8 +1579,10 @@ body {
 }
 
 #landing .landing-logo {
-  padding: 0;
-  background: transparent !important;
+  padding: 3px;
+  border-radius: 16px;
+  background: #fff !important;
+  box-shadow: 0 5px 14px rgba(6, 78, 59, .14);
 }
 
 .landing-clock {
