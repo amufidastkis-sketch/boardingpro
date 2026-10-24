@@ -1,5 +1,5 @@
 /* BoardingPro STKIS shared catalogue and seed data.
- * This file is intentionally loaded before app.js?v=6000 and owns every shared dataset.
+ * This file is intentionally loaded before app.js and owns every shared dataset.
  */
 const roles = {
   mahad: { label: "Ma'had/Admin", icon: 'building-2', description: 'Management Dashboard', demoName: "Ma'had/Admin" },

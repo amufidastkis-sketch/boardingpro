@@ -712,7 +712,7 @@ function signatureQrHtml(label, name, timestamp, payload) {
   const badge = isApplicant ? 'Terverifikasi Digital' : "Stempel Digital Ma'had";
   return `<div class="signature-card" style="min-width:0;text-align:center;border:1px solid #cbd5e1;border-radius:8px;padding:12px;overflow-wrap:anywhere;break-inside:avoid"><b class="signature-title" style="display:block;font-size:11px">${escapeHtml(label)}</b><img src="${qrSignatureUrl(signaturePayload)}" alt="QR tanda tangan ${escapeHtml(label)}" width="160" height="160" style="display:block;width:min(150px,100%);height:auto;max-width:150px;aspect-ratio:1;margin:8px auto;object-fit:contain" loading="eager"><strong style="display:block;font-size:11px">${escapeHtml(name || 'Tidak diketahui')}</strong><small style="display:block;font-size:9px;color:#475569">${escapeHtml(new Date(safeTimestamp).toLocaleString('id-ID'))}</small><span class="signature-badge" style="display:inline-block;margin-top:8px;padding:4px 8px;border-radius:999px;background:#d1fae5;color:#047857;font-size:9px;font-weight:700">${escapeHtml(badge)}</span></div>`;
 }
-const documentEngineStyles = `*,*:before,*:after{box-sizing:border-box}html,body{margin:0;padding:0;background:#e2e8f0;color:#0f172a;font-family:Arial,sans-serif}.document-container{position:relative;width:100%;max-width:210mm;min-height:297mm;margin:18px auto;padding:15mm;background:#fff;box-shadow:0 8px 28px #0f172a22;overflow:hidden}.kop-container{display:flex;align-items:center;justify-content:center;gap:18px;width:100%;text-align:center;border-bottom:3px double #0f172a;padding-bottom:12px;margin-bottom:16px}.logo-wrapper{display:grid;place-items:center;flex:none;width:110px;height:110px;background:#ffffff !important}.logo-wrapper img{display:block;width:100%;height:100%;object-fit:contain}.kop-text{flex:1;min-width:0;text-align:center;line-height:1.35}.kop-text b,.kop-text h1,.kop-text p,.kop-text small{display:block;margin:2px 0;text-align:center}.kop-text h1{font-size:18px;line-height:1.2}.kop-text p,.kop-text small{font-size:10px;line-height:1.45;color:#475569}.document-header{text-align:center;border-bottom:5px double #0f172a;padding-bottom:10px;margin-bottom:22px}.document-header h1,.document-header h2,.document-header p{margin:3px 0;text-align:center}.document-header h1{font-size:20px}.document-header p{font-size:11px;color:#475569}.document-content{line-height:1.65;overflow-wrap:anywhere}.document-signatures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:28px;page-break-inside:avoid}.document-watermark{position:absolute;top:48%;left:50%;z-index:2;width:150%;transform:translate(-50%,-50%) rotate(-28deg);color:#b91c1c2b;font-size:34px;font-weight:800;letter-spacing:3px;text-align:center;pointer-events:none;white-space:nowrap}.document-container.is-draft .document-signatures{display:none}.document-container.is-draft .document-content{opacity:.9}.document-multiline{white-space:pre-line}@media(max-width:820px){.document-container{width:100%;min-height:auto;margin:0;padding:28px 20px;box-shadow:none}.document-signatures{grid-template-columns:1fr}.document-watermark{font-size:25px}}@media print{@page{size:A4 portrait;margin:15mm}.document-container{width:100%;max-width:210mm;min-height:297mm;margin:0;box-shadow:none}.document-actions{display:none!important}}`;
+const documentEngineStyles = `*,*:before,*:after{box-sizing:border-box}html,body{margin:0;padding:0;background:#e2e8f0;color:#0f172a;font-family:Arial,sans-serif}.document-container{position:relative;width:100%;max-width:210mm;min-height:297mm;margin:18px auto;padding:15mm;background:#fff;box-shadow:0 8px 28px #0f172a22;overflow:hidden}.kop-container{display:flex;align-items:center;justify-content:flex-start;gap:18px;width:100%;text-align:center;border-bottom:3px double #0f172a;padding-bottom:12px;margin-bottom:16px}.logo-wrapper{display:grid;place-items:center;flex:none;width:110px;height:110px;background:transparent !important}.logo-wrapper img{display:block;width:100%;height:100%;object-fit:contain}.kop-text{flex:1;min-width:0;text-align:center;line-height:1.35}.kop-text b,.kop-text h1,.kop-text p,.kop-text small{display:block;margin:2px 0;text-align:center}.kop-text h1{font-size:18px;line-height:1.2}.kop-text p,.kop-text small{font-size:10px;line-height:1.45;color:#475569}.document-header{text-align:center;border-bottom:5px double #0f172a;padding-bottom:10px;margin-bottom:22px}.document-header h1,.document-header h2,.document-header p{margin:3px 0;text-align:center}.document-header h1{font-size:20px}.document-header p{font-size:11px;color:#475569}.document-content{line-height:1.65;overflow-wrap:anywhere}.document-signatures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:28px;page-break-inside:avoid}.document-watermark{position:absolute;top:48%;left:50%;z-index:2;width:150%;transform:translate(-50%,-50%) rotate(-28deg);color:#b91c1c2b;font-size:34px;font-weight:800;letter-spacing:3px;text-align:center;pointer-events:none;white-space:nowrap}.document-container.is-draft .document-signatures{display:none}.document-container.is-draft .document-content{opacity:.9}.document-multiline{white-space:pre-line}@media(max-width:820px){.document-container{width:100%;min-height:auto;margin:0;padding:28px 20px;box-shadow:none}.document-signatures{grid-template-columns:1fr}.document-watermark{font-size:25px}}@media print{@page{size:A4 portrait;margin:15mm}.document-container{width:100%;max-width:210mm;min-height:297mm;margin:0;box-shadow:none}.document-actions{display:none!important}}`;
 function renderDocumentPreview(docType, docData = {}) {
   const status = String(docData.status || '').toLowerCase();
   const verified = ['approved', 'terverifikasi', 'verified', 'lunas', 'aktif'].includes(status);
@@ -1059,6 +1059,12 @@ function isPwaInstalled() {
   return window.matchMedia('(display-mode: standalone)').matches
     || window.navigator.standalone === true
     || localStorage.getItem('boardingpro-pwa-installed') === 'true';
+}
+function offerInstallPrompt() {
+  if (deferredInstallPrompt && !isPwaInstalled()) {
+    showInstallModal('Aplikasi BoardingPro STKIS belum terpasang di perangkat ini.');
+  }
+  return Promise.resolve();
 }
 function showInstallModal(message) {
   const modal = $('#pwa-install-modal');
@@ -1466,6 +1472,18 @@ const thematicMurottalPlaylists = [
   { id: 'jihad', title: 'Jihad', references: [{ surah: 9, start: 20, end: 20, label: 'At-Taubah: 20' }] }
 ];
 const scholarLearningQuotes = [
+  { scholar: 'Imam An-Nawawi', core: 'Luruskan niat dalam menuntut ilmu, dan jadikan ilmu sebagai jalan untuk beramal serta mendekat kepada Allah.', reflection: 'Terjemahan makna (parafrasa) tentang niat, keutamaan ilmu, dan adab penuntut ilmu.', source: 'Al-Majmu’ Syarh al-Muhadzdzab (muqaddimah); At-Tibyan fi Adab Hamalat al-Qur’an' },
+  { scholar: 'Imam An-Nawawi', core: 'Ilmu yang dipelajari dengan sungguh-sungguh hendaknya membuahkan amal dan akhlak yang baik.', reflection: 'Terjemahan makna (parafrasa) tentang niat, keutamaan ilmu, dan adab penuntut ilmu.', source: 'At-Tibyan fi Adab Hamalat al-Qur’an' },
+  { scholar: 'Imam An-Nawawi', core: 'Penuntut ilmu menjaga adab, menghormati guru, dan bersungguh-sungguh dalam belajar.', reflection: 'Terjemahan makna (parafrasa) tentang niat, keutamaan ilmu, dan adab penuntut ilmu.', source: 'At-Tibyan fi Adab Hamalat al-Qur’an; Al-Majmu’ Syarh al-Muhadzdzab' },
+  { scholar: 'Imam Ibnu Katsir', core: 'Al-Qur’an diturunkan agar ayat-ayatnya direnungkan dan menjadi pelajaran bagi orang yang berakal.', reflection: 'Terjemahan makna (parafrasa) penjelasan tafsir atas seruan untuk mentadabburi ayat-ayat Al-Qur’an.', source: 'Tafsir al-Qur’an al-‘Azim, tafsir Surah Sad ayat 29' },
+  { scholar: 'Imam Ibnu Katsir', core: 'Memahami ayat perlu memperhatikan makna, konteks, dan penjelasan wahyu secara menyeluruh.', reflection: 'Terjemahan makna (parafrasa) dari pendekatan beliau dalam menjelaskan ayat dengan ayat dan riwayat.', source: 'Tafsir al-Qur’an al-‘Azim' },
+  { scholar: 'Imam Ibnu Katsir', core: 'Tadabbur mendorong pembaca mengambil petunjuk dan memperbaiki amal, bukan sekadar melafalkan ayat.', reflection: 'Terjemahan makna (parafrasa) dari penjelasan beliau tentang tujuan membaca dan memahami Al-Qur’an.', source: 'Tafsir al-Qur’an al-‘Azim, tafsir Surah Muhammad ayat 24' },
+  { scholar: 'Al-Hafiz Ibnu Hajar al-Asqalani', core: 'Sunnah Nabi dipahami melalui riwayat yang terjaga serta penjelasan para ahli hadis.', reflection: 'Terjemahan makna (parafrasa) tentang pentingnya memahami Sunnah dengan ilmu dan ketelitian periwayatan.', source: 'Nuzhat an-Nazar fi Tawdih Nukhbat al-Fikar; Fath al-Bari' },
+  { scholar: 'Al-Hafiz Ibnu Hajar al-Asqalani', core: 'Mempelajari hadis menuntut ketelitian dalam mengenali sanad, perawi, dan makna riwayat.', reflection: 'Terjemahan makna (parafrasa) tentang adab dan kecermatan seorang penuntut hadis.', source: 'Nuzhat an-Nazar fi Tawdih Nukhbat al-Fikar' },
+  { scholar: 'Al-Hafiz Ibnu Hajar al-Asqalani', core: 'Jangan tergesa-gesa menyimpulkan hukum dari hadis sebelum memahami riwayat dan penjelasan ulama.', reflection: 'Terjemahan makna (parafrasa) dari metode penjelasan hadis beliau.', source: 'Fath al-Bari bi Syarh Sahih al-Bukhari' },
+  { scholar: 'Syaikhul Islam Ibnu Taimiyah', core: 'Ketenangan dan kebahagiaan hati berakar pada iman, mengenal Allah, dan mengingat-Nya.', reflection: 'Terjemahan makna (parafrasa) tentang ketenteraman hati dan tauhid.', source: 'Majmu’ al-Fatawa, jilid 10' },
+  { scholar: 'Syaikhul Islam Ibnu Taimiyah', core: 'Tauhid mengarahkan hati agar bergantung kepada Allah dan tidak menjadikan selain-Nya sebagai tujuan ibadah.', reflection: 'Terjemahan makna (parafrasa) dari pembahasan beliau mengenai ibadah dan penghambaan kepada Allah.', source: 'Al-‘Ubudiyyah; Majmu’ al-Fatawa' },
+  { scholar: 'Syaikhul Islam Ibnu Taimiyah', core: 'Kesabaran dalam ketaatan dan menghadapi ujian adalah bekal seorang mukmin.', reflection: 'Terjemahan makna (parafrasa) dari penjelasan beliau tentang sabar dan keteguhan hati.', source: 'Majmu’ al-Fatawa; Al-Istiqamah' },
   { scholar: 'Imam Malik bin Anas', core: 'Ilmu yang benar membimbing seseorang untuk beramal dengan ikhlas dan mengikuti tuntunan yang sahih.', reflection: 'Carilah ilmu yang mendekatkan kepada Allah, lalu jaga dengan adab dan amal; banyaknya pengetahuan bukan tujuan jika tidak memperbaiki ibadah.', source: 'Tartib al-Madarik wa Taqrib al-Masalik — Al-Qadhi Iyadh' },
   { scholar: 'Imam Asy-Syafi’i', core: 'Kesungguhan, kesabaran, dan adab adalah bekal penting dalam perjalanan menuntut ilmu.', reflection: 'Belajar menuntut waktu dan kerendahan hati: tekun mengulang, menghormati guru, serta mengamalkan kebenaran yang telah dipahami.', source: 'Al-Risalah — Muhammad bin Idris Asy-Syafi’i' },
   { scholar: 'Imam Ahmad bin Hanbal', core: 'Ilmu dicari untuk diamalkan dan menjadi sebab bertambahnya rasa takut kepada Allah.', reflection: 'Jadikan belajar sebagai ibadah yang terus-menerus. Ukuran keberhasilan bukan sekadar hafalan, tetapi keteguhan memegang kebenaran dan memperbaiki amal.', source: 'Al-Adab al-Syar’iyyah — Ibnu Muflih' },
@@ -1538,8 +1556,12 @@ function bindScholarSlider(slider) {
     showScholarSlide(slider, current + step);
   };
   const resetTimer = () => {
-    window.clearInterval(timer);
-    timer = window.setInterval(() => advance(1), 25000);
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      if (!slider.isConnected) return;
+      advance(1);
+      resetTimer();
+    }, 25000);
   };
   slider.addEventListener('click', (event) => {
     const step = event.target.closest('[data-scholar-step]');
@@ -1548,9 +1570,9 @@ function bindScholarSlider(slider) {
     if (dot) showScholarSlide(slider, Number(dot.dataset.scholarIndex));
     if (step || dot) resetTimer();
   });
-  slider.addEventListener('mouseenter', () => window.clearInterval(timer));
+  slider.addEventListener('mouseenter', () => window.clearTimeout(timer));
   slider.addEventListener('mouseleave', resetTimer);
-  slider.addEventListener('focusin', () => window.clearInterval(timer));
+  slider.addEventListener('focusin', () => window.clearTimeout(timer));
   slider.addEventListener('focusout', (event) => {
     if (!slider.contains(event.relatedTarget)) resetTimer();
   });
@@ -1558,8 +1580,8 @@ function bindScholarSlider(slider) {
 }
 
 function scholarQuoteWidget() {
-  const initialIndex = new Date().getDate() % scholarLearningQuotes.length;
-  return `<section class="scholar-quote-widget" data-scholar-slider data-active-index="${initialIndex}" aria-label="Faedah Ulama"><div class="scholar-quote-heading"><div><span class="eyebrow">FAEDAH ULAMA</span></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-scholar-step="-1" aria-label="Ulama sebelumnya">‹</button><button class="icon-btn" type="button" data-scholar-step="1" aria-label="Ulama berikutnya">›</button></div></div><div class="scholar-quote-slides" aria-live="polite">${scholarLearningQuotes.map((quote, index) => `<article class="scholar-quote-slide" data-scholar-slide${index === initialIndex ? '' : ' hidden'} aria-hidden="${index !== initialIndex}"><p>${escapeHtml(quote.reflection)} <strong>${escapeHtml(quote.core)}</strong></p><b>${escapeHtml(quote.scholar)}</b><small class="scholar-quote-source">Rujukan: ${escapeHtml(quote.source)}</small></article>`).join('')}</div><div class="scholar-quote-dots" aria-label="Pilih tokoh ulama">${scholarLearningQuotes.map((quote, index) => `<button type="button" data-scholar-index="${index}" aria-label="Tampilkan ${escapeHtml(quote.scholar)}" aria-pressed="${index === initialIndex}" class="${index === initialIndex ? 'active' : ''}"></button>`).join('')}</div></section>`;
+  const initialIndex = new Date().getDate() % 12;
+  return `<section class="scholar-quote-widget" data-scholar-slider data-active-index="${initialIndex}" aria-label="Faedah Ulama"><div class="scholar-quote-heading"><div><span class="eyebrow">FAEDAH ULAMA</span><small class="scholar-quote-translation-label">Kutipan berupa terjemahan makna/parafrasa</small></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-scholar-step="-1" aria-label="Ulama sebelumnya">‹</button><button class="icon-btn" type="button" data-scholar-step="1" aria-label="Ulama berikutnya">›</button></div></div><div class="scholar-quote-slides" aria-live="polite">${scholarLearningQuotes.map((quote, index) => `<article class="scholar-quote-slide" data-scholar-slide${index === initialIndex ? '' : ' hidden'} aria-hidden="${index !== initialIndex}"><p>${escapeHtml(quote.reflection)} <strong>“${escapeHtml(quote.core)}”</strong></p><b>${escapeHtml(quote.scholar)}</b><small class="scholar-quote-source">Rujukan: ${escapeHtml(quote.source)}</small></article>`).join('')}</div><div class="scholar-quote-dots" aria-label="Pilih tokoh ulama">${scholarLearningQuotes.map((quote, index) => `<button type="button" data-scholar-index="${index}" aria-label="Tampilkan ${escapeHtml(quote.scholar)}" aria-pressed="${index === initialIndex}" class="${index === initialIndex ? 'active' : ''}"></button>`).join('')}</div></section>`;
 }
 
 function prayerWidgetMarkup() {
@@ -1799,21 +1821,33 @@ async function loadPrayerRegionOptions(select, endpoint, placeholder) {
     const request = (async () => {
       const [, collection, rawParentCode] = endpoint.match(/^(regencies|districts|villages)\/([^/]+)\.json$/) || [];
       const emsifaEndpoint = collection ? `${collection}/${rawParentCode.replace(/\./g, '')}.json` : 'provinces.json';
+      const ibnuxPaths = {
+        regencies: 'kabupaten',
+        districts: 'kecamatan',
+        villages: 'kelurahan'
+      };
+      const ibnuxEndpoint = collection
+        ? `${ibnuxPaths[collection]}/${rawParentCode.replace(/\D/g, '')}.json`
+        : 'provinsi.json';
       const endpoints = [
         `https://wilayah.id/api/${endpoint}`,
-        `https://www.emsifa.com/api-wilayah-indonesia/api/${emsifaEndpoint}`
+        `https://raw.githubusercontent.com/ibnux/data-indonesia/master/${ibnuxEndpoint}`,
+        `https://www.emsifa.com/api-wilayah-indonesia/api/${emsifaEndpoint}`,
       ];
       let lastError;
       for (const url of endpoints) {
         try {
-          const result = await fetchJsonWithRetry(url, 2);
+          const result = await fetchJsonWithRetry(url, 1, 6000);
           const rows = Array.isArray(result) ? result : result?.data;
           if (!Array.isArray(rows)) throw new Error('Format data wilayah tidak dikenali.');
           const regions = rows.map((region) => ({
             code: String(region.code ?? region.id ?? ''),
-            name: String(region.name ?? '').trim()
+            name: String(region.name ?? region.nama ?? '').trim()
           })).filter((region) => region.code && region.name);
           if (!regions.length) throw new Error('Layanan mengembalikan daftar wilayah kosong.');
+          if (endpoint === 'provinces.json' && regions.length < localPrayerRegionFallback.provinces.length) {
+            throw new Error('Sumber data tidak memuat seluruh provinsi Indonesia.');
+          }
           prayerRegionCache.set(endpoint, regions);
           await setPrayerCachedData(`region:${endpoint}`, regions);
           return regions;
@@ -1973,12 +2007,13 @@ async function restorePrayerRegionSelection(widget) {
 
 async function findManualCoordinates(city, provinceName) {
   const searchName = city.replace(/^(kabupaten|kota(?: administrasi)?)\s+/i, '').trim();
-  const result = await fetchJsonWithRetry(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchName)}&count=10&language=id&format=json`, 2);
+  const query = [searchName, provinceName].filter(Boolean).join(', ');
+  const result = await fetchJsonWithRetry(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=10&language=id&format=json`, 2);
   const normalize = (value) => String(value || '').toLocaleLowerCase('id-ID').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^(kabupaten|kota(?: administrasi)?|provinsi)\s+/i, '').trim();
   const candidates = (result.results || []).filter((place) => place.country_code === 'ID');
   const exact = candidates.filter((place) => normalize(place.name) === normalize(city) || normalize(place.name) === normalize(searchName));
   const inProvince = exact.filter((place) => normalize(place.admin1) === normalize(provinceName));
-  const match = inProvince[0] || exact[0];
+  const match = inProvince[0] || (!provinceName ? exact[0] : null);
   if (!match || !Number.isFinite(Number(match.latitude)) || !Number.isFinite(Number(match.longitude))) return null;
   return { latitude: Number(match.latitude), longitude: Number(match.longitude) };
 }
@@ -1999,22 +2034,24 @@ async function loadPrayerTimings(city = prayerLocation?.city || '', label = pray
     return null;
   });
   const prayerDate = prayerDateIso();
-  const scheduleCacheKey = `schedule:${prayerAreaType(city)}:${normalizePrayerAreaName(city)}:${prayerDate}`;
+  const areaKey = prayerLocation.regionCodes?.regency || `${normalizePrayerAreaName(prayerLocation.regionNames?.province || '')}:${prayerAreaType(city)}:${normalizePrayerAreaName(city)}`;
+  const scheduleCacheKey = `schedule:${areaKey}:${prayerDate}`;
   document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Memuat jadwal sholat untuk ${label || city}…`; });
   document.querySelectorAll('[data-prayer-location]').forEach((element) => { element.textContent = label || city; });
   document.querySelectorAll('[data-prayer-times]').forEach((element) => { element.innerHTML = '<p class="prayer-schedule-empty">Memuat jadwal sholat hari ini…</p>'; });
   try {
     if (requestId !== prayerRequestId) return;
+    const coordinates = await coordinatesPromise;
+    if (requestId !== prayerRequestId) return;
     try {
+      prayerTimings = await fetchKemenagCoordinateTimings(prayerDate, coordinates);
+    } catch (coordinateError) {
+      console.warn('[BoardingPro] Kalkulasi jadwal berdasarkan koordinat gagal; memakai jadwal kota MyQuran:', coordinateError);
+      if (requestId !== prayerRequestId) return;
       const cityId = await findMyQuranCityId(city);
       if (requestId !== prayerRequestId) return;
       prayerTimings = await fetchMyQuranTimings(cityId, prayerDate);
       prayerTimings.cityId = cityId;
-    } catch (error) {
-      console.warn('[BoardingPro] Jadwal MyQuran gagal; mencoba koordinat Kemenag:', error);
-      if (requestId !== prayerRequestId) return;
-      const coordinates = await coordinatesPromise;
-      prayerTimings = await fetchKemenagCoordinateTimings(prayerDate, coordinates);
     }
     if (requestId !== prayerRequestId) return;
     await setPrayerCachedData(scheduleCacheKey, prayerTimings);
@@ -2237,11 +2274,11 @@ function bindPersistentPlayer() {
 
 function quranPanelMarkup(includeBanner = true) {
   const banner = includeBanner ? `<div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Mushaf per surah, ayat, atau halaman; teks tematik dengan terjemahan dan audio.</p></div></div></div>` : '';
-  return `<section class="panel quran-panel">${banner}<div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="mushaf">Mushaf</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="mushaf"><div class="quran-controls quran-nav-grid"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat<input data-quran-ayah type="number" min="1" value="1"></label><label>Halaman<input data-quran-page type="number" min="1" max="604" placeholder="1–604"></label></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls quran-select-grid"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
+  return `<section class="panel quran-panel">${banner}${scholarQuoteWidget()}<div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="mushaf">Mushaf</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="mushaf"><div class="quran-controls quran-nav-grid"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat<input data-quran-ayah type="number" min="1" value="1"></label><label>Halaman<input data-quran-page type="number" min="1" max="604" placeholder="1–604"></label></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls quran-select-grid"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
 }
 
 function murottalPanelMarkup() {
-  return `<section class="panel murottal-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Murottal 30 Juz & Tematik</h2><p>Pemutar audio terpisah dari modul Al-Qur’an. Playback memakai floating player persisten.</p></div></div></div><div class="murottal-full-play"><div class="murottal-full-copy"><h3>Murottal Lengkap 30 Juz</h3><p>Mulai dari Juz, Surah, dan ayat yang dipilih; pemutar melanjutkan sampai akhir.</p></div><div class="quran-controls murottal-controls"><label>Mulai dari Juz<select data-murottal-juz>${juzOptionsMarkup()}</select></label><label>Surah<select data-murottal-surah><option value="1">Memuat daftar surah…</option></select></label><label>Ayat mulai<input data-murottal-ayah type="number" min="1" value="1" inputmode="numeric"></label><label>Qari<select data-qari>${qariOptionsMarkup()}</select></label><button type="button" class="btn btn-primary" data-murottal-play>Putar dari Posisi Ini</button></div></div><hr><div class="thematic-playlist-heading"><div><h3>Playlist Murottal Tematik</h3><p>Setiap tema menyediakan audio serta teks Arab, latin, dan terjemahan Indonesia.</p></div></div><div class="quran-controls quran-select-grid thematic-picker-grid"><label>Tema<select data-theme-playlist>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-play-selected-theme>Putar Tema</button></div><div class="thematic-playlist-grid">${thematicMurottalPlaylists.map((playlist) => `<article class="thematic-playlist-card"><h4>${escapeHtml(playlist.title)}</h4><p>${playlist.references.map((reference) => escapeHtml(reference.label)).join(' · ')}</p><div class="actions-inline"><button class="btn btn-primary btn-small" type="button" data-play-theme="${escapeHtml(playlist.id)}">Putar Playlist</button><button class="btn btn-ghost btn-small" type="button" data-theme-text="${escapeHtml(playlist.id)}" aria-expanded="false">Tampilkan Ayat</button></div><div class="thematic-text-output" data-theme-text-output="${escapeHtml(playlist.id)}" hidden></div></article>`).join('')}</div><small class="metric-note">Qari yang tersedia untuk audio per ayat ditampilkan pada pemilih playlist; audio dicocokkan dengan nomor surah dan ayat.</small></section>`;
+  return `<section class="panel murottal-panel"><div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Murottal 30 Juz & Tematik</h2><p>Pemutar audio terpisah dari modul Al-Qur’an. Playback memakai floating player persisten.</p></div></div></div>${scholarQuoteWidget()}<div class="murottal-full-play"><div class="murottal-full-copy"><h3>Murottal Lengkap 30 Juz</h3><p>Mulai dari Juz, Surah, dan ayat yang dipilih; pemutar melanjutkan sampai akhir.</p></div><div class="quran-controls murottal-controls"><label>Mulai dari Juz<select data-murottal-juz>${juzOptionsMarkup()}</select></label><label>Surah<select data-murottal-surah><option value="1">Memuat daftar surah…</option></select></label><label>Ayat mulai<input data-murottal-ayah type="number" min="1" value="1" inputmode="numeric"></label><label>Qari<select data-qari>${qariOptionsMarkup()}</select></label><button type="button" class="btn btn-primary" data-murottal-play>Putar dari Posisi Ini</button></div></div><hr><div class="thematic-playlist-heading"><div><h3>Playlist Murottal Tematik</h3><p>Setiap tema menyediakan audio serta teks Arab, latin, dan terjemahan Indonesia.</p></div></div><div class="quran-controls quran-select-grid thematic-picker-grid"><label>Tema<select data-theme-playlist>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-play-selected-theme>Putar Tema</button></div><div class="thematic-playlist-grid">${thematicMurottalPlaylists.map((playlist) => `<article class="thematic-playlist-card"><h4>${escapeHtml(playlist.title)}</h4><p>${playlist.references.map((reference) => escapeHtml(reference.label)).join(' · ')}</p><div class="actions-inline"><button class="btn btn-primary btn-small" type="button" data-play-theme="${escapeHtml(playlist.id)}">Putar Playlist</button><button class="btn btn-ghost btn-small" type="button" data-theme-text="${escapeHtml(playlist.id)}" aria-expanded="false">Tampilkan Ayat</button></div><div class="thematic-text-output" data-theme-text-output="${escapeHtml(playlist.id)}" hidden></div></article>`).join('')}</div><small class="metric-note">Qari yang tersedia untuk audio per ayat ditampilkan pada pemilih playlist; audio dicocokkan dengan nomor surah dan ayat.</small></section>`;
 }
 
 function renderQuranVerse(data) {
@@ -2708,12 +2745,14 @@ async function playCurrentThematicReference(qari = persistentQari) {
 
 function openQuranModal() {
   openModal('Al-Qur’an Digital STKIS', quranPanelMarkup(false));
+  bindScholarSlider($('#modal-root [data-scholar-slider]'));
   const panel = $('#modal-root .quran-panel');
   bindQuranPanel(panel);
 }
 
 function openMurottalModal() {
   openModal('Murottal 30 Juz & Tematik', murottalPanelMarkup());
+  bindScholarSlider($('#modal-root [data-scholar-slider]'));
   bindMurottalPanel($('#modal-root .murottal-panel'));
 }
 
@@ -3047,7 +3086,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<nav class="dashboard-learning-shortcuts" aria-label="Akses pembelajaran"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></nav>${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<nav class="dashboard-learning-shortcuts" aria-label="Akses pembelajaran"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></nav>${scholarQuoteWidget()}${extra}`;
 }
 
 function adminDashboard() {
@@ -3093,10 +3132,10 @@ function kaldikView() {
   const canEdit = canManageSchool();
   const events = [...(state.events || [])]
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-  const eventCards = events.map((event) => `<article class="kaldik-event-card"><time datetime="${escapeHtml(event.date || '')}">${formatDate(event.date)}</time><div><h3>${escapeHtml(event.title || 'Agenda sekolah')}</h3><p>${escapeHtml(event.audience || 'Kegiatan sekolah')} · ${escapeHtml(event.location || 'Lokasi belum ditentukan')}</p></div><span class="badge">${escapeHtml(event.status || 'Terjadwal')}</span></article>`).join('');
+  const eventCards = events.map((event) => `<article class="kaldik-event-card"><time datetime="${escapeHtml(event.date || '')}">${formatDate(event.date)}${event.startTime || event.endTime || event.time ? `<small>${escapeHtml([event.startTime, event.endTime].filter(Boolean).join('–') || event.time)}</small>` : ''}</time><div><h3>${escapeHtml(event.title || 'Agenda sekolah')}</h3><p>${escapeHtml(event.audience || 'Kegiatan sekolah')} · ${escapeHtml(event.location || 'Lokasi belum ditentukan')}</p>${event.description ? `<p class="kaldik-event-description">${escapeHtml(event.description)}</p>` : ''}</div><div class="kaldik-event-actions"><span class="badge">${escapeHtml(event.status || 'Terjadwal')}</span>${canEdit ? `<button type="button" class="btn btn-small btn-ghost" data-edit-calendar-event="${escapeHtml(String(event.id))}">Edit</button><button type="button" class="btn btn-small btn-danger" data-delete-calendar-event="${escapeHtml(String(event.id))}">Hapus</button>` : ''}</div></article>`).join('');
   const weeklySchedules = [...(state.schedules || [])]
     .sort((a, b) => String(a.day || '').localeCompare(String(b.day || '')))
-    .map((item) => `<article class="kaldik-schedule-card"><b>${escapeHtml(item.day || 'Jadwal rutin')}</b><time>${escapeHtml(item.time || 'Waktu belum ditentukan')}</time><h3>${escapeHtml(item.title || 'Kegiatan')}</h3><p>${escapeHtml(item.room || 'Lokasi belum ditentukan')}${item.teacher ? ` · ${escapeHtml(item.teacher)}` : ''}</p></article>`).join('');
+    .map((item) => `<article class="kaldik-schedule-card"><div class="kaldik-schedule-card-head"><b>${escapeHtml(item.day || 'Jadwal rutin')}</b>${canEdit ? `<span><button type="button" class="btn btn-small btn-ghost" data-edit-calendar-schedule="${escapeHtml(String(item.id))}">Edit</button><button type="button" class="btn btn-small btn-danger" data-delete-calendar-schedule="${escapeHtml(String(item.id))}">Hapus</button></span>` : ''}</div><time>${escapeHtml(item.time || 'Waktu belum ditentukan')}</time><h3>${escapeHtml(item.title || 'Kegiatan')}</h3><p>${escapeHtml(item.room || 'Lokasi belum ditentukan')}${item.teacher ? ` · ${escapeHtml(item.teacher)}` : ''}</p>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}</article>`).join('');
   const actions = canEdit ? `<div class="actions-inline"><button type="button" class="btn btn-primary" data-action="add-event">${icon('plus')} Tambah Agenda</button><button type="button" class="btn btn-ghost" data-action="add-schedule">${icon('plus')} Tambah Jadwal Rutin</button></div>` : '';
   return `${welcome('KALENDER PENDIDIKAN', 'Kalender Akademik & Kegiatan Santri', 'Agenda dan jadwal yang mengikuti data terbaru sekolah.', actions)}<section class="panel kaldik-panel"><div class="panel-head"><div><h2>Agenda Pendidikan</h2><p>Ujian, libur semester, kegiatan tahfidz, dan event pesantren.</p></div><span class="badge">${events.length} agenda</span></div><div class="kaldik-event-list">${eventCards || '<div class="empty-state"><p>Belum ada agenda pendidikan.</p></div>'}</div></section><section class="panel kaldik-panel"><div class="panel-head"><div><h2>Jadwal Kegiatan Rutin</h2><p>Jadwal yang dicatat oleh pengelola sekolah dan ma’had.</p></div><span class="badge">${weeklySchedules.length} jadwal</span></div><div class="kaldik-schedule-grid">${weeklySchedules || '<div class="empty-state"><p>Belum ada jadwal rutin.</p></div>'}</div></section><small class="metric-note">Data kalender menggunakan node jadwal dan event yang tersinkron dengan Firebase Realtime Database.</small>`;
 }
@@ -3671,7 +3710,7 @@ function gateEventsTable() {
 function activityTimeline() {
   const items = state.schedules.length ? state.schedules : state.activities.map((item) => ({ time: item.time, title: item.title, type: 'Kegiatan' }));
   return items.length
-    ? `<div class="timeline">${items.map((item) => `<div class="timeline-item"><div class="time">${item.time}</div><div class="timeline-dot">${icon(item.type === 'Tahfizh' ? 'book-open' : 'calendar-days', 16)}</div><div><b>${item.title}</b><p>${item.room || 'Agenda BoardingPro STKIS'}  -  ${item.teacher || ''}</p></div></div>`).join('')}</div>`
+    ? `<div class="timeline">${items.map((item) => `<div class="timeline-item"><div class="time">${escapeHtml(item.time || '')}</div><div class="timeline-dot">${icon(item.type === 'Tahfizh' ? 'book-open' : 'calendar-days', 16)}</div><div><b>${escapeHtml(item.title || 'Kegiatan')}</b><p>${escapeHtml(item.room || 'Agenda BoardingPro STKIS')}  -  ${escapeHtml(item.teacher || '')}</p></div></div>`).join('')}</div>`
     : '<div class="empty-state"><div class="empty-state-icon">' + icon('calendar-x', 28) + '</div><p>Belum ada jadwal atau aktivitas.</p></div>';
 }
 
@@ -3850,6 +3889,7 @@ function renderDashboard() {
   try {
     renderShell();
     renderView();
+    document.querySelectorAll('#main-content [data-scholar-slider]').forEach(bindScholarSlider);
 
     // Hook Integrasi BoardingPro (Kehadiran Guru & Notifikasi Role)
     if (typeof renderTeacherAttendanceModule === 'function') {
@@ -3996,7 +4036,7 @@ function ensureStudentAccounts(student) {
 }
 function eventsTable() {
   const events = state.events.slice().sort((a, b) => new Date(`${a.date || today}T00:00:00`) - new Date(`${b.date || today}T00:00:00`));
-  return table(['Tanggal', 'Event', 'Lokasi', 'Peserta', 'Status'], events.map((event) => `<tr><td>${formatDate(event.date)}</td><td><b>${event.title}</b></td><td>${event.location}</td><td>${event.audience}</td><td>${statusBadge(event.status)}</td></tr>`).join(''));
+  return table(['Tanggal & Waktu', 'Event', 'Lokasi', 'Peserta', 'Status', ...(canManageSchool() ? ['Aksi'] : [])], events.map((event) => `<tr><td>${formatDate(event.date)}<small>${escapeHtml([event.startTime, event.endTime].filter(Boolean).join('–') || event.time || '-')}</small></td><td><b>${escapeHtml(event.title || 'Agenda sekolah')}</b><small>${escapeHtml(event.description || '-')}</small></td><td>${escapeHtml(event.location || '-')}</td><td>${escapeHtml(event.audience || '-')}</td><td>${statusBadge(event.status)}</td>${canManageSchool() ? `<td><div class="actions-inline"><button type="button" class="btn btn-small btn-ghost" data-edit-calendar-event="${escapeHtml(String(event.id))}">Edit</button><button type="button" class="btn btn-small btn-danger" data-delete-calendar-event="${escapeHtml(String(event.id))}">Hapus</button></div></td>` : ''}</tr>`).join(''));
 }
 function announcementsView() {
   const action = canManageAnnouncements() ? `<button class="btn btn-primary" data-action="add-announcement">${icon('plus')} Buat Pengumuman</button>` : '';
@@ -4427,6 +4467,16 @@ function bindActions() {
   document.querySelectorAll('[data-action="add-lost-found"]').forEach((button) => button.addEventListener('click', () => openSecurityReportModal('lost')));
   document.querySelectorAll('[data-action="add-schedule"]').forEach((button) => button.addEventListener('click', () => openScheduleModal('schedule')));
   document.querySelectorAll('[data-action="add-event"]').forEach((button) => button.addEventListener('click', () => openScheduleModal('event')));
+  document.querySelectorAll('[data-edit-calendar-event]').forEach((button) => button.addEventListener('click', () => {
+    const event = state.events.find((item) => String(item.id) === button.dataset.editCalendarEvent);
+    if (canManageSchool() && event) openScheduleModal('event', event);
+  }));
+  document.querySelectorAll('[data-delete-calendar-event]').forEach((button) => button.addEventListener('click', () => deleteCalendarItem('event', button.dataset.deleteCalendarEvent)));
+  document.querySelectorAll('[data-edit-calendar-schedule]').forEach((button) => button.addEventListener('click', () => {
+    const schedule = state.schedules.find((item) => String(item.id) === button.dataset.editCalendarSchedule);
+    if (canManageSchool() && schedule) openScheduleModal('schedule', schedule);
+  }));
+  document.querySelectorAll('[data-delete-calendar-schedule]').forEach((button) => button.addEventListener('click', () => deleteCalendarItem('schedule', button.dataset.deleteCalendarSchedule)));
   document.querySelectorAll('[data-payment]').forEach((button) => button.addEventListener('click', (e) => { e.preventDefault(); const payment = state.payments.find((item) => item.id === button.dataset.payment); if (payment && currentRoleIsAdmin()) { payment.status = button.dataset.paymentStatus; if (payment.status === 'Verified') { const verifier = currentAccount(); payment.verifierName = verifier?.name || verifier?.nama || roles[effectiveRole()]?.label || 'Administrator'; payment.verifierSignedAt = new Date().toISOString(); payment.verifierQrPayload = { documentId: payment.id, documentType: 'invoice', role: effectiveRole() }; createInvoiceForPayment(payment); } persist(); render(); alert('Pembayaran disetujui. Invoice dan kuitansi digital otomatis diterbitkan.'); } }));
   document.querySelectorAll('[data-payment-proof]').forEach((button) => button.addEventListener('click', () => {
     const payment = state.payments.find((item) => item.id === button.dataset.paymentProof);
@@ -5178,23 +5228,72 @@ function renderPermitLetter(permitId, print = false) {
   openModal('Surat Izin Digital', html);
   bindDocumentActions($('#modal-root'), `Surat Izin - ${permit.letterNumber}`, '@page{size:A4 portrait;margin:15mm}');
 }
-function openScheduleModal(kind) {
+function openScheduleModal(kind, record = null) {
   if (!canManageSchool()) return;
   const isSchedule = kind === 'schedule';
-  const title = isSchedule ? 'Tambah Jadwal Harian' : 'Tambah Event Mendatang';
+  const editing = Boolean(record);
+  const title = `${editing ? 'Edit' : 'Tambah'} ${isSchedule ? 'Jadwal Harian' : 'Agenda Pendidikan'}`;
+  const legacyTimeRange = String(record?.time || '').split(/\s*[-–]\s*/, 2);
+  const value = (key) => {
+    const legacyValue = !isSchedule && key === 'startTime' ? legacyTimeRange[0] || ''
+      : !isSchedule && key === 'endTime' ? legacyTimeRange[1] || ''
+        : '';
+    const raw = record?.[key] ?? legacyValue;
+    return escapeHtml(String(raw));
+  };
   const content = isSchedule
-    ? `<form id="schedule-modal-form" class="form-grid"><label>Hari<input name="day" required placeholder="Senin, Selasa, ..."></label><label>Waktu / Jam<input name="time" required placeholder="07:00-08:30"></label><label>Nama Kegiatan<input name="title" required></label><label>Lokasi<input name="room" required></label><label>Pengampu / Penanggung Jawab<input name="teacher" required></label><label>Mata Pelajaran<input name="subject" placeholder="Opsional, contoh: Bahasa Arab"></label><label>Kelas<input name="className" placeholder="Opsional, contoh: XI TKJ"></label><button class="btn btn-primary full">Simpan Jadwal</button></form>`
-    : `<form id="schedule-modal-form" class="form-grid"><label>Nama Agenda<input name="title" required></label><label>Tanggal Pelaksanaan<input name="date" type="date" required></label><label>Kategori Event<input name="audience" required placeholder="Akademik, Asrama, Umum"></label><label class="full">Keterangan<input name="location" required></label><button class="btn btn-primary full">Simpan Event</button></form>`;
+    ? `<form id="schedule-modal-form" class="form-grid"><label>Hari<input name="day" value="${value('day')}" required placeholder="Senin, Selasa, ..."></label><label>Rentang Waktu<input name="time" value="${value('time')}" required placeholder="07:00-08:30"></label><label>Nama Kegiatan<input name="title" value="${value('title')}" required></label><label>Lokasi<input name="room" value="${value('room')}" required></label><label>Pengampu / Penanggung Jawab<input name="teacher" value="${value('teacher')}" required></label><label>Mata Pelajaran<input name="subject" value="${value('subject')}" placeholder="Opsional, contoh: Bahasa Arab"></label><label>Kelas<input name="className" value="${value('className')}" placeholder="Opsional, contoh: XI TKJ"></label><label class="full">Deskripsi<textarea name="description" rows="3">${value('description')}</textarea></label><button class="btn btn-primary full">${editing ? 'Simpan Perubahan Jadwal' : 'Simpan Jadwal'}</button></form>`
+    : `<form id="schedule-modal-form" class="form-grid"><label>Judul Kegiatan<input name="title" value="${value('title')}" required></label><label>Tanggal Pelaksanaan<input name="date" type="date" value="${value('date')}" required></label><label>Waktu Mulai<input name="startTime" type="time" value="${value('startTime')}"></label><label>Waktu Selesai<input name="endTime" type="time" value="${value('endTime')}"></label><label>Kategori / Peserta<input name="audience" value="${value('audience')}" required placeholder="Akademik, Asrama, Umum"></label><label>Lokasi<input name="location" value="${value('location')}" placeholder="Lokasi kegiatan"></label><label class="full">Deskripsi Kegiatan<textarea name="description" rows="4" placeholder="Keterangan kegiatan">${value('description')}</textarea></label><button class="btn btn-primary full">${editing ? 'Simpan Perubahan Agenda' : 'Simpan Agenda'}</button></form>`;
   openModal(title, content);
   $('#schedule-modal-form').addEventListener('submit', (event) => {
     event.preventDefault();
+    if (!canManageSchool()) return;
     const values = Object.fromEntries(new FormData(event.target).entries());
-    if (isSchedule) state.schedules.push({ id: `SCH-${Date.now()}`, type: 'Kegiatan', ...values });
-    else state.events.push({ id: `EV-${Date.now()}`, status: 'Published', ...values });
+    if (!isSchedule && values.startTime && values.endTime && values.endTime <= values.startTime) {
+      showToast('Waktu selesai harus setelah waktu mulai.', 'error');
+      return;
+    }
+    const collection = isSchedule ? state.schedules : state.events;
+    const target = editing ? collection.find((item) => item.id === record.id) : null;
+    if (editing && !target) {
+      showToast('Data kalender sudah tidak tersedia. Muat ulang daftar sebelum mengedit.', 'error');
+      closeModal();
+      render();
+      return;
+    }
+    if (isSchedule) {
+      if (editing) Object.assign(target, values);
+      else state.schedules.push({ id: `SCH-${Date.now()}`, type: 'Kegiatan', ...values });
+    } else {
+      const eventValues = {
+        ...values,
+        time: [values.startTime, values.endTime].filter(Boolean).join('–')
+      };
+      if (editing) Object.assign(target, eventValues);
+      else state.events.push({ id: `EV-${Date.now()}`, status: 'Published', ...eventValues });
+    }
     persist();
     closeModal();
     render();
   });
+}
+function deleteCalendarItem(kind, id) {
+  if (!canManageSchool()) return;
+  const collection = kind === 'schedule' ? state.schedules : state.events;
+  const record = collection.find((item) => item.id === id);
+  if (!record) return;
+  openConfirmModal(
+    'Hapus Data Kalender',
+    `Hapus ${kind === 'schedule' ? 'jadwal rutin' : 'agenda'} “${record.title || 'tanpa judul'}”? Tindakan ini tidak dapat dibatalkan.`,
+    () => {
+      if (!canManageSchool()) return;
+      const index = collection.findIndex((item) => item.id === id);
+      if (index < 0) return;
+      collection.splice(index, 1);
+      persist();
+      render();
+    }
+  );
 }
 function showDashboard() {
   const landing = $('#landing');
