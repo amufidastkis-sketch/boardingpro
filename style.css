@@ -4,12 +4,12 @@
 @media print { @page { size: A4 portrait; margin: 8mm; } .printable-document { width: 100% !important; max-width: 100% !important; padding: 0 !important; margin: 0 !important; } .surat-sp { transform: scale(0.92); transform-origin: top center; page-break-inside: avoid !important; } .invoice-card, .kwitansi-card { width: 148mm !important; height: 210mm !important; max-height: 210mm !important; padding: 10mm !important; page-break-inside: avoid !important; } .modal-header, .modal-footer, .btn, .d-print-none { display: none !important; } }
 
 .app-logo {
-  border: 0;
-  border-radius: 16px;
+  padding: 4px;
+  border: 1px solid #d1fae5;
+  border-radius: 18px;
   object-fit: contain;
-  background: transparent !important;
-  box-shadow: none !important;
-  filter: drop-shadow(0 2px 5px rgba(6, 78, 59, .22));
+  background: #fff !important;
+  box-shadow: 0 6px 18px rgba(2, 44, 34, .2) !important;
 }
 
 .reset-options {
@@ -676,7 +676,7 @@ body {
   padding: clamp(16px, 2.4vw, 24px);
   border: 1px solid #a7f3d0;
   border-radius: 18px;
-  background: linear-gradient(135deg, #fff 12%, #f0fdfa 100%);
+  background: linear-gradient(135deg, #fff 12%, #f8fffc 100%);
   box-shadow: 0 10px 25px -8px rgba(6, 78, 59, .12);
 }
 
@@ -706,8 +706,8 @@ body {
 }
 
 .scholar-quote-slide {
-  min-height: 96px;
-  padding: 18px 0 10px;
+  min-height: 0;
+  padding: 14px 0 8px;
 }
 
 .scholar-quote-slide[hidden] {
@@ -717,7 +717,6 @@ body {
 .scholar-quote-slide p {
   color: #334155;
   font-size: clamp(13px, 1.6vw, 16px);
-  font-weight: 600;
   line-height: 1.75;
 }
 
@@ -726,19 +725,25 @@ body {
   font-weight: 800;
 }
 
+.scholar-quote-slide .scholar-quote-core {
+  margin: 0;
+  font-size: clamp(14px, 1.7vw, 17px);
+  line-height: 1.75;
+}
+
 .scholar-quote-slide b {
   display: block;
-  margin-top: 12px;
+  margin-top: 8px;
   color: #047857;
   font-size: 11px;
 }
 
-.scholar-quote-source {
-  display: block;
-  margin-top: 6px;
+.scholar-quote-reference {
+  margin-top: 9px;
   color: #64748b;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .login-demo-note {
@@ -1217,14 +1222,14 @@ body {
   flex: none;
   width: 48px;
   height: 48px;
-  padding: 0;
-  border: 0;
-  border-radius: 16px;
+  padding: 4px;
+  border: 1px solid #d1fae5;
+  border-radius: 18px;
   object-fit: contain;
-  background: transparent !important;
-  box-shadow: none;
+  background: #fff !important;
+  box-shadow: 0 6px 18px rgba(2, 44, 34, .2);
   opacity: 1;
-  filter: drop-shadow(0 2px 6px rgba(6, 78, 59, .22));
+  filter: none;
   mix-blend-mode: normal;
 }
 
@@ -1676,11 +1681,12 @@ body {
 }
 
 #landing .landing-logo {
-  padding: 0;
-  border-radius: 16px;
-  background: transparent !important;
-  box-shadow: none;
-  filter: drop-shadow(0 2px 6px rgba(6, 78, 59, .22));
+  padding: 4px;
+  border: 1px solid #d1fae5;
+  border-radius: 18px;
+  background: #fff !important;
+  box-shadow: 0 6px 18px rgba(2, 44, 34, .2);
+  filter: none;
 }
 
 .landing-clock {

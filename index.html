@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./assets/logo stkis.png">
-  <link rel="stylesheet" href="./style.css?v=6038">
+  <link rel="stylesheet" href="./style.css?v=6045">
   <title>BoardingPro STKIS - Sistem Informasi Smart Boarding</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -323,8 +323,8 @@
       firebase.initializeApp(window.firebaseConfig);
   }
 </script>
-  <script src="data.js?v=6038"></script>
-  <script src="app.js?v=6038"></script>
+  <script src="data.js?v=6045"></script>
+  <script src="app.js?v=6045"></script>
 
 <!-- Modal Rincian Kehadiran Guru -->
 <div id="modal-detail-guru" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
@@ -429,12 +429,20 @@
   #modal-root .permit-letter .kop-surat .logo-wrapper img{border-radius:0!important}
   #modal-root .permit-letter .kop-surat .kop-text,#modal-root .permit-letter .kop-surat .kop-text *{text-align:center!important}
   #modal-root .form-grid [hidden]{display:none!important}
-  .logo-wrapper,.logo-box,.landing-logo,.app-logo,.quran-brand img,.prayer-hero-heading img,.pwa-install-logo,#persistent-murottal-player img{background:transparent!important;border-color:transparent!important;box-shadow:none!important}
-  .logo-wrapper img,.logo-box img{border-radius:0!important;object-fit:contain}
-  #landing .landing-logo,#app-shell .app-logo,#modal-root .document-container .logo-wrapper{background:transparent!important;border-color:transparent!important;box-shadow:none!important}
-  .landing-logo,.app-logo,.quran-brand img,.prayer-hero-heading img,.pwa-install-logo,#persistent-murottal-player img{filter:drop-shadow(0 2px 6px rgba(6,78,59,.2))}
+  #modal-root .document-container .kop-container .logo-wrapper,#modal-root .document-container .kop-surat .logo-wrapper{padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+  #modal-root .document-container .kop-container .logo-wrapper img,#modal-root .document-container .kop-surat .logo-wrapper img{border-radius:0!important;object-fit:contain}
+  .landing-logo,.app-logo,.pwa-install-logo{padding:4px!important;border:1px solid #d1fae5!important;border-radius:18px!important;background:#fff!important;box-shadow:0 6px 18px rgba(2,44,34,.2)!important;filter:none!important}
+  .quran-brand img,.prayer-hero-heading img,#persistent-murottal-player img{background:transparent!important;border-color:transparent!important;box-shadow:none!important;filter:drop-shadow(0 2px 6px rgba(6,78,59,.2))}
   .accordion-record>*{min-width:0;overflow-wrap:anywhere}
   .accordion-record .badge,.accordion-record .status-badge{max-width:100%;flex:0 1 auto}
+  .finance-record-list{width:100%;min-width:0;overflow-x:hidden}
+  .accordion-record.finance-record{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+  .finance-record-detail{min-width:0;overflow-wrap:anywhere}
+  .finance-record-status{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;min-width:0}
+  .finance-record-status .badge,.finance-record-status .status-badge{max-width:100%}
+  #modal-root .document-container .kop-container,#modal-root .document-container .kop-surat{display:grid!important;grid-template-columns:clamp(56px,15vw,110px) minmax(0,1fr)!important;align-items:center!important;justify-content:stretch!important;gap:clamp(8px,2.5vw,18px)!important;width:100%!important;border-bottom:3px double #0f172a!important;padding-bottom:12px!important;margin-bottom:16px!important}
+  #modal-root .document-container .kop-text,#modal-root .document-container .kop-text *{min-width:0;text-align:center!important;overflow-wrap:anywhere}
+  #modal-root .document-container .kop-container .logo-wrapper,#modal-root .document-container .kop-surat .logo-wrapper{width:clamp(56px,15vw,110px)!important;height:clamp(56px,15vw,110px)!important}
   .kaldik-event-actions,.kaldik-schedule-card-head,.kaldik-schedule-card-head>span{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
   .kaldik-event-actions{justify-content:flex-end}
   .kaldik-schedule-card-head{justify-content:space-between;gap:10px}
@@ -443,6 +451,12 @@
     .accordion-record{display:flex;flex-direction:column;align-items:stretch;gap:6px}
     .accordion-record>span:last-child{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
     .accordion-record .badge,.accordion-record .status-badge{white-space:normal!important;text-align:left}
+    .accordion-record.finance-record{display:flex;flex-direction:column;align-items:stretch;gap:7px;padding:12px 2px}
+    .finance-record-student,.finance-record-detail{display:block;width:100%;min-width:0;overflow-wrap:anywhere}
+    .finance-record-status{justify-content:flex-start}
+    .finance-record-status .badge,.finance-record-status .status-badge{white-space:normal!important;text-align:left}
+    #modal-root .document-container .kop-container,#modal-root .document-container .kop-surat{display:grid!important;grid-template-columns:clamp(48px,15vw,68px) minmax(0,1fr)!important;gap:8px!important;padding-bottom:8px!important;margin-bottom:12px!important}
+    #modal-root .document-container .kop-container .logo-wrapper,#modal-root .document-container .kop-surat .logo-wrapper{width:clamp(48px,15vw,68px)!important;height:clamp(48px,15vw,68px)!important}
     .kaldik-event-actions{justify-content:flex-start}
     .kaldik-event-card .kaldik-event-actions{justify-self:stretch}
   }
