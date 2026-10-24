@@ -105,8 +105,11 @@
 }
 
 .quran-brand img {
-  width: 48px;
-  height: 48px;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  padding: 2px;
+  border-radius: 16px;
   object-fit: contain;
   background: transparent;
   filter: drop-shadow(0 2px 5px rgba(6, 78, 59, .18));
@@ -716,6 +719,11 @@ body {
   font-size: clamp(13px, 1.6vw, 16px);
   font-weight: 600;
   line-height: 1.75;
+}
+
+.scholar-quote-slide p strong {
+  color: #047857;
+  font-weight: 800;
 }
 
 .scholar-quote-slide b {
@@ -1673,13 +1681,6 @@ body {
   background: transparent !important;
   box-shadow: none;
   filter: drop-shadow(0 2px 6px rgba(6, 78, 59, .22));
-}
-
-.scholar-quote-translation-label {
-  display: block;
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 9px;
 }
 
 .landing-clock {
