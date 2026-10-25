@@ -508,7 +508,8 @@ function hijriDateParts(date = new Date()) {
   adjusted.setDate(adjusted.getDate() + hijriConversionOffsetDays);
   const parts = new Intl.DateTimeFormat('en-US-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric', year: 'numeric' }).formatToParts(adjusted);
   const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-  return { day: values.day, month: hijriMonthNames[Number(values.month) - 1] || values.month, year: values.year };
+  const monthNumber = Number(values.month);
+  return { day: values.day, month: hijriMonthNames[monthNumber - 1] || values.month, monthNumber, year: values.year };
 }
 function formatDashboardDate(date = new Date()) {
   const hijri = hijriDateParts(date);
@@ -1544,42 +1545,47 @@ function juzOptionsMarkup(selected = '1') {
   }).join('');
 }
 
-function showScholarSlide(slider, nextIndex) {
-  const slides = [...slider.querySelectorAll('[data-scholar-slide]')];
+function showQuoteSlide(slider, nextIndex) {
+  const slides = [...slider.querySelectorAll('[data-quote-slide]')];
   if (!slides.length) return;
   const selectedIndex = (nextIndex + slides.length) % slides.length;
   slides.forEach((slide, index) => {
     slide.hidden = index !== selectedIndex;
     slide.setAttribute('aria-hidden', String(index !== selectedIndex));
   });
-  slider.querySelectorAll('[data-scholar-index]').forEach((button, index) => {
+  slider.querySelectorAll('[data-quote-index]').forEach((button, index) => {
     button.classList.toggle('active', index === selectedIndex);
     button.setAttribute('aria-pressed', String(index === selectedIndex));
   });
   slider.dataset.activeIndex = String(selectedIndex);
 }
 
-function bindScholarSlider(slider) {
+function bindQuoteSlider(slider) {
   if (!slider || slider.dataset.bound === 'true') return;
   slider.dataset.bound = 'true';
   let timer;
   const advance = (step) => {
     const current = Number(slider.dataset.activeIndex || 0);
-    showScholarSlide(slider, current + step);
+    showQuoteSlide(slider, current + step);
   };
   const resetTimer = () => {
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
       if (!slider.isConnected) return;
+      if (slider.dataset.hijriRotation === 'true' && slider.dataset.hijriDay !== hijriDayKey()) {
+        renderKnowledgePearlsForHijriDay(slider);
+        resetTimer();
+        return;
+      }
       advance(1);
       resetTimer();
     }, 25000);
   };
   slider.addEventListener('click', (event) => {
-    const step = event.target.closest('[data-scholar-step]');
-    if (step) advance(Number(step.dataset.scholarStep) || 1);
-    const dot = event.target.closest('[data-scholar-index]');
-    if (dot) showScholarSlide(slider, Number(dot.dataset.scholarIndex));
+    const step = event.target.closest('[data-quote-step]');
+    if (step) advance(Number(step.dataset.quoteStep) || 1);
+    const dot = event.target.closest('[data-quote-index]');
+    if (dot) showQuoteSlide(slider, Number(dot.dataset.quoteIndex));
     if (step || dot) resetTimer();
   });
   slider.addEventListener('mouseenter', () => window.clearTimeout(timer));
@@ -1591,12 +1597,178 @@ function bindScholarSlider(slider) {
   resetTimer();
 }
 
+const knowledgePearls = [
+  {
+    arabic: 'وَقُل رَّبِّ زِدْنِي عِلْمًا',
+    before: 'Allah mengajarkan Nabi ﷺ untuk berdoa: ',
+    core: '“Ya Tuhanku, tambahkanlah ilmu kepadaku.”',
+    after: '',
+    source: 'QS. Taha: 114',
+    url: 'https://quran.com/20/114'
+  },
+  {
+    arabic: 'يَا أَيُّهَا الَّذِينَ آمَنُوا إِذَا قِيلَ لَكُمْ تَفَسَّحُوا فِي الْمَجَالِسِ فَافْسَحُوا يَفْسَحِ اللَّهُ لَكُمْ وَإِذَا قِيلَ انشُزُوا فَانشُزُوا يَرْفَعِ اللَّهُ الَّذِينَ آمَنُوا مِنكُمْ وَالَّذِينَ أُوتُوا الْعِلْمَ دَرَجَاتٍ وَاللَّهُ بِمَا تَعْمَلُونَ خَبِيرٌ',
+    before: 'Allah berfirman: “Wahai orang-orang yang beriman! Apabila dikatakan kepadamu, ‘Berilah kelapangan di dalam majelis-majelis,’ maka lapangkanlah, niscaya Allah akan memberi kelapangan untukmu. Apabila dikatakan, ‘Berdirilah kamu,’ maka berdirilah. Niscaya ',
+    core: 'Allah akan mengangkat orang-orang yang beriman di antara kamu dan orang-orang yang diberi ilmu beberapa derajat.',
+    after: ' Allah Mahateliti terhadap apa yang kamu kerjakan.”',
+    source: 'QS. Al-Mujadilah: 11',
+    url: 'https://quran.com/58/11'
+  },
+  {
+    arabic: 'أَمَّنْ هُوَ قَانِتٌ آنَاءَ اللَّيْلِ سَاجِدًا وَقَائِمًا يَحْذَرُ الْآخِرَةَ وَيَرْجُو رَحْمَةَ رَبِّهِ قُلْ هَلْ يَسْتَوِي الَّذِينَ يَعْلَمُونَ وَالَّذِينَ لَا يَعْلَمُونَ إِنَّمَا يَتَذَكَّرُ أُولُو الْأَلْبَابِ',
+    before: 'Allah berfirman: “Apakah (kamu orang musyrik yang lebih beruntung) ataukah orang yang beribadah pada waktu malam dengan sujud dan berdiri, karena takut kepada (azab) akhirat dan mengharapkan rahmat Tuhannya? Katakanlah, ',
+    core: '‘Apakah sama orang-orang yang mengetahui dengan orang-orang yang tidak mengetahui?’',
+    after: ' Sesungguhnya hanya orang yang berakal sehat yang dapat menerima pelajaran.”',
+    source: 'QS. Az-Zumar: 9',
+    url: 'https://quran.com/39/9'
+  },
+  {
+    arabic: 'مَنْ يُرِدِ اللَّهُ بِهِ خَيْرًا يُفَقِّهْهُ فِي الدِّينِ',
+    before: 'Rasulullah ﷺ bersabda: ',
+    core: '“Barang siapa yang Allah kehendaki memperoleh kebaikan, Dia akan memahamkannya dalam urusan agama.”',
+    after: '',
+    source: 'HR. Bukhari no. 71 dan Muslim no. 1037 · Muslim.or.id dan Muslimah.or.id, “Keutamaan Menuntut Ilmu Agama”',
+    url: 'https://muslim.or.id/1482-keutamaan-menuntut-ilmu-agama.html'
+  },
+  {
+    arabic: 'وَمَنْ سَلَكَ طَرِيقًا يَلْتَمِسُ فِيهِ عِلْمًا سَهَّلَ اللَّهُ لَهُ بِهِ طَرِيقًا إِلَى الْجَنَّةِ',
+    before: 'Rasulullah ﷺ bersabda: ',
+    core: '“Barang siapa menempuh jalan untuk mencari ilmu, Allah akan memudahkan baginya jalan menuju surga.”',
+    after: '',
+    source: 'HR. Muslim no. 2699a · Almanhaj.or.id, “Menuntut Ilmu Jalan Menuju Surga”',
+    url: 'https://almanhaj.or.id/13056-menuntut-ilmu-jalan-menuju-surga.html'
+  },
+  {
+    arabic: 'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ',
+    before: 'Rasulullah ﷺ bersabda: ',
+    core: '“Sebaik-baik kalian adalah orang yang mempelajari Al-Qur’an dan mengajarkannya.”',
+    after: '',
+    source: 'HR. Bukhari no. 5027 · Yufid.com, portal pencarian Al-Qur’an dan hadits sahih',
+    url: 'https://yufid.com/en/index.html'
+  },
+  {
+    arabic: 'إِذَا مَاتَ الْإِنْسَانُ انْقَطَعَ عَنْهُ عَمَلُهُ إِلَّا مِنْ ثَلَاثَةٍ: إِلَّا مِنْ صَدَقَةٍ جَارِيَةٍ، أَوْ عِلْمٍ يُنْتَفَعُ بِهِ، أَوْ وَلَدٍ صَالِحٍ يَدْعُو لَهُ',
+    before: 'Rasulullah ﷺ bersabda: “Apabila seseorang meninggal dunia, terputuslah amalnya kecuali karena tiga perkara: ',
+    core: 'sedekah jariyah, ilmu yang dimanfaatkan, atau anak saleh yang mendoakannya.”',
+    after: '',
+    source: 'HR. Muslim no. 1631',
+    url: 'https://sunnah.com/muslim:1631'
+  },
+  {
+    arabic: 'وَمَا اجْتَمَعَ قَوْمٌ فِي بَيْتٍ مِنْ بُيُوتِ اللَّهِ يَتْلُونَ كِتَابَ اللَّهِ وَيَتَدَارَسُونَهُ بَيْنَهُمْ إِلَّا نَزَلَتْ عَلَيْهِمُ السَّكِينَةُ وَغَشِيَتْهُمُ الرَّحْمَةُ وَحَفَّتْهُمُ الْمَلَائِكَةُ وَذَكَرَهُمُ اللَّهُ فِيمَنْ عِنْدَهُ',
+    before: 'Rasulullah ﷺ bersabda: “Tidaklah suatu kaum berkumpul di salah satu rumah Allah, membaca Kitab Allah dan mempelajarinya bersama, melainkan ',
+    core: 'ketenangan turun kepada mereka, rahmat meliputi mereka, para malaikat mengelilingi mereka, dan Allah menyebut mereka di hadapan makhluk di sisi-Nya.”',
+    after: '',
+    source: 'HR. Muslim no. 2699a · Rumaysho.com, “Keutamaan Berkumpul di Masjid untuk Membaca dan Mempelajari Al-Qur’an”',
+    url: 'https://rumaysho.com/41153-keutamaan-berkumpul-di-masjid-untuk-membaca-dan-mempelajari-al-quran.html'
+  },
+  {
+    arabic: 'اقْرَءُوا الْقُرْآنَ فَإِنَّهُ يَأْتِي يَوْمَ الْقِيَامَةِ شَفِيعًا لِأَصْحَابِهِ',
+    before: 'Rasulullah ﷺ bersabda: ',
+    core: '“Bacalah Al-Qur’an, karena sesungguhnya ia akan datang pada hari kiamat sebagai pemberi syafaat bagi para pembacanya.”',
+    after: '',
+    source: 'HR. Muslim no. 804',
+    url: 'https://sunnah.com/muslim:804'
+  },
+  {
+    arabic: 'لَا حَسَدَ إِلَّا فِي اثْنَتَيْنِ: رَجُلٍ آتَاهُ اللَّهُ مَالًا فَسَلَّطَهُ عَلَى هَلَكَتِهِ فِي الْحَقِّ، وَرَجُلٍ آتَاهُ اللَّهُ الْحِكْمَةَ فَهُوَ يَقْضِي بِهَا وَيُعَلِّمُهَا',
+    before: 'Rasulullah ﷺ bersabda: “Tidak boleh hasad kecuali kepada dua orang: seseorang yang Allah beri harta lalu ia menggunakannya di jalan kebenaran, dan seseorang yang Allah beri hikmah, lalu ',
+    core: 'ia memutuskan perkara dengannya dan mengajarkannya.”',
+    after: '',
+    source: 'HR. Bukhari no. 73 dan Muslim no. 816 · Muslim Afiyah',
+    url: 'https://muslimafiyah.com/peran-harta-dalam-menegakkan-dakwah.html'
+  },
+  {
+    arabic: 'يَقُولُ اللَّهُ تَعَالَى أَنَا عِنْدَ ظَنِّ عَبْدِي بِي وَأَنَا مَعَهُ إِذَا ذَكَرَنِي فَإِنْ ذَكَرَنِي فِي نَفْسِهِ ذَكَرْتُهُ فِي نَفْسِي وَإِنْ ذَكَرَنِي فِي مَلَإٍ ذَكَرْتُهُ فِي مَلَإٍ خَيْرٍ مِنْهُمْ وَإِنْ تَقَرَّبَ إِلَيَّ بِشِبْرٍ تَقَرَّبْتُ إِلَيْهِ ذِرَاعًا وَإِنْ تَقَرَّبَ إِلَيَّ ذِرَاعًا تَقَرَّبْتُ إِلَيْهِ بَاعًا وَإِنْ أَتَانِي يَمْشِي أَتَيْتُهُ هَرْوَلَةً',
+    before: 'Allah Ta‘ala berfirman dalam hadits qudsi: “Aku sesuai dengan persangkaan hamba-Ku kepada-Ku, dan Aku bersamanya ketika ia mengingat-Ku. Jika ia mengingat-Ku dalam dirinya, Aku mengingatnya dalam diri-Ku; jika ia mengingat-Ku dalam suatu kelompok, Aku mengingatnya dalam kelompok yang lebih baik dari mereka. Jika ia mendekat kepada-Ku sejengkal, Aku mendekat kepadanya sehasta; jika ia mendekat kepada-Ku sehasta, Aku mendekat kepadanya sedepa. Jika ia datang kepada-Ku dengan berjalan, ',
+    core: 'Aku datang kepadanya dengan berlari.”',
+    after: '',
+    source: 'Hadits qudsi sahih · HR. Bukhari no. 7405 dan Muslim no. 2675a',
+    url: 'https://sunnah.com/bukhari:7405'
+  },
+  {
+    arabic: 'إِنَّ اللَّهَ قَالَ مَنْ عَادَى لِي وَلِيًّا فَقَدْ آذَنْتُهُ بِالْحَرْبِ وَمَا تَقَرَّبَ إِلَيَّ عَبْدِي بِشَيْءٍ أَحَبَّ إِلَيَّ مِمَّا افْتَرَضْتُ عَلَيْهِ وَمَا يَزَالُ عَبْدِي يَتَقَرَّبُ إِلَيَّ بِالنَّوَافِلِ حَتَّى أُحِبَّهُ',
+    before: 'Allah Ta‘ala berfirman dalam hadits qudsi: “Barang siapa memusuhi wali-Ku, sungguh Aku umumkan perang terhadapnya. Tidaklah hamba-Ku mendekatkan diri kepada-Ku dengan sesuatu yang lebih Aku cintai daripada apa yang Aku wajibkan atasnya. Hamba-Ku senantiasa mendekatkan diri kepada-Ku dengan amalan-amalan sunah hingga ',
+    core: 'Aku mencintainya.”',
+    after: '',
+    source: 'Hadits qudsi sahih · HR. Bukhari no. 6502',
+    url: 'https://sunnah.com/bukhari:6502'
+  }
+];
+
+function hijriDayKey(date = new Date()) {
+  const hijri = hijriDateParts(date);
+  return `${hijri.year}-${hijri.monthNumber}-${hijri.day}`;
+}
+
+function knowledgePearlSelection(date = new Date()) {
+  const hijri = hijriDateParts(date);
+  const dayKey = `${hijri.year}-${hijri.monthNumber}-${hijri.day}`;
+  const totalData = knowledgePearls.length;
+  if (totalData === 0) throw new Error('Data dalil untuk rotasi Hijriah tidak tersedia.');
+
+  const year = Number(hijri.year);
+  const month = Number(hijri.monthNumber);
+  const day = Number(hijri.day);
+  if (![year, month, day].every(Number.isSafeInteger) || month < 1 || month > 12 || day < 1) {
+    throw new Error('Tanggal Hijriah untuk rotasi dalil tidak valid.');
+  }
+
+  const modulo = (value, divisor) => ((value % divisor) + divisor) % divisor;
+  const daySerialModulo = modulo(
+    modulo(year, totalData) * (354 % totalData)
+      + modulo(month - 1, totalData) * (30 % totalData)
+      + modulo(day - 1, totalData),
+    totalData
+  );
+  const firstIndex = (daySerialModulo * 2) % totalData;
+  return {
+    dayKey,
+    label: `${hijri.day} ${hijri.month} ${hijri.year} H`,
+    indices: totalData > 1 ? [firstIndex, (firstIndex + 1) % totalData] : [firstIndex]
+  };
+}
+
+function knowledgePearlSlidesMarkup(indices, activeIndex = 0) {
+  return indices.map((pearlIndex, index) => {
+    const pearl = knowledgePearls[pearlIndex];
+    if (!pearl) throw new Error(`Data dalil pada indeks ${pearlIndex} tidak tersedia.`);
+    return `<article class="scholar-quote-slide" data-quote-slide data-pearl-index="${pearlIndex}"${index === activeIndex ? '' : ' hidden'} aria-hidden="${index !== activeIndex}"><p class="knowledge-pearl-arabic" lang="ar" dir="rtl">${escapeHtml(pearl.arabic)}</p><p class="scholar-quote-core">${escapeHtml(pearl.before)}<strong>${escapeHtml(pearl.core)}</strong>${escapeHtml(pearl.after)}</p><footer class="knowledge-pearl-source"><a href="${escapeHtml(pearl.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(pearl.source)}</a></footer></article>`;
+  }).join('');
+}
+
+function knowledgePearlDotsMarkup(indices, activeIndex = 0) {
+  return indices.map((pearlIndex, index) => `<button type="button" data-quote-index="${index}" aria-label="Tampilkan dalil ${index + 1}" aria-pressed="${index === activeIndex}" class="${index === activeIndex ? 'active' : ''}"></button>`).join('');
+}
+
+function renderKnowledgePearlsForHijriDay(slider) {
+  const selection = knowledgePearlSelection();
+  const slides = slider.querySelector('.scholar-quote-slides');
+  const dots = slider.querySelector('.scholar-quote-dots');
+  const dayLabel = slider.querySelector('[data-pearl-day]');
+  if (!slides || !dots || !dayLabel) throw new Error('Komponen rotasi dalil Hijriah tidak lengkap.');
+  slides.innerHTML = knowledgePearlSlidesMarkup(selection.indices);
+  dots.innerHTML = knowledgePearlDotsMarkup(selection.indices);
+  dayLabel.textContent = `${selection.label} · 2 dalil hari ini`;
+  slider.dataset.activeIndex = '0';
+  slider.dataset.hijriDay = selection.dayKey;
+}
+
 function scholarQuoteWidget() {
   const initialIndex = new Date().getDate() % scholarLearningQuotes.length;
-  return `<section class="scholar-quote-widget" data-scholar-slider data-active-index="${initialIndex}" aria-label="Faedah Ulama"><div class="scholar-quote-heading"><div><span class="eyebrow">FAEDAH ULAMA</span></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-scholar-step="-1" aria-label="Ulama sebelumnya">‹</button><button class="icon-btn" type="button" data-scholar-step="1" aria-label="Ulama berikutnya">›</button></div></div><div class="scholar-quote-slides" aria-live="polite">${scholarLearningQuotes.map((quote, index) => {
+  return `<section class="scholar-quote-widget" data-quote-slider data-active-index="${initialIndex}" aria-label="Faedah Ulama"><div class="scholar-quote-heading"><div><span class="eyebrow">FAEDAH ULAMA</span></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-quote-step="-1" aria-label="Ulama sebelumnya">‹</button><button class="icon-btn" type="button" data-quote-step="1" aria-label="Ulama berikutnya">›</button></div></div><div class="scholar-quote-slides" aria-live="polite">${scholarLearningQuotes.map((quote, index) => {
     const reference = quote.referenceDetails;
-    return `<article class="scholar-quote-slide" data-scholar-slide${index === initialIndex ? '' : ' hidden'} aria-hidden="${index !== initialIndex}"><p class="scholar-quote-core">${escapeHtml(quote.reflection)} <strong>${escapeHtml(quote.core)}</strong></p><b>${escapeHtml(quote.scholar)}</b><footer class="scholar-quote-reference">Rujukan: ${escapeHtml(reference.book)} karya ${escapeHtml(reference.author)}</footer></article>`;
-  }).join('')}</div><div class="scholar-quote-dots" aria-label="Pilih tokoh ulama">${scholarLearningQuotes.map((quote, index) => `<button type="button" data-scholar-index="${index}" aria-label="Tampilkan ${escapeHtml(quote.scholar)}" aria-pressed="${index === initialIndex}" class="${index === initialIndex ? 'active' : ''}"></button>`).join('')}</div></section>`;
+    return `<article class="scholar-quote-slide" data-quote-slide${index === initialIndex ? '' : ' hidden'} aria-hidden="${index !== initialIndex}"><p class="scholar-quote-core">${escapeHtml(quote.reflection)} <strong>${escapeHtml(quote.core)}</strong></p><b>${escapeHtml(quote.scholar)}</b><footer class="scholar-quote-reference">${escapeHtml(reference.book)} - ${escapeHtml(reference.author)}</footer></article>`;
+  }).join('')}</div><div class="scholar-quote-dots" aria-label="Pilih tokoh ulama">${scholarLearningQuotes.map((quote, index) => `<button type="button" data-quote-index="${index}" aria-label="Tampilkan ${escapeHtml(quote.scholar)}" aria-pressed="${index === initialIndex}" class="${index === initialIndex ? 'active' : ''}"></button>`).join('')}</div></section>`;
+}
+
+function knowledgePearlsWidget() {
+  const selection = knowledgePearlSelection();
+  return `<section class="scholar-quote-widget knowledge-pearl-widget" data-quote-slider data-hijri-rotation="true" data-hijri-day="${selection.dayKey}" data-active-index="0" aria-label="Dalil Al-Qur'an, Hadits dan Atsar"><div class="scholar-quote-heading"><div><span class="eyebrow">DALIL &amp; HADITS</span><h2>Dalil Al-Qur’an, Hadits &amp; Atsar</h2><small class="knowledge-pearl-day" data-pearl-day>${selection.label} · 2 dalil hari ini</small></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-quote-step="-1" aria-label="Dalil sebelumnya">‹</button><button class="icon-btn" type="button" data-quote-step="1" aria-label="Dalil berikutnya">›</button></div></div><div class="scholar-quote-slides" aria-live="polite">${knowledgePearlSlidesMarkup(selection.indices)}</div><div class="scholar-quote-dots" aria-label="Pilih salah satu dari dua dalil hari ini">${knowledgePearlDotsMarkup(selection.indices)}</div></section>`;
+}
+
+function learningWidgetsMarkup() {
+  return `<div class="learning-widgets-grid">${knowledgePearlsWidget()}${scholarQuoteWidget()}</div>`;
 }
 
 function prayerWidgetMarkup() {
@@ -3100,7 +3272,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<nav class="dashboard-learning-shortcuts" aria-label="Akses pembelajaran"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></nav>${scholarQuoteWidget()}${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<nav class="dashboard-learning-shortcuts" aria-label="Akses pembelajaran"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></nav>${learningWidgetsMarkup()}${extra}`;
 }
 
 function adminDashboard() {
@@ -3903,7 +4075,7 @@ function renderDashboard() {
   try {
     renderShell();
     renderView();
-    document.querySelectorAll('#main-content [data-scholar-slider]').forEach(bindScholarSlider);
+    document.querySelectorAll('#main-content [data-quote-slider]').forEach(bindQuoteSlider);
 
     // Hook Integrasi BoardingPro (Kehadiran Guru & Notifikasi Role)
     if (typeof renderTeacherAttendanceModule === 'function') {
@@ -5371,10 +5543,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
-  const landingScholarQuotes = $('#landing-scholar-quotes');
-  if (landingScholarQuotes) {
-    landingScholarQuotes.innerHTML = scholarQuoteWidget();
-    bindScholarSlider(landingScholarQuotes.querySelector('[data-scholar-slider]'));
+  const landingLearningWidgets = $('#landing-learning-widgets');
+  if (landingLearningWidgets) {
+    landingLearningWidgets.innerHTML = learningWidgetsMarkup();
+    landingLearningWidgets.querySelectorAll('[data-quote-slider]').forEach(bindQuoteSlider);
   }
   bindAudioUnlock();
   bindPersistentPlayer();

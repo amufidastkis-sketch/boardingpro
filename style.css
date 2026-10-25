@@ -680,6 +680,65 @@ body {
   box-shadow: 0 10px 25px -8px rgba(6, 78, 59, .12);
 }
 
+.learning-widgets-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, .85fr);
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 18px;
+}
+
+.learning-widgets-grid .scholar-quote-widget {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.knowledge-pearl-widget .scholar-quote-heading h2 {
+  margin: 3px 0 0;
+  color: #064e3b;
+  font-size: clamp(14px, 1.5vw, 18px);
+  line-height: 1.35;
+}
+
+.knowledge-pearl-day {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.knowledge-pearl-widget .knowledge-pearl-arabic {
+  margin: 0 0 12px;
+  color: #064e3b;
+  font-family: "Amiri", "Noto Naskh Arabic", "Traditional Arabic", serif;
+  font-size: clamp(23px, 2.5vw, 30px);
+  line-height: 1.9;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-pearl-widget .knowledge-pearl-source {
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-pearl-widget .knowledge-pearl-source a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: #a7f3d0;
+  text-underline-offset: 2px;
+}
+
+.knowledge-pearl-widget .knowledge-pearl-source a:hover {
+  color: #047857;
+}
+
 .scholar-quote-heading {
   display: flex;
   align-items: center;
@@ -764,9 +823,13 @@ body {
   line-height: 1.5;
 }
 
-#landing-scholar-quotes {
+#landing-learning-widgets {
   grid-column: 1 / -1;
   width: 100%;
+}
+
+#landing-learning-widgets .learning-widgets-grid {
+  margin: 0;
 }
 
 .landing-feature-grid {
@@ -1350,50 +1413,49 @@ body {
   font-size: 15px;
 }
 
-#landing-scholar-quotes {
+#landing-learning-widgets {
   grid-column: 1 / -1;
   width: min(100%, 1020px);
   justify-self: start;
 }
 
-#landing .scholar-quote-widget {
+#landing-learning-widgets .scholar-quote-widget {
   width: 100%;
-  margin: 0;
   padding: 12px 15px;
   border-radius: 15px;
   box-shadow: 0 7px 18px -9px rgba(6, 78, 59, .15);
 }
 
-#landing .scholar-quote-heading h2 {
+#landing-learning-widgets .scholar-quote-heading h2 {
   font-size: clamp(14px, 1.5vw, 17px);
 }
 
-#landing .scholar-quote-slide {
+#landing-learning-widgets .scholar-quote-slide {
   min-height: 0;
   padding: 9px 0 5px;
 }
 
-#landing .scholar-quote-slide p {
+#landing-learning-widgets .scholar-quote-slide p {
   font-size: clamp(11px, 1vw, 13px);
   line-height: 1.55;
 }
 
-#landing .scholar-quote-slide p strong {
+#landing-learning-widgets .scholar-quote-slide p strong {
   color: #047857;
   font-weight: 800;
 }
 
-#landing .scholar-quote-slide b {
+#landing-learning-widgets .scholar-quote-slide b {
   margin-top: 7px;
   font-size: 10px;
 }
 
-#landing .scholar-quote-source {
+#landing-learning-widgets .scholar-quote-reference {
   margin-top: 3px;
   font-size: 8px;
 }
 
-#landing .scholar-quote-widget > small {
+#landing-learning-widgets .scholar-quote-widget > small {
   display: block;
   margin-top: 5px;
   font-size: 8px;
@@ -1494,24 +1556,29 @@ body {
     font-size: 14px;
   }
 
-  #landing-scholar-quotes {
+  #landing-learning-widgets {
     width: 100%;
   }
 
-  #landing .scholar-quote-widget {
+  #landing-learning-widgets .learning-widgets-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  #landing-learning-widgets .scholar-quote-widget {
     padding: 10px 11px;
   }
 
-  #landing .scholar-quote-heading {
+  #landing-learning-widgets .scholar-quote-heading {
     gap: 8px;
   }
 
-  #landing .scholar-quote-heading .eyebrow {
+  #landing-learning-widgets .scholar-quote-heading .eyebrow {
     font-size: 8px;
     letter-spacing: .7px;
   }
 
-  #landing .scholar-quote-slide p {
+  #landing-learning-widgets .scholar-quote-slide p {
     font-size: 11px;
   }
 
@@ -1774,6 +1841,11 @@ body {
 }
 
 @media (max-width: 640px) {
+  .learning-widgets-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
   .landing-clock {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
