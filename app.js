@@ -1259,8 +1259,20 @@ function startInactivityTimer() {
   resetInactivityTimer();
 }
 
+const savedPrayerLocationKey = 'boardingpro-prayer-location';
+function readSavedPrayerLocation() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(savedPrayerLocationKey) || 'null');
+    if (!saved || typeof saved !== 'object' || !saved.city || !saved.regionCodes?.province || !saved.regionCodes?.regency) return null;
+    return { ...saved, saved: true, editing: false };
+  } catch (error) {
+    console.warn('[BoardingPro] Lokasi jadwal sholat tersimpan tidak valid:', error);
+    localStorage.removeItem(savedPrayerLocationKey);
+    return null;
+  }
+}
 let prayerTimings = null;
-let prayerLocation = null;
+let prayerLocation = readSavedPrayerLocation();
 let prayerTimingDate = '';
 let adhanAudio = null;
 let prayerIntervalId = null;
@@ -1427,6 +1439,15 @@ let persistentPlayerBound = false;
 let lastPrayerAlerts = new Set(JSON.parse(localStorage.getItem('boardingpro-prayer-alerts') || '[]'));
 const prayerNames = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 const prayerLabels = { Fajr: 'Subuh', Dhuhr: 'Dzuhur', Asr: 'Ashar', Maghrib: 'Maghrib', Isha: 'Isya' };
+const prayerBellStoreKey = 'boardingpro-prayer-bell-notifications';
+let prayerBellNotifications = [];
+try {
+  const storedPrayerBellNotifications = JSON.parse(localStorage.getItem(prayerBellStoreKey) || '[]');
+  if (Array.isArray(storedPrayerBellNotifications)) prayerBellNotifications = storedPrayerBellNotifications;
+} catch (error) {
+  console.warn('[BoardingPro] Notifikasi sholat tersimpan tidak valid:', error);
+  localStorage.removeItem(prayerBellStoreKey);
+}
 const qariDefinitions = {
   sudais: { label: 'Syekh Abdurrahman Al-Sudais', category: 'zyadah', quranComId: 3 },
   ossi: { label: 'Syekh Abdul Rahman Al-Ossi', category: 'zyadah', match: 'العوسي' },
@@ -1632,7 +1653,7 @@ const knowledgePearls = [
     before: 'Rasulullah ﷺ bersabda: ',
     core: '“Barang siapa yang Allah kehendaki memperoleh kebaikan, Dia akan memahamkannya dalam urusan agama.”',
     after: '',
-    source: 'HR. Bukhari no. 71 dan Muslim no. 1037 · Muslim.or.id dan Muslimah.or.id, “Keutamaan Menuntut Ilmu Agama”',
+    source: 'HR. Bukhari no. 71 dan Muslim no. 1037',
     url: 'https://muslim.or.id/1482-keutamaan-menuntut-ilmu-agama.html'
   },
   {
@@ -1641,7 +1662,7 @@ const knowledgePearls = [
     before: 'Rasulullah ﷺ bersabda: ',
     core: '“Barang siapa menempuh jalan untuk mencari ilmu, Allah akan memudahkan baginya jalan menuju surga.”',
     after: '',
-    source: 'HR. Muslim no. 2699a · Almanhaj.or.id, “Menuntut Ilmu Jalan Menuju Surga”',
+    source: 'HR. Muslim no. 2699a',
     url: 'https://almanhaj.or.id/13056-menuntut-ilmu-jalan-menuju-surga.html'
   },
   {
@@ -1650,7 +1671,7 @@ const knowledgePearls = [
     before: 'Rasulullah ﷺ bersabda: ',
     core: '“Sebaik-baik kalian adalah orang yang mempelajari Al-Qur’an dan mengajarkannya.”',
     after: '',
-    source: 'HR. Bukhari no. 5027 · Yufid.com, portal pencarian Al-Qur’an dan hadits sahih',
+    source: 'HR. Bukhari no. 5027',
     url: 'https://yufid.com/en/index.html'
   },
   {
@@ -1668,7 +1689,7 @@ const knowledgePearls = [
     before: 'Rasulullah ﷺ bersabda: “Tidaklah suatu kaum berkumpul di salah satu rumah Allah, membaca Kitab Allah dan mempelajarinya bersama, melainkan ',
     core: 'ketenangan turun kepada mereka, rahmat meliputi mereka, para malaikat mengelilingi mereka, dan Allah menyebut mereka di hadapan makhluk di sisi-Nya.”',
     after: '',
-    source: 'HR. Muslim no. 2699a · Rumaysho.com, “Keutamaan Berkumpul di Masjid untuk Membaca dan Mempelajari Al-Qur’an”',
+    source: 'HR. Muslim no. 2699a',
     url: 'https://rumaysho.com/41153-keutamaan-berkumpul-di-masjid-untuk-membaca-dan-mempelajari-al-quran.html'
   },
   {
@@ -1686,7 +1707,7 @@ const knowledgePearls = [
     before: 'Rasulullah ﷺ bersabda: “Tidak boleh hasad kecuali kepada dua orang: seseorang yang Allah beri harta lalu ia menggunakannya di jalan kebenaran, dan seseorang yang Allah beri hikmah, lalu ',
     core: 'ia memutuskan perkara dengannya dan mengajarkannya.”',
     after: '',
-    source: 'HR. Bukhari no. 73 dan Muslim no. 816 · Muslim Afiyah',
+    source: 'HR. Bukhari no. 73 dan Muslim no. 816',
     url: 'https://muslimafiyah.com/peran-harta-dalam-menegakkan-dakwah.html'
   },
   {
@@ -1784,11 +1805,9 @@ function renderKnowledgePearlsForHijriDay(slider) {
   const selection = knowledgePearlSelection();
   const slides = slider.querySelector('.scholar-quote-slides');
   const dots = slider.querySelector('.scholar-quote-dots');
-  const dayLabel = slider.querySelector('[data-pearl-day]');
-  if (!slides || !dots || !dayLabel) throw new Error('Komponen rotasi dalil Hijriah tidak lengkap.');
+  if (!slides || !dots) throw new Error('Komponen rotasi dalil tidak lengkap.');
   slides.innerHTML = knowledgePearlSlidesMarkup(selection.indices);
   dots.innerHTML = knowledgePearlDotsMarkup(selection.indices);
-  dayLabel.textContent = `${selection.label} · 2 dalil hari ini`;
   slider.dataset.activeIndex = '0';
   slider.dataset.hijriDay = selection.dayKey;
 }
@@ -1803,7 +1822,7 @@ function scholarQuoteWidget() {
 
 function knowledgePearlsWidget() {
   const selection = knowledgePearlSelection();
-  return `<section class="scholar-quote-widget knowledge-pearl-widget" data-quote-slider data-hijri-rotation="true" data-hijri-day="${selection.dayKey}" data-active-index="0" aria-label="Dalil Al-Qur'an, Hadits dan Atsar"><div class="scholar-quote-heading"><div><span class="eyebrow">DALIL &amp; HADITS</span><h2>Dalil Al-Qur’an, Hadits &amp; Atsar</h2><small class="knowledge-pearl-day" data-pearl-day>${selection.label} · 2 dalil hari ini</small></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-quote-step="-1" aria-label="Dalil sebelumnya">‹</button><button class="icon-btn" type="button" data-quote-step="1" aria-label="Dalil berikutnya">›</button></div></div><div class="scholar-quote-slides" aria-live="polite">${knowledgePearlSlidesMarkup(selection.indices)}</div><div class="scholar-quote-dots" aria-label="Pilih salah satu dari dua dalil hari ini">${knowledgePearlDotsMarkup(selection.indices)}</div></section>`;
+  return `<section class="scholar-quote-widget knowledge-pearl-widget" data-quote-slider data-hijri-rotation="true" data-hijri-day="${selection.dayKey}" data-active-index="0" aria-label="Dalil Al-Qur'an, Hadits dan Atsar"><div class="scholar-quote-heading"><div><span class="eyebrow">DALIL &amp; HADITS</span><h2>Dalil Al-Qur’an, Hadits &amp; Atsar</h2></div><div class="scholar-quote-controls"><button class="icon-btn" type="button" data-quote-step="-1" aria-label="Dalil sebelumnya">‹</button><button class="icon-btn" type="button" data-quote-step="1" aria-label="Dalil berikutnya">›</button></div></div><div class="scholar-quote-slides" aria-live="polite">${knowledgePearlSlidesMarkup(selection.indices)}</div><div class="scholar-quote-dots" aria-label="Pilih salah satu dari dua dalil">${knowledgePearlDotsMarkup(selection.indices)}</div></section>`;
 }
 
 function learningWidgetsMarkup() {
@@ -1811,7 +1830,7 @@ function learningWidgetsMarkup() {
 }
 
 function prayerWidgetMarkup() {
-  return `<section class="prayer-hero" data-prayer-widget><div class="prayer-hero-heading"><img src="./assets/logo%20stkis.png" alt="Logo Sekolah Tahfidz Kejuruan Irman Sofran"><div><span class="eyebrow">SEKOLAH TAHFIDZ KEJURUAN IRMAN SOFRAN</span><h2>Waktu Ibadah</h2><p data-prayer-status>Pilih provinsi, kabupaten/kota, kecamatan, dan desa/kelurahan.</p><p class="prayer-location-detail" data-prayer-location>${escapeHtml(prayerLocation?.label || 'Lokasi belum dipilih')}</p></div></div><div class="prayer-location-actions" aria-label="Pilih wilayah jadwal sholat"><label>Provinsi<select data-prayer-province><option value="">Pilih provinsi</option></select></label><label>Kabupaten/Kota<select data-prayer-regency disabled><option value="">Pilih kabupaten/kota</option></select></label><label>Kecamatan<select data-prayer-district disabled><option value="">Pilih kecamatan</option></select></label><label>Desa/Kelurahan<select data-prayer-village disabled><option value="">Pilih desa/kelurahan</option></select></label></div><div class="prayer-times" data-prayer-times aria-label="Jadwal waktu sholat"><p class="prayer-schedule-empty">Pilih kabupaten/kota untuk memuat jadwal sholat hari ini.</p></div><div class="prayer-times-note">Waktu sholat dihitung berdasarkan kabupaten/kota. Sholat Syuruq dimulai 15 menit setelah Syuruq.</div><div class="prayer-hero-footer"><b data-prayer-countdown aria-live="polite"></b><div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-prayer-notifications>Aktifkan Notifikasi</button><button type="button" class="btn btn-ghost btn-small" data-prayer-adhan>${localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan'}</button><button type="button" class="btn btn-danger btn-small" data-adhan-stop hidden>Hentikan Adzan</button></div></div><small class="metric-note">Audio Adzan menggunakan satu rekaman default.</small>${adhanAudioCredits}</section>`;
+  return `<section class="prayer-hero" data-prayer-widget><div class="prayer-hero-heading"><img src="./assets/logo%20stkis.png" alt="Logo Sekolah Tahfidz Kejuruan Irman Sofran"><div><span class="eyebrow">SEKOLAH TAHFIDZ KEJURUAN IRMAN SOFRAN</span><h2>Waktu Ibadah</h2><p data-prayer-status>Pilih provinsi, kabupaten/kota, kecamatan, dan desa/kelurahan.</p><p class="prayer-location-detail" data-prayer-location>${escapeHtml(prayerLocation?.label || 'Lokasi belum dipilih')}</p></div></div><div class="prayer-location-actions" aria-label="Pilih wilayah jadwal sholat"><label>Provinsi<select data-prayer-province><option value="">Pilih provinsi</option></select></label><label>Kabupaten/Kota<select data-prayer-regency disabled><option value="">Pilih kabupaten/kota</option></select></label><label>Kecamatan<select data-prayer-district disabled><option value="">Pilih kecamatan</option></select></label><label>Desa/Kelurahan<select data-prayer-village disabled><option value="">Pilih desa/kelurahan</option></select></label></div><div class="prayer-location-controls"><button type="button" class="btn btn-primary btn-small" data-prayer-save-location>Simpan Lokasi</button><button type="button" class="btn btn-ghost btn-small" data-prayer-edit-location hidden>Ubah Lokasi</button></div><div class="prayer-times" data-prayer-times aria-label="Jadwal waktu sholat"><p class="prayer-schedule-empty">Pilih kabupaten/kota untuk memuat jadwal sholat hari ini.</p></div><div class="prayer-times-note">Waktu sholat dihitung berdasarkan kabupaten/kota. Sholat Syuruq dimulai 15 menit setelah Syuruq. Pengingat Syuruq tidak memutar adzan.</div><div class="prayer-hero-footer"><b data-prayer-countdown aria-live="polite"></b><div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-prayer-notifications>Aktifkan Notifikasi</button><button type="button" class="btn btn-ghost btn-small" data-prayer-adhan aria-pressed="${localStorage.getItem('boardingpro-adhan-enabled') === 'true'}">${localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan'}</button><button type="button" class="btn btn-danger btn-small" data-adhan-stop hidden>Hentikan Adzan</button></div></div><small class="metric-note">Audio Adzan otomatis hanya berbunyi pada Subuh, Dzuhur, Ashar, Maghrib, dan Isya.</small>${adhanAudioCredits}</section>`;
 }
 
 function qiblaWidgetMarkup() {
@@ -1917,17 +1936,54 @@ function shiftPrayerTime(value, offsetMinutes) {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
+function addPrayerBellNotification(title, description) {
+  const createdAt = new Date().toISOString();
+  prayerBellNotifications.unshift({
+    id: `prayer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title,
+    description,
+    category: 'Waktu Sholat',
+    timestamp: new Intl.DateTimeFormat('id-ID', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(createdAt)),
+    createdAt,
+    read: false
+  });
+  prayerBellNotifications = prayerBellNotifications.slice(0, 20);
+  try {
+    localStorage.setItem(prayerBellStoreKey, JSON.stringify(prayerBellNotifications));
+  } catch (error) {
+    console.error('[BoardingPro] Notifikasi waktu sholat tidak dapat disimpan:', error);
+  }
+  renderRoleBasedNotifications();
+}
+
+function dispatchPrayerNotification(title, description) {
+  addPrayerBellNotification(title, description);
+  showToast(description, 'success');
+  try {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification(title, { body: description, icon: './assets/logo%20stkis.png' });
+    }
+  } catch (error) {
+    console.warn('[BoardingPro] Notifikasi sholat tidak dapat ditampilkan:', error);
+  }
+}
+
 function notifyPrayerTime(name) {
+  if (!prayerNames.includes(name)) {
+    console.error(`[BoardingPro] Adzan otomatis ditolak untuk waktu yang bukan sholat wajib: ${name}`);
+    return;
+  }
   const label = prayerLabels[name] || name;
   currentAdhanPrayer = name;
   document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = `Waktu shalat ${label} telah tiba.`; });
-  showToast(`Telah masuk waktu shalat ${label}.`, 'success');
-  try {
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(`Waktu Shalat ${label}`, { body: `Telah masuk waktu shalat ${label}.`, icon: './assets/logo%20stkis.png' });
-  } catch (error) {
-    console.warn('[BoardingPro] Notifikasi shalat tidak dapat ditampilkan:', error);
-  }
+  dispatchPrayerNotification(`Waktu Sholat ${label}`, `Telah masuk waktu sholat ${label}.`);
   playAdhanAudio();
+}
+
+function notifySyuruqTime() {
+  const message = 'Telah masuk waktu Syuruq (terbit matahari).';
+  document.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = message; });
+  dispatchPrayerNotification('Waktu Syuruq', message);
 }
 
 function bindAudioUnlock() {
@@ -1981,7 +2037,7 @@ function bindAudioUnlock() {
 }
 
 function playAdhanAudio() {
-  if (localStorage.getItem('boardingpro-adhan-enabled') !== 'true') return;
+  if (localStorage.getItem('boardingpro-adhan-enabled') !== 'true' || !prayerNames.includes(currentAdhanPrayer)) return;
   try {
     const isFajr = currentAdhanPrayer === 'Fajr';
     const source = 'https://upload.wikimedia.org/wikipedia/commons/7/7d/The_Adhan_-_Muslim_Call_to_Prayer_-_Aaqib_Azeez.mp3';
@@ -2026,6 +2082,8 @@ async function loadPrayerRegionOptions(select, endpoint, placeholder) {
     const selectedRegion = regions.find((region) => region.code === selectedValue
       || region.code.replace(/\D/g, '') === selectedValue.replace(/\D/g, ''));
     if (selectedRegion) select.value = selectedRegion.code;
+    const widget = select.closest('[data-prayer-widget]');
+    if (widget) updatePrayerLocationControls(widget);
   };
   select.disabled = false;
   select.innerHTML = `<option value="">Memuat ${escapeHtml(placeholder.toLowerCase())}…</option>`;
@@ -2211,6 +2269,78 @@ function updatePrayerRegionLabel(widget) {
   if (prayerTimings) renderPrayerWidgets();
 }
 
+function updatePrayerLocationControls(widget) {
+  const saved = prayerLocation?.saved === true;
+  const editing = prayerLocation?.editing === true;
+  const locked = saved && !editing;
+  widget.querySelectorAll('[data-prayer-province], [data-prayer-regency], [data-prayer-district], [data-prayer-village]')
+    .forEach((select) => {
+      const hasOptions = [...select.options].some((option) => option.value);
+      select.disabled = locked || !hasOptions;
+    });
+  const saveButton = widget.querySelector('[data-prayer-save-location]');
+  const editButton = widget.querySelector('[data-prayer-edit-location]');
+  if (saveButton) {
+    saveButton.hidden = saved && !editing;
+    saveButton.disabled = !widget.querySelector('[data-prayer-regency]')?.value;
+  }
+  if (editButton) editButton.hidden = !saved || editing;
+}
+
+async function savePrayerLocation(widget) {
+  const province = widget.querySelector('[data-prayer-province]');
+  const regency = widget.querySelector('[data-prayer-regency]');
+  const district = widget.querySelector('[data-prayer-district]');
+  const village = widget.querySelector('[data-prayer-village]');
+  if (!province?.value || !regency?.value) throw new Error('Pilih provinsi dan kabupaten/kota sebelum menyimpan lokasi.');
+
+  const city = regency.selectedOptions[0]?.textContent || '';
+  const label = prayerRegionLabel(widget);
+  const location = {
+    city,
+    label,
+    regionCodes: {
+      province: province.value,
+      regency: regency.value,
+      district: district?.value || '',
+      village: village?.value || ''
+    },
+    regionNames: {
+      province: province.selectedOptions[0]?.textContent || '',
+      regency: regency.selectedOptions[0]?.textContent || '',
+      district: district?.value ? district.selectedOptions[0]?.textContent || '' : '',
+      village: village?.value ? village.selectedOptions[0]?.textContent || '' : ''
+    }
+  };
+  try {
+    const coordinates = await findManualCoordinates(city, location.regionNames.province);
+    if (coordinates) Object.assign(location, coordinates);
+    else console.warn(`[BoardingPro] Koordinat tepat untuk ${city} tidak tersedia; jadwal akan memakai pencarian kota.`);
+  } catch (error) {
+    console.warn(`[BoardingPro] Koordinat ${city} tidak dapat dimuat saat lokasi disimpan:`, error);
+  }
+  try {
+    localStorage.setItem(savedPrayerLocationKey, JSON.stringify(location));
+  } catch (error) {
+    console.error('[BoardingPro] Lokasi jadwal sholat tidak dapat disimpan:', error);
+    throw new Error(`Lokasi tidak dapat disimpan: ${error.message}`);
+  }
+  prayerLocation = { ...location, saved: true, editing: false };
+  widget.querySelectorAll('[data-prayer-location]').forEach((element) => { element.textContent = label; });
+  updatePrayerLocationControls(widget);
+  if (!prayerTimings || prayerTimingDate !== new Date().toDateString()) loadPrayerTimings(city, label);
+  showToast(`Lokasi jadwal sholat tersimpan: ${label}.`, 'success');
+}
+
+function selectSavedPrayerRegion(select, code) {
+  if (!select || !code) return false;
+  const normalizedCode = String(code).replace(/\D/g, '');
+  const option = [...select.options].find((item) => item.value === code || item.value.replace(/\D/g, '') === normalizedCode);
+  if (!option) return false;
+  select.value = option.value;
+  return true;
+}
+
 async function restorePrayerRegionSelection(widget) {
   const province = widget.querySelector('[data-prayer-province]');
   const regency = widget.querySelector('[data-prayer-regency]');
@@ -2218,17 +2348,31 @@ async function restorePrayerRegionSelection(widget) {
   const village = widget.querySelector('[data-prayer-village]');
   const codes = prayerLocation?.regionCodes;
   await loadPrayerRegionOptions(province, 'provinces.json', 'provinsi');
-  if (!codes?.province || ![...province.options].some((option) => option.value === codes.province)) return;
-  province.value = codes.province;
-  await loadPrayerRegionOptions(regency, `regencies/${codes.province}.json`, 'kabupaten/kota');
-  if (!codes.regency || ![...regency.options].some((option) => option.value === codes.regency)) return;
-  regency.value = codes.regency;
-  await loadPrayerRegionOptions(district, `districts/${codes.regency}.json`, 'kecamatan');
-  if (!codes.district || ![...district.options].some((option) => option.value === codes.district)) return;
-  district.value = codes.district;
-  await loadPrayerRegionOptions(village, `villages/${codes.district}.json`, 'desa/kelurahan');
-  if (codes.village && [...village.options].some((option) => option.value === codes.village)) village.value = codes.village;
+  if (!selectSavedPrayerRegion(province, codes?.province)) {
+    updatePrayerLocationControls(widget);
+    return;
+  }
+  const provinceCode = province.value;
+  const regencyRestored = await loadPrayerRegionOptions(regency, `regencies/${provinceCode}.json`, 'kabupaten/kota');
+  if (regencyRestored.length && selectSavedPrayerRegion(regency, codes?.regency)) {
+    const regencyCode = regency.value;
+    await loadPrayerRegionOptions(district, `districts/${regencyCode}.json`, 'kecamatan');
+    selectSavedPrayerRegion(district, codes?.district);
+    if (district.value) {
+      await loadPrayerRegionOptions(village, `villages/${district.value}.json`, 'desa/kelurahan');
+      selectSavedPrayerRegion(village, codes?.village);
+    }
+  }
+  prayerLocation = {
+    ...prayerLocation,
+    city: regency.selectedOptions[0]?.textContent || prayerLocation.city,
+    label: prayerRegionLabel(widget) || prayerLocation.label
+  };
+  updatePrayerLocationControls(widget);
   renderPrayerWidgets();
+  if (prayerLocation.city && (!prayerTimings || prayerTimingDate !== new Date().toDateString())) {
+    loadPrayerTimings(prayerLocation.city, prayerLocation.label);
+  }
 }
 
 async function findManualCoordinates(city, provinceName) {
@@ -2251,7 +2395,12 @@ async function loadPrayerTimings(city = prayerLocation?.city || '', label = pray
   prayerLocation = { ...(prayerLocation || {}), city, label };
   prayerTimings = null;
   const selectedProvince = prayerLocation.regionNames?.province || '';
-  const coordinatesPromise = findManualCoordinates(city, selectedProvince).then((coordinates) => {
+  const savedCoordinates = Number.isFinite(prayerLocation.latitude) && Number.isFinite(prayerLocation.longitude)
+    ? { latitude: prayerLocation.latitude, longitude: prayerLocation.longitude }
+    : null;
+  const coordinatesPromise = (savedCoordinates
+    ? Promise.resolve(savedCoordinates)
+    : findManualCoordinates(city, selectedProvince)).then((coordinates) => {
     if (requestId !== prayerRequestId || !coordinates) return;
     Object.assign(prayerLocation, coordinates);
     renderPrayerWidgets();
@@ -2321,11 +2470,13 @@ function bindPrayerWidgets() {
       ++prayerRequestId;
       prayerLocationRequested = false;
       prayerTimings = null;
-      prayerLocation = null;
+      const editing = prayerLocation?.editing === true;
+      prayerLocation = editing ? { saved: false, editing: true } : null;
       widget.querySelector('[data-prayer-status]').textContent = 'Pilih kabupaten/kota untuk memuat jadwal sholat.';
       widget.querySelector('[data-prayer-location]').textContent = 'Lokasi belum dipilih';
       widget.querySelector('[data-prayer-times]').innerHTML = '<p class="prayer-schedule-empty">Pilih kabupaten/kota untuk memuat jadwal sholat hari ini.</p>';
       widget.querySelector('[data-prayer-countdown]').textContent = '';
+      updatePrayerLocationControls(widget);
       if (province.value) await loadPrayerRegionOptions(regency, `regencies/${province.value}.json`, 'kabupaten/kota');
     });
     regency.addEventListener('change', async () => {
@@ -2339,9 +2490,15 @@ function bindPrayerWidgets() {
         city,
         label,
         regionCodes: { province: province.value, regency: regency.value },
-        regionNames: { province: province.selectedOptions[0]?.textContent || '' }
+        regionNames: {
+          province: province.selectedOptions[0]?.textContent || '',
+          regency: city
+        },
+        saved: false,
+        editing: prayerLocation?.editing === true
       };
       prayerTimings = null;
+      updatePrayerLocationControls(widget);
       loadPrayerTimings(city, label);
       await loadPrayerRegionOptions(district, `districts/${regency.value}.json`, 'kecamatan');
     });
@@ -2349,12 +2506,36 @@ function bindPrayerWidgets() {
       village.innerHTML = '<option value="">Pilih desa/kelurahan</option>';
       village.disabled = true;
       if (district.value) await loadPrayerRegionOptions(village, `villages/${district.value}.json`, 'desa/kelurahan');
-      if (prayerLocation) prayerLocation.regionCodes.district = district.value;
+      if (prayerLocation) {
+        prayerLocation.regionCodes.district = district.value;
+        prayerLocation.regionNames.district = district.selectedOptions[0]?.textContent || '';
+      }
       updatePrayerRegionLabel(widget);
     });
     village.addEventListener('change', () => {
-      if (prayerLocation) prayerLocation.regionCodes.village = village.value;
+      if (prayerLocation) {
+        prayerLocation.regionCodes.village = village.value;
+        prayerLocation.regionNames.village = village.selectedOptions[0]?.textContent || '';
+      }
       updatePrayerRegionLabel(widget);
+    });
+    widget.querySelector('[data-prayer-save-location]')?.addEventListener('click', async () => {
+      const saveButton = widget.querySelector('[data-prayer-save-location]');
+      if (saveButton) saveButton.disabled = true;
+      try {
+        await savePrayerLocation(widget);
+      } catch (error) {
+        console.error('[BoardingPro] Gagal menyimpan lokasi jadwal sholat:', error);
+        widget.querySelectorAll('[data-prayer-status]').forEach((element) => { element.textContent = error.message; });
+      } finally {
+        updatePrayerLocationControls(widget);
+      }
+    });
+    widget.querySelector('[data-prayer-edit-location]')?.addEventListener('click', () => {
+      if (!prayerLocation?.saved) return;
+      prayerLocation.editing = true;
+      updatePrayerLocationControls(widget);
+      showToast('Pilih lokasi baru, lalu tekan Simpan Lokasi.', 'success');
     });
   });
   document.querySelectorAll('[data-qibla-select-location]').forEach((button) => { button.onclick = openPrayerModal; });
@@ -2373,19 +2554,32 @@ function bindPrayerWidgets() {
   });
   document.querySelectorAll('[data-prayer-adhan]').forEach((button) => {
     button.textContent = localStorage.getItem('boardingpro-adhan-enabled') === 'true' ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan';
+    button.setAttribute('aria-pressed', String(localStorage.getItem('boardingpro-adhan-enabled') === 'true'));
     button.onclick = () => {
       const enabled = localStorage.getItem('boardingpro-adhan-enabled') !== 'true';
       localStorage.setItem('boardingpro-adhan-enabled', String(enabled));
-      document.querySelectorAll('[data-prayer-adhan]').forEach((item) => { item.textContent = enabled ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan'; });
-      if (enabled) {
-        currentAdhanPrayer = '';
-        playAdhanAudio();
-      } else stopAdhanAudio();
+      document.querySelectorAll('[data-prayer-adhan]').forEach((item) => {
+        item.textContent = enabled ? 'Audio Adzan Aktif' : 'Aktifkan Audio Adzan';
+        item.setAttribute('aria-pressed', String(enabled));
+      });
+      if (!enabled) stopAdhanAudio();
+      else showToast('Audio adzan aktif untuk lima waktu sholat wajib.', 'success');
     };
   });
   document.querySelectorAll('[data-adhan-stop]').forEach((button) => { button.onclick = stopAdhanAudio; });
-  if (!prayerIntervalId && document.querySelector('[data-prayer-widget], [data-qibla-widget]')) {
+  const authenticated = localStorage.getItem('boardingpro-auth') === 'true';
+  if (authenticated && prayerLocation?.city && (!prayerTimings || prayerTimingDate !== new Date().toDateString()) && !prayerLocationRequested) {
+    loadPrayerTimings(prayerLocation.city, prayerLocation.label).catch((error) => {
+      console.error('[BoardingPro] Gagal memulai pemuatan jadwal sholat tersimpan:', error);
+    });
+  }
+  if (authenticated && !prayerIntervalId && (prayerLocation?.city || document.querySelector('[data-prayer-widget], [data-qibla-widget]'))) {
     prayerIntervalId = window.setInterval(() => {
+      if (localStorage.getItem('boardingpro-auth') !== 'true' || !prayerLocation?.city) {
+        window.clearInterval(prayerIntervalId);
+        prayerIntervalId = null;
+        return;
+      }
       if (prayerTimingDate && prayerTimingDate !== new Date().toDateString() && prayerLocation?.city && !prayerLocationRequested) {
         prayerTimings = null;
         loadPrayerTimings(prayerLocation.city, prayerLocation.label);
@@ -2404,6 +2598,19 @@ function bindPrayerWidgets() {
           notifyPrayerTime(name);
         }
       });
+      const sunriseTime = prayerTimings.Sunrise || prayerTimings.Sun;
+      const [sunriseHour, sunriseMinute] = String(sunriseTime || '').slice(0, 5).split(':').map(Number);
+      if (Number.isFinite(sunriseHour) && Number.isFinite(sunriseMinute)) {
+        const sunrise = new Date(now);
+        sunrise.setHours(sunriseHour, sunriseMinute, 0, 0);
+        const secondsSinceSunrise = Math.floor((now - sunrise) / 1000);
+        const sunriseAlertKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-Sunrise`;
+        if (secondsSinceSunrise >= 0 && secondsSinceSunrise < 60 && !lastPrayerAlerts.has(sunriseAlertKey)) {
+          lastPrayerAlerts.add(sunriseAlertKey);
+          localStorage.setItem('boardingpro-prayer-alerts', JSON.stringify([...lastPrayerAlerts].slice(-30)));
+          notifySyuruqTime();
+        }
+      }
       renderPrayerWidgets();
     }, 1000);
   }
@@ -2501,7 +2708,7 @@ function bindPersistentPlayer() {
 
 function quranPanelMarkup() {
   const banner = `<div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Mushaf per surah, ayat, atau halaman; teks tematik dengan terjemahan dan audio.</p></div></div></div>`;
-  return `<section class="panel quran-panel">${banner}<div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="mushaf">Mushaf</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="mushaf"><div class="quran-controls quran-nav-grid"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat<input data-quran-ayah type="number" min="1" value="1"></label><label>Halaman<input data-quran-page type="number" min="1" max="604" placeholder="1–604"></label></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls quran-select-grid"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
+  return `<section class="panel quran-panel" data-quran-mode="mushaf">${banner}<div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="mushaf">Baca Al-Qur'an</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="mushaf"><div class="quran-tabs quran-reading-modes" role="tablist" aria-label="Mode membaca"><button type="button" role="tab" aria-selected="true" data-quran-mode-button="mushaf">Mushaf Utsmani</button><button type="button" role="tab" aria-selected="false" data-quran-mode-button="list">Standar / List</button></div><div class="quran-controls quran-nav-grid"><label data-quran-control="surah" hidden>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label data-quran-control="ayah" hidden>Ayat mulai<input data-quran-ayah type="number" min="1" value="1" inputmode="numeric"></label><div class="quran-page-navigation" data-quran-control="page"><button class="btn btn-ghost" type="button" data-quran-page-step="-1" aria-label="Halaman sebelumnya">‹</button><label>Halaman Mushaf<input data-quran-page type="number" min="1" max="604" value="1" placeholder="1–604" inputmode="numeric"></label><button class="btn btn-ghost" type="button" data-quran-page-step="1" aria-label="Halaman berikutnya">›</button></div><button class="btn btn-ghost quran-translation-toggle" type="button" data-quran-translation aria-expanded="false"><i class="fa-solid fa-language" aria-hidden="true"></i> Terjemahan</button></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls quran-select-grid"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
 }
 
 function murottalPanelMarkup() {
@@ -2514,6 +2721,20 @@ function renderQuranVerse(data) {
   const latin = data?.latin || '';
   const reference = `${data?.surah?.number || ''}:${data?.numberInSurah || ''}`;
   return `<article class="quran-verse" id="quran-verse-${escapeHtml(reference.replace(':', '-'))}"><div class="quran-verse-head"><span class="badge badge-success">${escapeHtml(reference)}</span></div><p lang="ar" dir="rtl" class="quran-arabic font-quran">${escapeHtml(arabic)}</p><p class="quran-latin">${escapeHtml(latin)}</p><p class="quran-translation">${escapeHtml(translation)}</p><div class="quran-verse-actions"><button class="btn btn-small btn-ghost" type="button" data-quran-play-verse="${escapeHtml(reference)}">Putar Ayat</button><button class="btn btn-small btn-ghost" type="button" data-quran-tafsir="${escapeHtml(reference)}">Tafsir Ibnu Katsir</button></div></article>`;
+}
+
+function renderQuranMushafPage(entries, pageNumber, juzNumbers, showTranslation = false) {
+  const arabic = entries.map((entry) => {
+    return `<span class="quran-mushaf-ayah">${escapeHtml(entry.text || '')}<span class="quran-mushaf-marker" aria-label="Ayat ${escapeHtml(entry.numberInSurah)}">${escapeHtml(entry.numberInSurah)}</span></span>`;
+  }).join(' ');
+  const surahNames = [...new Set(entries.map((entry) => entry?.surah?.name).filter(Boolean))];
+  const surahLabel = surahNames.join(' · ');
+  const juzLabel = juzNumbers.length === 1 ? `Juz ${juzNumbers[0]}` : `Juz ${juzNumbers[0]}–${juzNumbers[juzNumbers.length - 1]}`;
+  const translations = entries.map((entry) => {
+    const reference = `${entry?.surah?.number || ''}:${entry?.numberInSurah || ''}`;
+    return `<article class="quran-mushaf-translation-row"><b>${escapeHtml(entry?.surah?.name || '')} ${escapeHtml(entry?.numberInSurah || '')}</b><p>${escapeHtml(entry.translation || '')}</p><div class="quran-verse-actions"><button class="btn btn-small btn-ghost" type="button" data-quran-play-verse="${escapeHtml(reference)}">Putar Ayat</button><button class="btn btn-small btn-ghost" type="button" data-quran-tafsir="${escapeHtml(reference)}">Tafsir Ibnu Katsir</button></div></article>`;
+  }).join('');
+  return `<article class="quran-mushaf-page"><header class="quran-mushaf-page-heading"><div><span class="quran-mushaf-bookmark">الْقُرْآنُ الْكَرِيم</span><b>${escapeHtml(surahLabel)}</b><small>${escapeHtml(juzLabel)}</small></div><span class="quran-mushaf-page-number">${pageNumber}</span></header><div class="quran-mushaf-arabic font-quran" lang="ar" dir="rtl">${arabic}</div><footer class="quran-mushaf-page-footer"><span>مصحف المدينة النبوية</span><span>${pageNumber}</span></footer><div class="quran-mushaf-translations" data-quran-mushaf-translations ${showTranslation ? '' : 'hidden'}>${translations}</div></article>`;
 }
 
 let quranSurahs = [];
@@ -2600,38 +2821,55 @@ async function loadQuranContent(container = document) {
   const status = container.querySelector('[data-quran-status]');
   if (!select || !output) return;
   try {
-    if (status) status.textContent = 'Memuat ayat dan terjemahan…';
+    const mode = container.dataset.quranMode || 'mushaf';
+    if (status) status.textContent = mode === 'mushaf' ? 'Memuat satu halaman Mushaf Utsmani…' : 'Memuat ayat dan terjemahan…';
     const pageValue = Number(container.querySelector('[data-quran-page]')?.value);
     const ayahValue = Number(container.querySelector('[data-quran-ayah]')?.value || 1);
+    if (mode === 'mushaf' && (!Number.isInteger(pageValue) || pageValue < 1 || pageValue > 604)) {
+      throw new Error('Nomor halaman Mushaf harus antara 1 dan 604.');
+    }
     let entries;
     let displayName;
-    if (pageValue >= 1 && pageValue <= 604) {
-      const response = await fetch(`https://api.quran.com/api/v4/verses/by_page/${pageValue}?language=id&words=false&fields=text_uthmani`);
+    let pageNumber = pageValue;
+    let juzNumbers = [];
+    if (mode === 'mushaf' && pageValue >= 1 && pageValue <= 604) {
+      const response = await fetch(`https://api.quran.com/api/v4/verses/by_page/${pageValue}?language=id&words=false&fields=text_uthmani,juz_number,page_number`);
       if (!response.ok) throw new Error(`Layanan Al-Qur'an merespons ${response.status}.`);
       const result = await response.json();
       if (!Array.isArray(result.verses)) throw new Error('Data halaman Al-Qur’an tidak tersedia.');
       const references = result.verses.map((ayah) => {
         const [surah, ayahNumber] = ayah.verse_key.split(':').map(Number);
-        return { surah, ayahNumber };
+        return { surah, ayahNumber, juz: Number(ayah.juz_number) };
       });
       const surahsOnPage = [...new Set(references.map((reference) => reference.surah))];
       const surahData = await Promise.all(surahsOnPage.map(loadEquranSurah));
       entries = references.map(({ surah, ayahNumber }) => {
         const data = surahData.find((item) => item.nomor === surah);
         const ayah = data?.ayat.find((item) => item.nomorAyat === ayahNumber);
-        if (!data || !ayah) throw new Error(`Data ayat ${surah}:${ayahNumber} tidak tersedia.`);
-        return { text: ayah.teksArab, latin: ayah.teksLatin, translation: ayah.teksIndonesia, numberInSurah: ayah.nomorAyat, surah: { number: data.nomor, name: data.namaLatin } };
+        const uthmani = result.verses.find((item) => item.verse_key === `${surah}:${ayahNumber}`)?.text_uthmani;
+        if (!data || !ayah || !uthmani) throw new Error(`Data Mushaf Utsmani ayat ${surah}:${ayahNumber} tidak lengkap.`);
+        return { text: uthmani, latin: ayah.teksLatin, translation: ayah.teksIndonesia, numberInSurah: ayah.nomorAyat, juz: references.find((reference) => reference.surah === surah && reference.ayahNumber === ayahNumber)?.juz, surah: { number: data.nomor, name: data.namaLatin } };
       });
+      juzNumbers = [...new Set(references.map((reference) => reference.juz).filter(Number.isInteger))].sort((a, b) => a - b);
+      if (!juzNumbers.length) throw new Error('Informasi juz untuk halaman ini tidak tersedia.');
       displayName = `Halaman ${pageValue}`;
+      pageNumber = Number(result.verses[0]?.page_number) || pageValue;
     } else {
       const data = await loadEquranSurah(select.value);
       entries = data.ayat.map((ayah) => ({ text: ayah.teksArab, latin: ayah.teksLatin, translation: ayah.teksIndonesia, numberInSurah: ayah.nomorAyat, surah: { number: data.nomor, name: data.namaLatin } }));
       displayName = `${data.namaLatin} (${data.arti})`;
     }
-    output.innerHTML = entries.map(renderQuranVerse).join('');
+    if (mode === 'mushaf') {
+      const showTranslation = container.querySelector('[data-quran-translation]')?.getAttribute('aria-expanded') === 'true';
+      output.innerHTML = renderQuranMushafPage(entries, pageNumber, juzNumbers, showTranslation);
+      output.classList.add('quran-mushaf-output');
+    } else {
+      output.innerHTML = entries.map(renderQuranVerse).join('');
+      output.classList.remove('quran-mushaf-output');
+    }
     if (status) status.textContent = `${displayName} · ${entries.length} ayat`;
     const targetAyah = entries.findIndex((ayah) => Number(ayah.numberInSurah) === ayahValue);
-    if (targetAyah >= 0) output.children[targetAyah]?.scrollIntoView({ block: 'start' });
+    if (mode !== 'mushaf' && targetAyah >= 0) output.children[targetAyah]?.scrollIntoView({ block: 'start' });
   } catch (error) {
     console.error('[BoardingPro] Gagal memuat ayat Al-Qur’an:', error);
     if (status) status.textContent = `Ayat tidak dapat dimuat: ${error.message}`;
@@ -2970,6 +3208,11 @@ async function playCurrentThematicReference(qari = persistentQari) {
   }
 }
 
+function openQuranAdabModal() {
+  openModal('Adab Membaca Al-Qur’an', '<section class="quran-adab-prompt"><div class="quran-adab-icon" aria-hidden="true">۞</div><h3>Anjuran sebelum membaca</h3><p>Dianjurkan berwudhu sebelum membaca Al-Qur’an sebagai bentuk penghormatan terhadap kalam Allah. Silakan lanjutkan ketika sudah siap.</p><div class="actions-inline"><button type="button" class="btn btn-primary" data-quran-continue>Mari Lanjutkan Membaca</button></div></section>');
+  $('#modal-root [data-quran-continue]')?.addEventListener('click', openQuranModal);
+}
+
 function openQuranModal() {
   openModal('Al-Qur’an Digital STKIS', quranPanelMarkup());
   const panel = $('#modal-root .quran-panel');
@@ -3004,6 +3247,36 @@ function bindQuranPanel(container) {
   surahSelect?.addEventListener('change', () => renderSelectedQuranContent(surahSelect));
   ayahSelect?.addEventListener('change', () => renderSelectedQuranContent(ayahSelect));
   pageSelect?.addEventListener('change', () => renderSelectedQuranContent(pageSelect));
+  container.querySelectorAll('[data-quran-mode-button]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const mode = button.dataset.quranModeButton;
+      container.dataset.quranMode = mode;
+      container.querySelectorAll('[data-quran-mode-button]').forEach((item) => item.setAttribute('aria-selected', String(item === button)));
+      container.querySelectorAll('[data-quran-control]').forEach((control) => { control.hidden = control.dataset.quranControl !== 'page' && mode === 'mushaf' || control.dataset.quranControl === 'page' && mode !== 'mushaf'; });
+      const translationButton = container.querySelector('[data-quran-translation]');
+      if (translationButton) translationButton.hidden = mode !== 'mushaf';
+      loadQuranContent(container);
+    });
+  });
+  container.querySelector('[data-quran-translation]')?.addEventListener('click', (event) => {
+    const button = event.currentTarget;
+    const expanded = button.getAttribute('aria-expanded') !== 'true';
+    button.setAttribute('aria-expanded', String(expanded));
+    button.innerHTML = `<i class="fa-solid fa-language" aria-hidden="true"></i> ${expanded ? 'Sembunyikan Terjemahan' : 'Terjemahan'}`;
+    const translations = container.querySelector('[data-quran-mushaf-translations]');
+    if (translations) translations.hidden = !expanded;
+  });
+  container.querySelectorAll('[data-quran-page-step]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const pageInput = container.querySelector('[data-quran-page]');
+      if (!pageInput) return;
+      const currentPage = Number(pageInput.value) || 1;
+      const nextPage = Math.max(1, Math.min(604, currentPage + Number(button.dataset.quranPageStep)));
+      if (nextPage === currentPage) return;
+      pageInput.value = String(nextPage);
+      loadQuranContent(container);
+    });
+  });
   container.querySelector('[data-quran-theme]')?.addEventListener('change', async (event) => {
     try {
       await showThematicVerses(event.currentTarget.value, container.querySelector('[data-quran-theme-verses]'), container.querySelector('[data-quran-theme-status]'));
@@ -3311,7 +3584,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<nav class="dashboard-learning-shortcuts" aria-label="Akses pembelajaran"><button class="btn btn-ghost" type="button" data-view="quran">Buka Al-Qur’an Digital</button><button class="btn btn-ghost" type="button" data-view="murottal">Buka Murottal 30 Juz & Tematik</button></nav>${learningWidgetsMarkup()}${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<section class="dashboard-study-cards" aria-label="Akses Al-Qur’an dan Murottal"><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-book-quran"></i></span><div><h2>Al-Qur’an Digital</h2><p>Baca dalam Mushaf Utsmani atau mode standar dengan terjemahan.</p></div><button class="btn btn-primary" type="button" data-action="open-quran">Buka</button></article><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-headphones"></i></span><div><h2>Murottal 30 Juz</h2><p>Dengarkan tilawah lengkap dan playlist ayat tematik.</p></div><button class="btn btn-primary" type="button" data-action="open-murottal">Buka</button></article></section><div class="dashboard-prayer-shortcut"><button class="btn btn-ghost" type="button" data-action="open-prayer">Jadwal Sholat & Adzan</button></div>${learningWidgetsMarkup()}${extra}`;
 }
 
 function adminDashboard() {
@@ -4558,6 +4831,9 @@ function bindBulkSelection(selectAllSelector, itemSelector, buttonSelector) {
 
 function bindActions() {
   bindMajorCodeGenerator();
+  document.querySelectorAll('[data-action="open-prayer"]').forEach((button) => button.addEventListener('click', openPrayerModal));
+  document.querySelectorAll('[data-action="open-quran"]').forEach((button) => button.addEventListener('click', openQuranAdabModal));
+  document.querySelectorAll('[data-action="open-murottal"]').forEach((button) => button.addEventListener('click', openMurottalModal));
   const semesterFilter = $('#semester-filter-form');
   if (semesterFilter) semesterFilter.addEventListener('submit', (event) => { event.preventDefault(); state.tahfizhSemesterFilter = Object.fromEntries(new FormData(semesterFilter).entries()); render(); });
   const attendanceSemesterFilter = $('#attendance-semester-filter');
@@ -5578,7 +5854,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (button.dataset.landingTool === 'murottal') {
         openMurottalModal();
       } else {
-        openQuranModal();
+        openQuranAdabModal();
       }
     });
   });
@@ -5792,6 +6068,10 @@ function updateBellUI() {
   const list = document.getElementById('notif-list');
   const badge = document.getElementById('notif-count-badge');
   if (!list) return;
+  if (document.getElementById('notification-badge')) {
+    renderRoleBasedNotifications();
+    return;
+  }
 
   if (systemNotifications.length === 0) {
     list.innerHTML = `<div class="p-4 text-center text-slate-400">Belum ada notifikasi baru.</div>`;
@@ -5940,17 +6220,25 @@ document.addEventListener('click', function(e) {
 
 function renderRoleBasedNotifications() {
   const notifications = filterActiveNotifications(roleNotifications[effectiveRole()] || []);
+  const activePrayerNotifications = prayerBellNotifications
+    .filter((item) => !item.createdAt || Date.now() - new Date(item.createdAt).getTime() <= 2 * 24 * 60 * 60 * 1000);
+  const combinedNotifications = [
+    ...notifications.map((item) => ({ ...item, notificationType: 'role' })),
+    ...activePrayerNotifications.map((item) => ({ ...item, notificationType: 'prayer' }))
+  ].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
   const list = $('#notif-list');
   const badge = $('#notification-badge');
   const roleLabel = $('#notification-role-label');
   if (!list || !badge) return;
   if (roleLabel) roleLabel.textContent = (roles[effectiveRole()] || roles.yayasan).label;
-  const unread = notifications.filter((item) => !item.read);
+  const unread = combinedNotifications.filter((item) => !item.read);
   badge.classList.toggle('notification-badge-live', unread.length > 0);
   badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
   badge.hidden = unread.length === 0;
-  list.innerHTML = notifications.length
-    ? notifications.map((item) => `<article class="notification-item ${item.read ? 'notification-read' : ''}" data-notification-id="${escapeHtml(item.id)}" data-notification-target="${escapeHtml(item.targetView || 'dashboard')}"><div class="notification-item-head"><b>${escapeHtml(item.title)}</b><span class="notification-category">${escapeHtml(item.category)}</span></div><p>${escapeHtml(item.description)}</p><time>${escapeHtml(item.timestamp)}${item.read ? '  -  Dibaca' : '  -  Baru'}</time></article>`).join('')
+  list.innerHTML = combinedNotifications.length
+    ? combinedNotifications.map((item) => item.notificationType === 'prayer'
+      ? `<article class="notification-item ${item.read ? 'notification-read' : ''}" data-prayer-notification-id="${escapeHtml(item.id)}" tabindex="0" role="button"><div class="notification-item-head"><b>${escapeHtml(item.title)}</b><span class="notification-category">${escapeHtml(item.category)}</span></div><p>${escapeHtml(item.description)}</p><time>${escapeHtml(item.timestamp)}${item.read ? '  -  Dibaca' : '  -  Baru'}</time></article>`
+      : `<article class="notification-item ${item.read ? 'notification-read' : ''}" data-notification-id="${escapeHtml(item.id)}" data-notification-target="${escapeHtml(item.targetView || 'dashboard')}"><div class="notification-item-head"><b>${escapeHtml(item.title)}</b><span class="notification-category">${escapeHtml(item.category)}</span></div><p>${escapeHtml(item.description)}</p><time>${escapeHtml(item.timestamp)}${item.read ? '  -  Dibaca' : '  -  Baru'}</time></article>`).join('')
     : '<div class="notification-empty">Belum ada notifikasi untuk role ini.</div>';
 }
 
@@ -5960,7 +6248,21 @@ function bindNotificationActions() {
   document.addEventListener('click', (event) => {
     const bell = event.target.closest('#notification-bell');
     const dropdown = $('#notif-dropdown');
+    const prayerNotification = event.target.closest('[data-prayer-notification-id]');
     const notification = event.target.closest('[data-notification-target]');
+    if (prayerNotification) {
+      const item = prayerBellNotifications.find((entry) => entry.id === prayerNotification.dataset.prayerNotificationId);
+      if (item && !item.read) {
+        item.read = true;
+        try {
+          localStorage.setItem(prayerBellStoreKey, JSON.stringify(prayerBellNotifications));
+        } catch (error) {
+          console.error('[BoardingPro] Status notifikasi sholat tidak dapat disimpan:', error);
+        }
+        renderRoleBasedNotifications();
+      }
+      return;
+    }
     if (notification) {
       const item = (roleNotifications[effectiveRole()] || []).find((entry) => entry.id === notification.dataset.notificationId);
       if (item) { item.read = true; persistNotificationState(); }
