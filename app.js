@@ -509,7 +509,8 @@ function hijriDateParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric', year: 'numeric' }).formatToParts(adjusted);
   const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
   const monthNumber = Number(values.month);
-  return { day: values.day, month: hijriMonthNames[monthNumber - 1] || values.month, monthNumber, year: values.year };
+  const serialDay = Math.floor(Date.UTC(adjusted.getFullYear(), adjusted.getMonth(), adjusted.getDate()) / 86400000);
+  return { day: values.day, month: hijriMonthNames[monthNumber - 1] || values.month, monthNumber, year: values.year, serialDay };
 }
 function formatDashboardDate(date = new Date()) {
   const hijri = hijriDateParts(date);
@@ -1599,6 +1600,7 @@ function bindQuoteSlider(slider) {
 
 const knowledgePearls = [
   {
+    type: 'quran',
     arabic: 'وَقُل رَّبِّ زِدْنِي عِلْمًا',
     before: 'Allah mengajarkan Nabi ﷺ untuk berdoa: ',
     core: '“Ya Tuhanku, tambahkanlah ilmu kepadaku.”',
@@ -1607,6 +1609,7 @@ const knowledgePearls = [
     url: 'https://quran.com/20/114'
   },
   {
+    type: 'quran',
     arabic: 'يَا أَيُّهَا الَّذِينَ آمَنُوا إِذَا قِيلَ لَكُمْ تَفَسَّحُوا فِي الْمَجَالِسِ فَافْسَحُوا يَفْسَحِ اللَّهُ لَكُمْ وَإِذَا قِيلَ انشُزُوا فَانشُزُوا يَرْفَعِ اللَّهُ الَّذِينَ آمَنُوا مِنكُمْ وَالَّذِينَ أُوتُوا الْعِلْمَ دَرَجَاتٍ وَاللَّهُ بِمَا تَعْمَلُونَ خَبِيرٌ',
     before: 'Allah berfirman: “Wahai orang-orang yang beriman! Apabila dikatakan kepadamu, ‘Berilah kelapangan di dalam majelis-majelis,’ maka lapangkanlah, niscaya Allah akan memberi kelapangan untukmu. Apabila dikatakan, ‘Berdirilah kamu,’ maka berdirilah. Niscaya ',
     core: 'Allah akan mengangkat orang-orang yang beriman di antara kamu dan orang-orang yang diberi ilmu beberapa derajat.',
@@ -1615,6 +1618,7 @@ const knowledgePearls = [
     url: 'https://quran.com/58/11'
   },
   {
+    type: 'quran',
     arabic: 'أَمَّنْ هُوَ قَانِتٌ آنَاءَ اللَّيْلِ سَاجِدًا وَقَائِمًا يَحْذَرُ الْآخِرَةَ وَيَرْجُو رَحْمَةَ رَبِّهِ قُلْ هَلْ يَسْتَوِي الَّذِينَ يَعْلَمُونَ وَالَّذِينَ لَا يَعْلَمُونَ إِنَّمَا يَتَذَكَّرُ أُولُو الْأَلْبَابِ',
     before: 'Allah berfirman: “Apakah (kamu orang musyrik yang lebih beruntung) ataukah orang yang beribadah pada waktu malam dengan sujud dan berdiri, karena takut kepada (azab) akhirat dan mengharapkan rahmat Tuhannya? Katakanlah, ',
     core: '‘Apakah sama orang-orang yang mengetahui dengan orang-orang yang tidak mengetahui?’',
@@ -1623,6 +1627,7 @@ const knowledgePearls = [
     url: 'https://quran.com/39/9'
   },
   {
+    type: 'sahih',
     arabic: 'مَنْ يُرِدِ اللَّهُ بِهِ خَيْرًا يُفَقِّهْهُ فِي الدِّينِ',
     before: 'Rasulullah ﷺ bersabda: ',
     core: '“Barang siapa yang Allah kehendaki memperoleh kebaikan, Dia akan memahamkannya dalam urusan agama.”',
@@ -1631,6 +1636,7 @@ const knowledgePearls = [
     url: 'https://muslim.or.id/1482-keutamaan-menuntut-ilmu-agama.html'
   },
   {
+    type: 'sahih',
     arabic: 'وَمَنْ سَلَكَ طَرِيقًا يَلْتَمِسُ فِيهِ عِلْمًا سَهَّلَ اللَّهُ لَهُ بِهِ طَرِيقًا إِلَى الْجَنَّةِ',
     before: 'Rasulullah ﷺ bersabda: ',
     core: '“Barang siapa menempuh jalan untuk mencari ilmu, Allah akan memudahkan baginya jalan menuju surga.”',
@@ -1639,6 +1645,7 @@ const knowledgePearls = [
     url: 'https://almanhaj.or.id/13056-menuntut-ilmu-jalan-menuju-surga.html'
   },
   {
+    type: 'sahih',
     arabic: 'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ',
     before: 'Rasulullah ﷺ bersabda: ',
     core: '“Sebaik-baik kalian adalah orang yang mempelajari Al-Qur’an dan mengajarkannya.”',
@@ -1647,6 +1654,7 @@ const knowledgePearls = [
     url: 'https://yufid.com/en/index.html'
   },
   {
+    type: 'sahih',
     arabic: 'إِذَا مَاتَ الْإِنْسَانُ انْقَطَعَ عَنْهُ عَمَلُهُ إِلَّا مِنْ ثَلَاثَةٍ: إِلَّا مِنْ صَدَقَةٍ جَارِيَةٍ، أَوْ عِلْمٍ يُنْتَفَعُ بِهِ، أَوْ وَلَدٍ صَالِحٍ يَدْعُو لَهُ',
     before: 'Rasulullah ﷺ bersabda: “Apabila seseorang meninggal dunia, terputuslah amalnya kecuali karena tiga perkara: ',
     core: 'sedekah jariyah, ilmu yang dimanfaatkan, atau anak saleh yang mendoakannya.”',
@@ -1655,6 +1663,7 @@ const knowledgePearls = [
     url: 'https://sunnah.com/muslim:1631'
   },
   {
+    type: 'sahih',
     arabic: 'وَمَا اجْتَمَعَ قَوْمٌ فِي بَيْتٍ مِنْ بُيُوتِ اللَّهِ يَتْلُونَ كِتَابَ اللَّهِ وَيَتَدَارَسُونَهُ بَيْنَهُمْ إِلَّا نَزَلَتْ عَلَيْهِمُ السَّكِينَةُ وَغَشِيَتْهُمُ الرَّحْمَةُ وَحَفَّتْهُمُ الْمَلَائِكَةُ وَذَكَرَهُمُ اللَّهُ فِيمَنْ عِنْدَهُ',
     before: 'Rasulullah ﷺ bersabda: “Tidaklah suatu kaum berkumpul di salah satu rumah Allah, membaca Kitab Allah dan mempelajarinya bersama, melainkan ',
     core: 'ketenangan turun kepada mereka, rahmat meliputi mereka, para malaikat mengelilingi mereka, dan Allah menyebut mereka di hadapan makhluk di sisi-Nya.”',
@@ -1663,6 +1672,7 @@ const knowledgePearls = [
     url: 'https://rumaysho.com/41153-keutamaan-berkumpul-di-masjid-untuk-membaca-dan-mempelajari-al-quran.html'
   },
   {
+    type: 'sahih',
     arabic: 'اقْرَءُوا الْقُرْآنَ فَإِنَّهُ يَأْتِي يَوْمَ الْقِيَامَةِ شَفِيعًا لِأَصْحَابِهِ',
     before: 'Rasulullah ﷺ bersabda: ',
     core: '“Bacalah Al-Qur’an, karena sesungguhnya ia akan datang pada hari kiamat sebagai pemberi syafaat bagi para pembacanya.”',
@@ -1671,6 +1681,7 @@ const knowledgePearls = [
     url: 'https://sunnah.com/muslim:804'
   },
   {
+    type: 'sahih',
     arabic: 'لَا حَسَدَ إِلَّا فِي اثْنَتَيْنِ: رَجُلٍ آتَاهُ اللَّهُ مَالًا فَسَلَّطَهُ عَلَى هَلَكَتِهِ فِي الْحَقِّ، وَرَجُلٍ آتَاهُ اللَّهُ الْحِكْمَةَ فَهُوَ يَقْضِي بِهَا وَيُعَلِّمُهَا',
     before: 'Rasulullah ﷺ bersabda: “Tidak boleh hasad kecuali kepada dua orang: seseorang yang Allah beri harta lalu ia menggunakannya di jalan kebenaran, dan seseorang yang Allah beri hikmah, lalu ',
     core: 'ia memutuskan perkara dengannya dan mengajarkannya.”',
@@ -1679,6 +1690,7 @@ const knowledgePearls = [
     url: 'https://muslimafiyah.com/peran-harta-dalam-menegakkan-dakwah.html'
   },
   {
+    type: 'qudsi',
     arabic: 'يَقُولُ اللَّهُ تَعَالَى أَنَا عِنْدَ ظَنِّ عَبْدِي بِي وَأَنَا مَعَهُ إِذَا ذَكَرَنِي فَإِنْ ذَكَرَنِي فِي نَفْسِهِ ذَكَرْتُهُ فِي نَفْسِي وَإِنْ ذَكَرَنِي فِي مَلَإٍ ذَكَرْتُهُ فِي مَلَإٍ خَيْرٍ مِنْهُمْ وَإِنْ تَقَرَّبَ إِلَيَّ بِشِبْرٍ تَقَرَّبْتُ إِلَيْهِ ذِرَاعًا وَإِنْ تَقَرَّبَ إِلَيَّ ذِرَاعًا تَقَرَّبْتُ إِلَيْهِ بَاعًا وَإِنْ أَتَانِي يَمْشِي أَتَيْتُهُ هَرْوَلَةً',
     before: 'Allah Ta‘ala berfirman dalam hadits qudsi: “Aku sesuai dengan persangkaan hamba-Ku kepada-Ku, dan Aku bersamanya ketika ia mengingat-Ku. Jika ia mengingat-Ku dalam dirinya, Aku mengingatnya dalam diri-Ku; jika ia mengingat-Ku dalam suatu kelompok, Aku mengingatnya dalam kelompok yang lebih baik dari mereka. Jika ia mendekat kepada-Ku sejengkal, Aku mendekat kepadanya sehasta; jika ia mendekat kepada-Ku sehasta, Aku mendekat kepadanya sedepa. Jika ia datang kepada-Ku dengan berjalan, ',
     core: 'Aku datang kepadanya dengan berlari.”',
@@ -1687,12 +1699,22 @@ const knowledgePearls = [
     url: 'https://sunnah.com/bukhari:7405'
   },
   {
+    type: 'qudsi',
     arabic: 'إِنَّ اللَّهَ قَالَ مَنْ عَادَى لِي وَلِيًّا فَقَدْ آذَنْتُهُ بِالْحَرْبِ وَمَا تَقَرَّبَ إِلَيَّ عَبْدِي بِشَيْءٍ أَحَبَّ إِلَيَّ مِمَّا افْتَرَضْتُ عَلَيْهِ وَمَا يَزَالُ عَبْدِي يَتَقَرَّبُ إِلَيَّ بِالنَّوَافِلِ حَتَّى أُحِبَّهُ',
     before: 'Allah Ta‘ala berfirman dalam hadits qudsi: “Barang siapa memusuhi wali-Ku, sungguh Aku umumkan perang terhadapnya. Tidaklah hamba-Ku mendekatkan diri kepada-Ku dengan sesuatu yang lebih Aku cintai daripada apa yang Aku wajibkan atasnya. Hamba-Ku senantiasa mendekatkan diri kepada-Ku dengan amalan-amalan sunah hingga ',
     core: 'Aku mencintainya.”',
     after: '',
     source: 'Hadits qudsi sahih · HR. Bukhari no. 6502',
     url: 'https://sunnah.com/bukhari:6502'
+  },
+  {
+    type: 'atsar',
+    arabic: 'كُنْتُ أَنَا وَجَارٌ لِي مِنَ الْأَنْصَارِ فِي بَنِي أُمَيَّةَ بْنِ زَيْدٍ، وَهْىَ مِنْ عَوَالِي الْمَدِينَةِ، وَكُنَّا نَتَنَاوَبُ النُّزُولَ عَلَى رَسُولِ اللَّهِ ﷺ يَنْزِلُ يَوْمًا وَأَنْزِلُ يَوْمًا، فَإِذَا نَزَلْتُ جِئْتُهُ بِخَبَرِ ذَلِكَ الْيَوْمِ مِنَ الْوَحْيِ وَغَيْرِهِ، وَإِذَا نَزَلَ فَعَلَ مِثْلَ ذَلِكَ',
+    before: 'Dari Sahabat Umar bin Al-Khattab radhiyallahu ‘anhu: “Aku dan seorang tetanggaku dari kalangan Ansar di Bani Umayyah bin Zaid bergantian mendatangi Rasulullah ﷺ, ',
+    core: 'sehari ia datang dan sehari aku.',
+    after: ' Ketika aku datang, aku menyampaikan kepadanya kabar wahyu dan hal lain pada hari itu; ketika ia datang, ia melakukan hal yang sama.”',
+    source: 'Atsar Sahabat Umar bin Al-Khattab · Sahih al-Bukhari no. 89 (diriwayatkan dengan sanad sahih)',
+    url: 'https://sunnah.com/bukhari:89'
   }
 ];
 
@@ -1701,31 +1723,48 @@ function hijriDayKey(date = new Date()) {
   return `${hijri.year}-${hijri.monthNumber}-${hijri.day}`;
 }
 
+const knowledgePearlRotationEpoch = Date.UTC(2026, 0, 1 + hijriConversionOffsetDays) / 86400000;
+
 function knowledgePearlSelection(date = new Date()) {
   const hijri = hijriDateParts(date);
   const dayKey = `${hijri.year}-${hijri.monthNumber}-${hijri.day}`;
   const totalData = knowledgePearls.length;
   if (totalData === 0) throw new Error('Data dalil untuk rotasi Hijriah tidak tersedia.');
 
-  const year = Number(hijri.year);
   const month = Number(hijri.monthNumber);
   const day = Number(hijri.day);
-  if (![year, month, day].every(Number.isSafeInteger) || month < 1 || month > 12 || day < 1) {
+  const daySerial = hijri.serialDay;
+  if (![month, day, daySerial].every(Number.isSafeInteger) || month < 1 || month > 12 || day < 1) {
     throw new Error('Tanggal Hijriah untuk rotasi dalil tidak valid.');
   }
 
   const modulo = (value, divisor) => ((value % divisor) + divisor) % divisor;
-  const daySerialModulo = modulo(
-    modulo(year, totalData) * (354 % totalData)
-      + modulo(month - 1, totalData) * (30 % totalData)
-      + modulo(day - 1, totalData),
-    totalData
-  );
-  const firstIndex = (daySerialModulo * 2) % totalData;
+  const rotationDay = daySerial - knowledgePearlRotationEpoch;
+
+  const quranIndices = knowledgePearls.reduce((indices, pearl, index) => {
+    if (pearl.type === 'quran') indices.push(index);
+    return indices;
+  }, []);
+  const categoryOrder = ['qudsi', 'sahih', 'atsar']
+    .map((type) => ({ type, indices: knowledgePearls.reduce((matches, pearl, index) => {
+      if (pearl.type === type) matches.push(index);
+      return matches;
+    }, []) }))
+    .filter((category) => category.indices.length > 0);
+  if (quranIndices.length === 0 || categoryOrder.length === 0) {
+    throw new Error('Rotasi dalil memerlukan setidaknya satu ayat dan satu hadits atau atsar.');
+  }
+
+  const quranIndex = quranIndices[modulo(rotationDay, quranIndices.length)];
+  const categoryPosition = modulo(rotationDay, categoryOrder.length);
+  const category = categoryOrder[categoryPosition];
+  const categoryTurn = Math.floor(rotationDay / categoryOrder.length);
+  const secondIndex = category.indices[modulo(categoryTurn, category.indices.length)];
   return {
     dayKey,
     label: `${hijri.day} ${hijri.month} ${hijri.year} H`,
-    indices: totalData > 1 ? [firstIndex, (firstIndex + 1) % totalData] : [firstIndex]
+    indices: [quranIndex, secondIndex],
+    secondCategory: category.type
   };
 }
 
