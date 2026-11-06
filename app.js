@@ -222,8 +222,13 @@ async function resetSelectedModules(selectedKeys) {
     throw error;
   }
 }
+function normalizeIdList(ids) {
+  if (Array.isArray(ids)) return ids;
+  return ids instanceof Set ? [...ids] : [];
+}
+
 function applyStudentCascade(studentIds) {
-  const ids = new Set(studentIds.map(String));
+  const ids = new Set(normalizeIdList(studentIds).map(String));
   const students = state.students.filter((student) => ids.has(String(student.id)));
   if (!students.length) return 0;
   const nisValues = new Set(students.map((student) => String(student.nis || '').trim().toLowerCase()).filter(Boolean));
@@ -263,7 +268,8 @@ function applyStudentCascade(studentIds) {
 
 async function deleteStudentsCascade(studentIds) {
   if (!currentRoleIsAdmin()) throw new Error('Hanya Admin atau Ma\'had yang dapat menghapus data santri.');
-  const ids = new Set(studentIds.map(String));
+  const ids = new Set(normalizeIdList(studentIds).map(String));
+  if (!ids.size) return 0;
   if (!state.students.some((student) => ids.has(String(student.id)))) return 0;
   const previous = Object.fromEntries([...stateCollectionKeys, 'users', 'currentUser', 'studentId'].map((key) => [key, Array.isArray(state[key]) || (state[key] && typeof state[key] === 'object') ? clone(state[key]) : state[key]]));
   try {
@@ -283,7 +289,8 @@ async function deleteStudentsCascade(studentIds) {
 
 async function deleteAccountsBulk(accountIds) {
   if (!currentRoleIsAdmin() || !canManageUserAccounts()) throw new Error('Akses penghapusan akun ditolak.');
-  const selectedIds = new Set(accountIds.map(String));
+  const selectedIds = new Set(normalizeIdList(accountIds).map(String));
+  if (!selectedIds.size) return { accounts: 0, students: 0 };
   const protectedIds = new Set(['ACC-SUPER', 'ACC-MASTER', String(currentAccount()?.id || '')]);
   const selectedAccounts = state.internalAccounts.filter((account) => {
     if (!selectedIds.has(String(account.id)) || protectedIds.has(String(account.id))) return false;
@@ -291,9 +298,9 @@ async function deleteAccountsBulk(accountIds) {
     return !(account.role === 'mahad' && !isMasterAdminSession());
   });
   if (!selectedAccounts.length) return { accounts: 0, students: 0 };
-  const studentIds = new Set(selectedAccounts
+  const studentIds = selectedAccounts
     .filter((account) => ['student', 'santri'].includes(canonicalRole(String(account.role || '').toLowerCase())) && account.studentId)
-    .map((account) => String(account.studentId)));
+    .map((account) => String(account.studentId));
   const previous = Object.fromEntries([...stateCollectionKeys, 'users', 'currentUser', 'studentId'].map((key) => [key, Array.isArray(state[key]) || (state[key] && typeof state[key] === 'object') ? clone(state[key]) : state[key]]));
   try {
     const studentCount = applyStudentCascade(studentIds);
