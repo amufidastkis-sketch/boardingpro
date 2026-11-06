@@ -268,7 +268,7 @@ async function deleteStudentsCascade(studentIds) {
   const previous = Object.fromEntries([...stateCollectionKeys, 'users', 'currentUser', 'studentId'].map((key) => [key, Array.isArray(state[key]) || (state[key] && typeof state[key] === 'object') ? clone(state[key]) : state[key]]));
   try {
     const count = applyStudentCascade(ids);
-    const saved = await persist({ throwOnError: true });
+    const saved = await persistAccountDeletion(previous);
     if (saved === false) throw new Error('Firebase tidak mengonfirmasi penghapusan berantai.');
     return count;
   } catch (error) {
@@ -305,7 +305,7 @@ async function deleteAccountsBulk(accountIds) {
       !selectedStandaloneIds.has(String(account.id)) || cascadeRemovedIds.has(String(account.id))
     );
     state.users = state.internalAccounts;
-    const saved = await persist({ throwOnError: true });
+    const saved = await persistAccountDeletion(previous);
     if (saved === false) throw new Error('Firebase tidak mengonfirmasi penghapusan akun.');
     return { accounts: selectedAccounts.length, students: studentCount };
   } catch (error) {
@@ -854,6 +854,34 @@ const persist = (options = {}) => {
   requestRuntimeRender();
   return saveResult;
 };
+async function persistAccountDeletion(previousState) {
+  if (isDemoSession()) return true;
+  if (!firebaseRuntimeConfig?.databaseURL) return persist({ throwOnError: true });
+  if (!firebaseState.ready && firebaseState.initPromise) await firebaseState.initPromise;
+  if (!firebaseState.ready || !firebaseState.database) {
+    throw new Error('Firebase Realtime Database tidak tersedia; penghapusan akun belum disimpan.');
+  }
+  if (!firebaseState.remoteLoaded && firebaseState.remoteReadyPromise) await firebaseState.remoteReadyPromise;
+
+  const updates = {};
+  stateCollectionKeys.forEach((key) => {
+    if (JSON.stringify(previousState[key]) === JSON.stringify(state[key])) return;
+    if (key === 'financeBills') {
+      updates[key] = state.financeBills.length
+        ? Object.fromEntries(state.financeBills.map((bill, index) => [bill.id || String(index), bill]))
+        : null;
+      return;
+    }
+    updates[key] = Array.isArray(state[key]) && !state[key].length ? null : state[key];
+  });
+  if (!Object.keys(updates).length) return true;
+
+  await firebaseState.database.ref('boardingpro/state').update(updates);
+  window.appData.state = state;
+  window.appData.currentSantri = currentStudent();
+  requestRuntimeRender();
+  return true;
+}
 function applySynchronizedState(snapshot) {
   if (!snapshot?.data || typeof snapshot.data !== 'object') return false;
   stateCollectionKeys.forEach((key) => {
@@ -1851,7 +1879,7 @@ function knowledgePearlsWidget() {
 }
 
 function learningWidgetsMarkup() {
-  return `<div class="learning-widgets-grid">${dashboardToolCard('fa-lightbulb', 'Faedah Ulama', 'Renungan dan faedah pilihan ulama.', 'learning-scholar')}${dashboardToolCard('fa-book-open', 'Dalil & Hadits', 'Dalil Al-Qur’an, hadits, dan atsar pilihan.', 'learning-dalil')}</div>`;
+  return `${dashboardToolCard('fa-lightbulb', 'Faedah Ulama', 'Renungan dan faedah pilihan ulama.', 'learning-scholar')}${dashboardToolCard('fa-book-open', 'Dalil & Hadits', 'Dalil Al-Qur’an, hadits, dan atsar pilihan.', 'learning-dalil')}`;
 }
 
 function landingLearningWidgetsMarkup() {
@@ -3407,7 +3435,7 @@ function bindMurottalPanel(container) {
 }
 
 function navItems() {
-  const common = [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }];
+  const common = [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }];
   const pklItem = canViewPkl() ? { id: 'pkl', label: 'Laporan PKL Santri', icon: 'briefcase-business' } : null;
   const semesterTahfizhItem = ['yayasan', 'kepsek', 'mahad', 'maahad', 'admin', 'pembina', 'musyrif', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'tahfizh-semester', label: 'Rekap Tahfizh Semester', icon: 'book-open-check' } : null;
   const semesterAttendanceItem = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'attendance-semester', label: 'Rekap Absensi Semester', icon: 'calendar-check' } : null;
@@ -3422,7 +3450,7 @@ function navItems() {
     pembina: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     musyrif: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     security: [...common, { id: 'gate', label: 'Log Gerbang', icon: 'scan-line' }, { id: 'security-reports', label: 'Laporan Keamanan', icon: 'shield-alert' }],
-    parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
+    parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
     student: [...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Sanksi Saya', icon: 'shield-alert' }, { id: 'tahfizh', label: 'Tahfizh Saya', icon: 'book-open-check' }, ...(pklItem ? [pklItem] : [])]
   };
   // The real Ma'had/Admin account keeps its full navigation only in the
@@ -3606,7 +3634,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<section class="dashboard-study-cards" aria-label="Akses Al-Qur’an dan Murottal"><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-book-quran"></i></span><div><h2>Al-Qur’an Digital</h2><p>Baca ayat dalam teks Arab, latin, dan terjemahan.</p></div><button class="btn btn-primary" type="button" data-action="open-quran">Buka</button></article><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-headphones"></i></span><div><h2>Murottal 30 Juz</h2><p>Dengarkan tilawah lengkap dan playlist ayat tematik.</p></div><button class="btn btn-primary" type="button" data-action="open-murottal">Buka</button></article></section><section class="dashboard-tools-grid" aria-label="Widget Islami">${learningWidgetsMarkup()}${dashboardToolCard('fa-clock', 'Jadwal Sholat', 'Lihat waktu sholat dan hitung mundur.', 'open-prayer')}${dashboardToolCard('fa-bullhorn', 'Adzan & Pengingat', 'Atur audio adzan dan notifikasi sholat.', 'open-prayer')}${dashboardToolCard('fa-compass', 'Kompas Kiblat', 'Tentukan arah kiblat dari lokasi pilihan.', 'open-qibla')}</section>${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<section class="dashboard-tools-grid" aria-label="Widget Islami">${dashboardToolCard('fa-headphones', 'Murottal', 'Dengarkan tilawah lengkap dan playlist ayat tematik.', 'open-murottal')}${learningWidgetsMarkup()}${dashboardToolCard('fa-clock', 'Waktu Sholat', 'Lihat jadwal sholat, pengingat, dan audio adzan.', 'open-prayer')}</section>${extra}`;
 }
 
 function adminDashboard() {
@@ -4349,6 +4377,7 @@ function disciplineView() {
 }
 
 function renderView() {
+  if (state.view === 'murottal') state.view = 'dashboard';
   if (state.view === 'accounts' && !canManageUserAccounts()) {
     state.view = 'dashboard';
   }
@@ -4362,7 +4391,6 @@ function renderView() {
   else if (state.view === 'teachers') html = section('Data Staff & Karyawan', 'Kelola posisi, unit, dan kontak opsional staff sekolah.', teachersTable(), currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-teacher">${icon('plus')} Tambah Staff</button>` : '');
   else if (state.view === 'accounts' && canManageUserAccounts()) html = section('Akun Internal Staf', 'Kelola username dan password internal tanpa email', accountsTable(), `<div class="actions-inline"><button type="button" class="btn btn-danger" data-action="bulk-delete-accounts" hidden disabled>${icon('trash-2')} Hapus Terpilih</button><button class="btn btn-primary" data-action="add-account">${icon('plus')} Buat Akun Staf</button></div>`);
   else if (state.view === 'quran') html = quranPanelMarkup();
-  else if (state.view === 'murottal') html = murottalPanelMarkup();
   else if (state.view === 'permits') html = effectiveRole() === 'parent' ? permitForm() : `${musyrifPermitForm()}${section('Manajemen Perizinan', 'Verifikasi seluruh pengajuan santri', permitTable(true))}`;
   else if (state.view === 'billing') html = canViewFinance() ? financeView() : dashboard();
   else if (state.view === 'payments') html = canViewFinance() ? (effectiveRole() === 'parent' ? paymentForm() : `${paymentVerificationPanel()}${section('Riwayat Pembayaran', 'Seluruh transaksi pembayaran yang tercatat', paymentTable(currentRoleIsAdmin()))}`) : dashboard();
@@ -4391,7 +4419,6 @@ function renderView() {
   $('#main-content').querySelectorAll('button:not([type]):not(form button)').forEach((button) => { button.type = 'button'; });
   bindPrayerWidgets();
   if (state.view === 'quran') bindQuranPanel($('#main-content .quran-panel'));
-  if (state.view === 'murottal') bindMurottalPanel($('#main-content .murottal-panel'));
   bindActions();
   if (window.lucide) lucide.createIcons();
   renderRoleBasedNotifications();
@@ -5045,7 +5072,7 @@ function bindActions() {
         showToast(`${count} santri dan seluruh data terkait berhasil dihapus.`, 'success');
       } catch (error) {
         console.error('[BoardingPro] Penghapusan massal santri gagal:', error);
-        showToast('Penghapusan gagal. Data dipulihkan; periksa koneksi lalu coba lagi.', 'error');
+        showToast(accountDeletionErrorMessage(error), 'error');
       }
     });
   }));
@@ -5084,7 +5111,9 @@ function bindActions() {
         } else {
           state.internalAccounts = state.internalAccounts.filter((item) => item.id !== account.id);
           state.users = state.internalAccounts;
-          const saved = await persist({ throwOnError: true });
+          const previousState = Object.fromEntries([...stateCollectionKeys, 'users', 'currentUser', 'studentId'].map((key) => [key, Array.isArray(state[key]) || (state[key] && typeof state[key] === 'object') ? clone(state[key]) : state[key]]));
+          previousState.internalAccounts = clone(previousAccounts);
+          const saved = await persistAccountDeletion(previousState);
           if (saved === false) throw new Error('Firebase tidak mengonfirmasi penghapusan akun.');
         }
         closeModal();

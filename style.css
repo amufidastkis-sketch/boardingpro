@@ -120,22 +120,20 @@
 
 .dashboard-tools-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 14px;
   margin: 0 0 18px;
-}
-
-.dashboard-tools-grid .learning-widgets-grid {
-  display: contents;
 }
 
 .dashboard-tool-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 11px;
+  gap: 14px;
   min-width: 0;
-  padding: 13px;
+  min-height: 104px;
+  padding: 17px;
   border: 1px solid #a7f3d0;
   border-radius: 14px;
   background: linear-gradient(135deg, #fff 12%, #f0fdf4 100%);
@@ -143,26 +141,27 @@
 }
 
 .dashboard-tool-card .dashboard-study-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  font-size: 15px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 19px;
 }
 
 .dashboard-tool-card h2 {
   color: #064e3b;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .dashboard-tool-card p {
-  margin-top: 3px;
+  margin-top: 4px;
   color: #475569;
-  font-size: 10px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .dashboard-tool-card .btn {
-  min-height: 38px;
+  min-width: 74px;
+  min-height: 40px;
 }
 
 .dashboard-study-icon {
@@ -1758,6 +1757,17 @@ body {
   .dashboard-tools-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 9px;
+  }
+
+  .dashboard-tool-card {
+    min-height: 88px;
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .dashboard-tool-card .btn {
+    min-width: 62px;
+    padding-inline: 11px;
   }
 
   #landing-learning-widgets .scholar-quote-widget {
