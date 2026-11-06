@@ -118,6 +118,53 @@
   box-shadow: 0 8px 20px -10px rgba(6, 78, 59, .22);
 }
 
+.dashboard-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 18px;
+}
+
+.dashboard-tools-grid .learning-widgets-grid {
+  display: contents;
+}
+
+.dashboard-tool-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #a7f3d0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fff 12%, #f0fdf4 100%);
+  box-shadow: 0 8px 20px -10px rgba(6, 78, 59, .18);
+}
+
+.dashboard-tool-card .dashboard-study-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  font-size: 15px;
+}
+
+.dashboard-tool-card h2 {
+  color: #064e3b;
+  font-size: 12px;
+}
+
+.dashboard-tool-card p {
+  margin-top: 3px;
+  color: #475569;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.dashboard-tool-card .btn {
+  min-height: 38px;
+}
+
 .dashboard-study-icon {
   display: grid;
   place-items: center;
@@ -615,6 +662,14 @@ body {
   box-shadow: 0 0 0 2px #99f6e4, 0 8px 20px #064e3b20;
 }
 
+.qibla-dial {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transition: transform .18s linear;
+  will-change: transform;
+}
+
 .qibla-compass:before {
   position: absolute;
   inset: 7px;
@@ -659,6 +714,17 @@ body {
 
 .qibla-copy {
   min-width: 0;
+}
+
+#modal-root .modal-card:has(.prayer-hero),
+#modal-root .modal-card:has(.qibla-widget) {
+  width: min(920px, calc(100vw - 24px));
+  max-width: 920px;
+}
+
+#modal-root .modal-card:has(.scholar-quote-widget) {
+  width: min(780px, calc(100vw - 24px));
+  max-width: 780px;
 }
 
 .qibla-copy h3 {
@@ -939,18 +1005,6 @@ body {
   font-size: 10px;
   line-height: 1.5;
   overflow-wrap: anywhere;
-}
-
-.login-demo-note {
-  margin-top: 12px;
-  color: #64748b;
-  font-size: 9px;
-  line-height: 1.5;
-  text-align: center;
-}
-
-.login-demo-note b {
-  color: #047857;
 }
 
 .scholar-quote-widget > small {
@@ -1699,6 +1753,11 @@ body {
   #landing-learning-widgets .learning-widgets-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
+  }
+
+  .dashboard-tools-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
   }
 
   #landing-learning-widgets .scholar-quote-widget {

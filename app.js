@@ -268,7 +268,7 @@ async function deleteStudentsCascade(studentIds) {
   const previous = Object.fromEntries([...stateCollectionKeys, 'users', 'currentUser', 'studentId'].map((key) => [key, Array.isArray(state[key]) || (state[key] && typeof state[key] === 'object') ? clone(state[key]) : state[key]]));
   try {
     const count = applyStudentCascade(ids);
-    const saved = await persist();
+    const saved = await persist({ throwOnError: true });
     if (saved === false) throw new Error('Firebase tidak mengonfirmasi penghapusan berantai.');
     return count;
   } catch (error) {
@@ -305,7 +305,7 @@ async function deleteAccountsBulk(accountIds) {
       !selectedStandaloneIds.has(String(account.id)) || cascadeRemovedIds.has(String(account.id))
     );
     state.users = state.internalAccounts;
-    const saved = await persist();
+    const saved = await persist({ throwOnError: true });
     if (saved === false) throw new Error('Firebase tidak mengonfirmasi penghapusan akun.');
     return { accounts: selectedAccounts.length, students: studentCount };
   } catch (error) {
@@ -317,6 +317,22 @@ async function deleteAccountsBulk(accountIds) {
     throw error;
   }
 }
+
+function accountDeletionErrorMessage(error) {
+  const candidates = [
+    error?.message,
+    error?.response?.data?.message,
+    error?.response?.data?.error?.message,
+    error?.response?.data?.error,
+    error?.error?.message,
+    error?.error,
+    error?.code,
+    error
+  ];
+  const message = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim())?.trim();
+  return message || 'Gagal menghapus akun, silakan coba lagi.';
+}
+
 normalizeStateCollections();
 secureStorage.get('boardingpro-state').then((storedState) => {
   if (!firebaseState.ready && !firebaseState.remoteLoaded && storedState && typeof storedState === 'object') {
@@ -806,7 +822,7 @@ function requestRuntimeRender() {
   if (window.requestAnimationFrame) window.requestAnimationFrame(refresh);
   else window.setTimeout(refresh, 0);
 }
-const persist = () => {
+const persist = (options = {}) => {
   normalizeStateCollections();
   if (isDemoSession()) {
     window.appData.state = state;
@@ -834,7 +850,7 @@ const persist = () => {
   }
   window.appData.state = state;
   window.appData.currentSantri = currentStudent();
-  const saveResult = syncFirebaseFinance();
+  const saveResult = syncFirebaseFinance(options);
   requestRuntimeRender();
   return saveResult;
 };
@@ -1187,13 +1203,15 @@ async function initializeFirebase() {
   }, (error) => console.error('[BoardingPro] Sinkronisasi konfigurasi gagal:', error));
 }
 
-async function syncFirebaseFinance() {
+async function syncFirebaseFinance({ throwOnError = false } = {}) {
   if (isDemoSession()) return true;
   if (!firebaseState.ready && firebaseRuntimeConfig?.databaseURL && firebaseState.initPromise) {
     await firebaseState.initPromise;
   }
   if (!firebaseRuntimeConfig?.databaseURL) return true;
   if (!firebaseState.ready || !firebaseState.database) {
+    const error = new Error('Penyimpanan Firebase tidak tersedia; perubahan belum dikonfirmasi.');
+    if (throwOnError) throw error;
     console.error('[BoardingPro] Penyimpanan Firebase tidak tersedia; perubahan operasional belum dikonfirmasi.');
     return false;
   }
@@ -1211,6 +1229,7 @@ async function syncFirebaseFinance() {
     return true;
   } catch (error) {
     console.error('[BoardingPro] Gagal menyimpan state realtime ke Firebase:', error);
+    if (throwOnError) throw error;
     return false;
   } finally {
     firebaseState.syncing = false;
@@ -1422,6 +1441,12 @@ async function fetchJsonWithRetry(url, attempts = 2, timeout = 7000) {
 let currentAdhanPrayer = '';
 let prayerNotificationPermission = typeof Notification === 'undefined' ? 'denied' : Notification.permission;
 let qiblaHeading = null;
+let qiblaDeviceHeading = null;
+let qiblaDialRotation = 0;
+let qiblaSensorState = 'idle';
+let qiblaSensorError = '';
+let qiblaCompassLastUpdated = 0;
+let qiblaCompassRequestId = 0;
 let qiblaOrientationBound = false;
 let audioUnlockBound = false;
 let audioUnlockContext = null;
@@ -1826,7 +1851,15 @@ function knowledgePearlsWidget() {
 }
 
 function learningWidgetsMarkup() {
+  return `<div class="learning-widgets-grid">${dashboardToolCard('fa-lightbulb', 'Faedah Ulama', 'Renungan dan faedah pilihan ulama.', 'learning-scholar')}${dashboardToolCard('fa-book-open', 'Dalil & Hadits', 'Dalil Al-Qur’an, hadits, dan atsar pilihan.', 'learning-dalil')}</div>`;
+}
+
+function landingLearningWidgetsMarkup() {
   return `<div class="learning-widgets-grid">${knowledgePearlsWidget()}${scholarQuoteWidget()}</div>`;
+}
+
+function dashboardToolCard(iconName, title, description, action) {
+  return `<article class="dashboard-tool-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid ${iconName}"></i></span><div><h2>${title}</h2><p>${description}</p></div><button class="btn btn-primary btn-small" type="button" data-action="${action}">Buka</button></article>`;
 }
 
 function prayerWidgetMarkup() {
@@ -1834,7 +1867,7 @@ function prayerWidgetMarkup() {
 }
 
 function qiblaWidgetMarkup() {
-  return `<section class="qibla-widget" data-qibla-widget><div class="qibla-compass" aria-label="Kompas arah kiblat"><span class="qibla-north">U</span><span class="qibla-needle" data-qibla-needle>↑</span><span class="qibla-kaaba">K</span></div><div class="qibla-copy"><span class="eyebrow">ARAH KIBLAT</span><h3 data-qibla-degree>${prayerLocation?.latitude ? 'Arah kiblat siap ditampilkan' : 'Pilih lokasi manual terlebih dahulu'}</h3><p data-qibla-location>${escapeHtml(prayerLocation?.label || 'Pilih provinsi dan kabupaten/kota melalui Jadwal Sholat.')}</p><p class="metric-note" data-qibla-heading>Arah dihitung dari koordinat kabupaten/kota terpilih; jadwal sholat tidak menggunakan GPS.</p><div class="actions-inline"><button type="button" class="btn btn-primary btn-small" data-qibla-select-location>Pilih Lokasi Manual</button><button type="button" class="btn btn-ghost btn-small" data-qibla-calibrate>Aktifkan Kompas Perangkat</button></div></div></section>`;
+  return `<section class="qibla-widget" data-qibla-widget><div class="qibla-compass" role="img" aria-label="Kompas arah kiblat"><div class="qibla-dial" data-qibla-dial><span class="qibla-north">U</span><span class="qibla-needle" data-qibla-needle>↑</span><span class="qibla-kaaba">K</span></div></div><div class="qibla-copy"><span class="eyebrow">ARAH KIBLAT</span><h3 data-qibla-degree>${prayerLocation?.latitude ? 'Arah kiblat siap ditampilkan' : 'Pilih lokasi manual terlebih dahulu'}</h3><p data-qibla-location>${escapeHtml(prayerLocation?.label || 'Pilih provinsi dan kabupaten/kota melalui Jadwal Sholat.')}</p><p class="metric-note" data-qibla-heading>Jarum menunjukkan arah kiblat dari utara. Aktifkan sensor untuk menyesuaikan kompas dengan arah perangkat.</p><div class="actions-inline"><button type="button" class="btn btn-primary btn-small" data-qibla-select-location>Pilih Lokasi Manual</button><button type="button" class="btn btn-ghost btn-small" data-qibla-calibrate>Aktifkan Kompas Perangkat</button></div></div></section>`;
 }
 
 function calculateQiblaBearing(latitude, longitude) {
@@ -1847,10 +1880,34 @@ function calculateQiblaBearing(latitude, longitude) {
 }
 
 function updateQiblaCompass(event) {
-  const heading = Number(event.webkitCompassHeading ?? (event.alpha === null ? NaN : 360 - event.alpha));
-  if (!Number.isFinite(heading) || qiblaHeading === null) return;
-  document.querySelectorAll('[data-qibla-needle]').forEach((element) => { element.style.transform = `rotate(${qiblaHeading - heading}deg)`; });
-  document.querySelectorAll('[data-qibla-heading]').forEach((element) => { element.textContent = `Arah perangkat: ${heading.toFixed(0)}° · arah kiblat relatif ditampilkan oleh jarum.`; });
+  const webkitHeading = event.webkitCompassHeading === undefined || event.webkitCompassHeading === null
+    ? NaN
+    : Number(event.webkitCompassHeading);
+  let heading;
+  if (Number.isFinite(webkitHeading)) {
+    heading = webkitHeading;
+  } else if (Number.isFinite(event.alpha) && (event.absolute === true || event.type === 'deviceorientationabsolute')) {
+    const screenAngle = Number(window.screen?.orientation?.angle ?? window.orientation ?? 0);
+    heading = 360 - event.alpha + screenAngle;
+  } else {
+    return;
+  }
+  const normalizedHeading = ((heading % 360) + 360) % 360;
+  if (qiblaDeviceHeading === null) {
+    qiblaDialRotation = -normalizedHeading;
+    qiblaDeviceHeading = normalizedHeading;
+  } else {
+    const headingChange = ((normalizedHeading - qiblaDeviceHeading + 540) % 360) - 180;
+    if (Math.abs(headingChange) >= 0.7) {
+      const smoothedChange = headingChange * 0.25;
+      qiblaDeviceHeading = (qiblaDeviceHeading + smoothedChange + 360) % 360;
+      qiblaDialRotation -= smoothedChange;
+    }
+  }
+  qiblaSensorState = 'active';
+  qiblaSensorError = '';
+  qiblaCompassLastUpdated = Date.now();
+  renderQiblaCompass();
 }
 
 async function enableDeviceCompass() {
@@ -1866,11 +1923,58 @@ async function enableDeviceCompass() {
       window.addEventListener('deviceorientation', updateQiblaCompass, true);
       qiblaOrientationBound = true;
     }
-    document.querySelectorAll('[data-qibla-heading]').forEach((element) => { element.textContent = 'Kompas aktif. Pegang perangkat mendatar dan kalibrasikan jika diperlukan.'; });
+    const requestId = ++qiblaCompassRequestId;
+    qiblaDeviceHeading = null;
+    qiblaDialRotation = 0;
+    qiblaSensorState = 'waiting';
+    qiblaSensorError = '';
+    qiblaCompassLastUpdated = 0;
+    renderQiblaCompass();
+    await delay(3000);
+    if (requestId === qiblaCompassRequestId && !qiblaCompassLastUpdated) {
+      qiblaSensorState = 'unavailable';
+      renderQiblaCompass();
+    }
   } catch (error) {
     console.warn('[BoardingPro] Kompas perangkat tidak aktif:', error);
-    document.querySelectorAll('[data-qibla-heading]').forEach((element) => { element.textContent = error.message; });
+    qiblaSensorState = 'error';
+    qiblaSensorError = error.message;
+    renderQiblaCompass();
   }
+}
+
+function renderQiblaCompass() {
+  if (Number.isFinite(prayerLocation?.latitude) && Number.isFinite(prayerLocation?.longitude)) {
+    qiblaHeading = calculateQiblaBearing(prayerLocation.latitude, prayerLocation.longitude);
+  } else {
+    qiblaHeading = null;
+    document.querySelectorAll('[data-qibla-degree]').forEach((element) => { element.textContent = 'Pilih lokasi untuk melihat arah kiblat'; });
+    document.querySelectorAll('[data-qibla-needle]').forEach((element) => { element.style.transform = 'rotate(0deg)'; });
+    document.querySelectorAll('[data-qibla-dial]').forEach((element) => { element.style.transform = `rotate(${qiblaDialRotation}deg)`; });
+    document.querySelectorAll('[data-qibla-location]').forEach((element) => { element.textContent = prayerLocation?.label || 'Lokasi belum dipilih'; });
+    document.querySelectorAll('[data-qibla-heading]').forEach((element) => {
+      element.textContent = qiblaCompassStatus(false);
+    });
+    return;
+  }
+  document.querySelectorAll('[data-qibla-degree]').forEach((element) => { element.textContent = `Arah Ka’bah ${qiblaHeading.toFixed(1)}° dari Utara`; });
+  document.querySelectorAll('[data-qibla-needle]').forEach((element) => { element.style.transform = `rotate(${qiblaHeading}deg)`; });
+  document.querySelectorAll('[data-qibla-dial]').forEach((element) => { element.style.transform = `rotate(${qiblaDialRotation}deg)`; });
+  document.querySelectorAll('[data-qibla-location]').forEach((element) => { element.textContent = prayerLocation?.label || 'Lokasi belum dipilih'; });
+  document.querySelectorAll('[data-qibla-heading]').forEach((element) => { element.textContent = qiblaCompassStatus(true); });
+}
+
+function qiblaCompassStatus(hasLocation) {
+  if (qiblaSensorState === 'waiting') return 'Menunggu sensor kompas… Pegang perangkat mendatar.';
+  if (qiblaSensorState === 'unavailable') return 'Sensor tidak mengirim arah yang akurat. Jarum tetap menunjukkan arah kiblat dari utara.';
+  if (qiblaSensorState === 'error') return qiblaSensorError || 'Sensor kompas tidak dapat diaktifkan.';
+  if (qiblaDeviceHeading !== null) {
+    const heading = `Sensor aktif · arah perangkat ${qiblaDeviceHeading.toFixed(0)}° dari utara.`;
+    return hasLocation ? heading : `${heading} Pilih lokasi untuk menghitung kiblat.`;
+  }
+  return hasLocation
+    ? 'Jarum menunjukkan arah kiblat dari utara. Aktifkan sensor untuk menyesuaikan kompas dengan arah perangkat.'
+    : 'Pilih lokasi manual untuk menghitung arah kiblat.';
 }
 
 function renderPrayerWidgets() {
@@ -1920,13 +2024,7 @@ function renderPrayerWidgets() {
       countdown.textContent = `Menuju ${prayerLabels[nextPrayer.name]}: ${hours}:${minutes}:${seconds}`;
     }
   });
-  if (Number.isFinite(prayerLocation?.latitude) && Number.isFinite(prayerLocation?.longitude)) {
-    const bearing = calculateQiblaBearing(prayerLocation.latitude, prayerLocation.longitude);
-    qiblaHeading = bearing;
-    document.querySelectorAll('[data-qibla-degree]').forEach((element) => { element.textContent = `Arah Ka’bah ${bearing.toFixed(1)}° dari Utara`; });
-    document.querySelectorAll('[data-qibla-needle]').forEach((element) => { element.style.transform = `rotate(${bearing}deg)`; });
-    document.querySelectorAll('[data-qibla-location]').forEach((element) => { element.textContent = prayerLocation.label; });
-  }
+  renderQiblaCompass();
 }
 
 function shiftPrayerTime(value, offsetMinutes) {
@@ -3169,9 +3267,24 @@ function openMurottalModal() {
   bindMurottalPanel($('#modal-root .murottal-panel'));
 }
 
+function openLearningWidgetModal(widget) {
+  const views = {
+    'learning-scholar': { title: 'Faedah Ulama', markup: scholarQuoteWidget },
+    'learning-dalil': { title: 'Dalil Al-Qur’an, Hadits & Atsar', markup: knowledgePearlsWidget }
+  };
+  const selected = views[widget];
+  if (!selected) {
+    console.error(`[BoardingPro] Widget pembelajaran tidak dikenal: ${widget}`);
+    return;
+  }
+  openModal(selected.title, selected.markup());
+  document.querySelectorAll('#modal-root [data-quote-slider]').forEach(bindQuoteSlider);
+}
+
 function openPrayerModal() {
-  openModal('Waktu Shalat & Notifikasi Adzan', prayerWidgetMarkup());
+  openModal('Jadwal Sholat & Adzan', prayerWidgetMarkup());
   bindPrayerWidgets();
+  renderPrayerWidgets();
 }
 
 function openQiblaModal() {
@@ -3294,7 +3407,7 @@ function bindMurottalPanel(container) {
 }
 
 function navItems() {
-  const common = [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }];
+  const common = [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }];
   const pklItem = canViewPkl() ? { id: 'pkl', label: 'Laporan PKL Santri', icon: 'briefcase-business' } : null;
   const semesterTahfizhItem = ['yayasan', 'kepsek', 'mahad', 'maahad', 'admin', 'pembina', 'musyrif', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'tahfizh-semester', label: 'Rekap Tahfizh Semester', icon: 'book-open-check' } : null;
   const semesterAttendanceItem = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? { id: 'attendance-semester', label: 'Rekap Absensi Semester', icon: 'calendar-check' } : null;
@@ -3309,7 +3422,7 @@ function navItems() {
     pembina: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     musyrif: appendModules([...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Kedisiplinan', icon: 'shield-check' }, { id: 'tahfizh', label: 'Program Tahfizh', icon: 'book-open-check' }, { id: 'permits', label: 'Approval Izin', icon: 'clipboard-check' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }]),
     security: [...common, { id: 'gate', label: 'Log Gerbang', icon: 'scan-line' }, { id: 'security-reports', label: 'Laporan Keamanan', icon: 'shield-alert' }],
-    parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'quran', label: 'Al-Qur’an Digital', icon: 'book-open' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
+    parent: [{ id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' }, { id: 'murottal', label: 'Murottal 30 Juz & Tematik', icon: 'headphones' }, { id: 'kaldik', label: 'Jadwal & Kaldik', icon: 'calendar-days' }, { id: 'child', label: 'Ringkasan Anak', icon: 'heart' }, { id: 'discipline', label: 'Kedisiplinan Anak', icon: 'shield-alert' }, { id: 'payments', label: 'Keuangan & Tagihan', icon: 'wallet-cards' }, { id: 'pocket', label: 'Uang Saku', icon: 'wallet' }, { id: 'permits', label: 'Perizinan', icon: 'clipboard-list' }, { id: 'announcements', label: 'Pengumuman', icon: 'megaphone' }],
     student: [...common, { id: 'points', label: 'Poin Kedisiplinan', icon: 'award' }, { id: 'discipline', label: 'Sanksi Saya', icon: 'shield-alert' }, { id: 'tahfizh', label: 'Tahfizh Saya', icon: 'book-open-check' }, ...(pklItem ? [pklItem] : [])]
   };
   // The real Ma'had/Admin account keeps its full navigation only in the
@@ -3493,7 +3606,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<section class="dashboard-study-cards" aria-label="Akses Al-Qur’an dan Murottal"><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-book-quran"></i></span><div><h2>Al-Qur’an Digital</h2><p>Baca ayat dalam teks Arab, latin, dan terjemahan.</p></div><button class="btn btn-primary" type="button" data-action="open-quran">Buka</button></article><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-headphones"></i></span><div><h2>Murottal 30 Juz</h2><p>Dengarkan tilawah lengkap dan playlist ayat tematik.</p></div><button class="btn btn-primary" type="button" data-action="open-murottal">Buka</button></article></section><div class="dashboard-prayer-shortcut"><button class="btn btn-ghost" type="button" data-action="open-prayer">Jadwal Sholat & Adzan</button></div>${learningWidgetsMarkup()}${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<section class="dashboard-study-cards" aria-label="Akses Al-Qur’an dan Murottal"><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-book-quran"></i></span><div><h2>Al-Qur’an Digital</h2><p>Baca ayat dalam teks Arab, latin, dan terjemahan.</p></div><button class="btn btn-primary" type="button" data-action="open-quran">Buka</button></article><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-headphones"></i></span><div><h2>Murottal 30 Juz</h2><p>Dengarkan tilawah lengkap dan playlist ayat tematik.</p></div><button class="btn btn-primary" type="button" data-action="open-murottal">Buka</button></article></section><section class="dashboard-tools-grid" aria-label="Widget Islami">${learningWidgetsMarkup()}${dashboardToolCard('fa-clock', 'Jadwal Sholat', 'Lihat waktu sholat dan hitung mundur.', 'open-prayer')}${dashboardToolCard('fa-bullhorn', 'Adzan & Pengingat', 'Atur audio adzan dan notifikasi sholat.', 'open-prayer')}${dashboardToolCard('fa-compass', 'Kompas Kiblat', 'Tentukan arah kiblat dari lokasi pilihan.', 'open-qibla')}</section>${extra}`;
 }
 
 function adminDashboard() {
@@ -4741,8 +4854,10 @@ function bindBulkSelection(selectAllSelector, itemSelector, buttonSelector) {
 function bindActions() {
   bindMajorCodeGenerator();
   document.querySelectorAll('[data-action="open-prayer"]').forEach((button) => button.addEventListener('click', openPrayerModal));
+  document.querySelectorAll('[data-action="open-qibla"]').forEach((button) => button.addEventListener('click', openQiblaModal));
   document.querySelectorAll('[data-action="open-quran"]').forEach((button) => button.addEventListener('click', openQuranAdabModal));
   document.querySelectorAll('[data-action="open-murottal"]').forEach((button) => button.addEventListener('click', openMurottalModal));
+  document.querySelectorAll('[data-action="learning-scholar"], [data-action="learning-dalil"]').forEach((button) => button.addEventListener('click', () => openLearningWidgetModal(button.dataset.action)));
   const semesterFilter = $('#semester-filter-form');
   if (semesterFilter) semesterFilter.addEventListener('submit', (event) => { event.preventDefault(); state.tahfizhSemesterFilter = Object.fromEntries(new FormData(semesterFilter).entries()); render(); });
   const attendanceSemesterFilter = $('#attendance-semester-filter');
@@ -4948,7 +5063,7 @@ function bindActions() {
         showToast(`${result.accounts} akun terpilih berhasil dihapus${result.students ? ` bersama ${result.students} data santri dan riwayat terkait` : ''}.`, 'success');
       } catch (error) {
         console.error('[BoardingPro] Penghapusan massal akun gagal:', error);
-        showToast('Penghapusan gagal. Data dipulihkan; periksa koneksi lalu coba lagi.', 'error');
+        showToast(accountDeletionErrorMessage(error), 'error');
       }
     });
   }));
@@ -4962,20 +5077,26 @@ function bindActions() {
     $('#modal-root [data-cancel-delete]').addEventListener('click', closeModal);
     $('#modal-root [data-confirm-delete]').addEventListener('click', async () => {
       const role = canonicalRole(String(account.role || '').toLowerCase());
+      const previousAccounts = state.internalAccounts;
       try {
         if (['student', 'santri'].includes(role) && account.studentId) {
           await deleteStudentsCascade([account.studentId]);
         } else {
           state.internalAccounts = state.internalAccounts.filter((item) => item.id !== account.id);
           state.users = state.internalAccounts;
-          const saved = await persist();
+          const saved = await persist({ throwOnError: true });
           if (saved === false) throw new Error('Firebase tidak mengonfirmasi penghapusan akun.');
         }
         closeModal();
         render();
       } catch (error) {
+        state.internalAccounts = previousAccounts;
+        state.users = previousAccounts;
+        normalizeStateCollections();
+        window.appData.state = state;
+        if (!firebaseState.ready) await persist();
         console.error('[BoardingPro] Gagal menghapus akun:', error);
-        showToast('Penghapusan akun gagal. Periksa koneksi lalu coba lagi.', 'error');
+        showToast(accountDeletionErrorMessage(error), 'error');
       }
     });
   }));
@@ -5769,8 +5890,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const landingLearningWidgets = $('#landing-learning-widgets');
   if (landingLearningWidgets) {
-    landingLearningWidgets.innerHTML = learningWidgetsMarkup();
+    landingLearningWidgets.innerHTML = landingLearningWidgetsMarkup();
     landingLearningWidgets.querySelectorAll('[data-quote-slider]').forEach(bindQuoteSlider);
+    landingLearningWidgets.querySelectorAll('[data-action="learning-scholar"], [data-action="learning-dalil"]').forEach((button) => {
+      button.addEventListener('click', () => openLearningWidgetModal(button.dataset.action));
+    });
   }
   bindAudioUnlock();
   bindPersistentPlayer();

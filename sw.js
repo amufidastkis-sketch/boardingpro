@@ -1,5 +1,5 @@
-const CACHE_NAME = 'boardingpro-shell-v6070';
-const SHELL_FILES = ['./', './index.html', './app.js?v=6070', './data.js?v=6070', './style.css?v=6070', './manifest.json', './assets/logo%20stkis.png', './assets/pwa-icon-192.png', './assets/pwa-icon-512.png'];
+const CACHE_NAME = 'boardingpro-shell-v6073';
+const SHELL_FILES = ['./', './index.html', './app.js?v=6073', './data.js?v=6073', './style.css?v=6073', './manifest.json', './assets/logo%20stkis.png', './assets/pwa-icon-192.png', './assets/pwa-icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES)));
