@@ -2707,8 +2707,8 @@ function bindPersistentPlayer() {
 }
 
 function quranPanelMarkup() {
-  const banner = `<div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Mushaf per surah, ayat, atau halaman; teks tematik dengan terjemahan dan audio.</p></div></div></div>`;
-  return `<section class="panel quran-panel" data-quran-mode="mushaf">${banner}<div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="mushaf">Baca Al-Qur'an</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="mushaf"><div class="quran-tabs quran-reading-modes" role="tablist" aria-label="Mode membaca"><button type="button" role="tab" aria-selected="true" data-quran-mode-button="mushaf">Mushaf Utsmani</button><button type="button" role="tab" aria-selected="false" data-quran-mode-button="list">Standar / List</button></div><div class="quran-controls quran-nav-grid"><label data-quran-control="surah" hidden>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label data-quran-control="ayah" hidden>Ayat mulai<input data-quran-ayah type="number" min="1" value="1" inputmode="numeric"></label><div class="quran-page-navigation" data-quran-control="page"><button class="btn btn-ghost" type="button" data-quran-page-step="-1" aria-label="Halaman sebelumnya">‹</button><label>Halaman Mushaf<input data-quran-page type="number" min="1" max="604" value="1" placeholder="1–604" inputmode="numeric"></label><button class="btn btn-ghost" type="button" data-quran-page-step="1" aria-label="Halaman berikutnya">›</button></div><button class="btn btn-ghost quran-translation-toggle" type="button" data-quran-translation aria-expanded="false"><i class="fa-solid fa-language" aria-hidden="true"></i> Terjemahan</button></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls quran-select-grid"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
+  const banner = `<div class="panel-head"><div class="quran-brand"><img src="./assets/logo%20stkis.png" alt="Logo STKIS"><div><h2>Al-Qur'an Digital STKIS</h2><p>Baca surah dalam teks Arab, latin, dan terjemahan; tersedia juga ayat tematik dan audio.</p></div></div></div>`;
+  return `<section class="panel quran-panel">${banner}<div class="quran-tabs" role="tablist" aria-label="Al-Qur'an Digital"><button type="button" role="tab" aria-selected="true" data-quran-tab="reading">Baca Al-Qur'an</button><button type="button" role="tab" aria-selected="false" data-quran-tab="themes">Baca Ayat Tematik</button></div><div data-quran-tab-panel="reading"><div class="quran-controls quran-nav-grid"><label>Surah<select data-quran-surah><option value="">Memuat daftar surah…</option></select></label><label>Ayat mulai<input data-quran-ayah type="number" min="1" value="1" inputmode="numeric"></label></div><p class="metric-note" data-quran-status aria-live="polite">Memuat Al-Qur'an…</p><div class="quran-verses" data-quran-verses></div></div><div data-quran-tab-panel="themes" hidden><div class="quran-controls quran-select-grid"><label>Tema<select data-quran-theme>${thematicMurottalPlaylists.map((playlist) => `<option value="${escapeHtml(playlist.id)}">${escapeHtml(playlist.title)}</option>`).join('')}</select></label><label>Qari<select data-theme-qari>${qariOptionsMarkup(persistentQari, true)}</select></label><button class="btn btn-ghost quran-select-action" type="button" data-quran-theme-play>Putar Tema</button></div><p class="metric-note" data-quran-theme-status aria-live="polite">Pilih tema untuk membaca ayat dalam bahasa Arab, latin, dan terjemahan Indonesia.</p><div class="quran-verses thematic-reading-verses" data-quran-theme-verses></div></div></section>`;
 }
 
 function murottalPanelMarkup() {
@@ -2721,20 +2721,6 @@ function renderQuranVerse(data) {
   const latin = data?.latin || '';
   const reference = `${data?.surah?.number || ''}:${data?.numberInSurah || ''}`;
   return `<article class="quran-verse" id="quran-verse-${escapeHtml(reference.replace(':', '-'))}"><div class="quran-verse-head"><span class="badge badge-success">${escapeHtml(reference)}</span></div><p lang="ar" dir="rtl" class="quran-arabic font-quran">${escapeHtml(arabic)}</p><p class="quran-latin">${escapeHtml(latin)}</p><p class="quran-translation">${escapeHtml(translation)}</p><div class="quran-verse-actions"><button class="btn btn-small btn-ghost" type="button" data-quran-play-verse="${escapeHtml(reference)}">Putar Ayat</button><button class="btn btn-small btn-ghost" type="button" data-quran-tafsir="${escapeHtml(reference)}">Tafsir Ibnu Katsir</button></div></article>`;
-}
-
-function renderQuranMushafPage(entries, pageNumber, juzNumbers, showTranslation = false) {
-  const arabic = entries.map((entry) => {
-    return `<span class="quran-mushaf-ayah">${escapeHtml(entry.text || '')}<span class="quran-mushaf-marker" aria-label="Ayat ${escapeHtml(entry.numberInSurah)}">${escapeHtml(entry.numberInSurah)}</span></span>`;
-  }).join(' ');
-  const surahNames = [...new Set(entries.map((entry) => entry?.surah?.name).filter(Boolean))];
-  const surahLabel = surahNames.join(' · ');
-  const juzLabel = juzNumbers.length === 1 ? `Juz ${juzNumbers[0]}` : `Juz ${juzNumbers[0]}–${juzNumbers[juzNumbers.length - 1]}`;
-  const translations = entries.map((entry) => {
-    const reference = `${entry?.surah?.number || ''}:${entry?.numberInSurah || ''}`;
-    return `<article class="quran-mushaf-translation-row"><b>${escapeHtml(entry?.surah?.name || '')} ${escapeHtml(entry?.numberInSurah || '')}</b><p>${escapeHtml(entry.translation || '')}</p><div class="quran-verse-actions"><button class="btn btn-small btn-ghost" type="button" data-quran-play-verse="${escapeHtml(reference)}">Putar Ayat</button><button class="btn btn-small btn-ghost" type="button" data-quran-tafsir="${escapeHtml(reference)}">Tafsir Ibnu Katsir</button></div></article>`;
-  }).join('');
-  return `<article class="quran-mushaf-page"><header class="quran-mushaf-page-heading"><div><span class="quran-mushaf-bookmark">الْقُرْآنُ الْكَرِيم</span><b>${escapeHtml(surahLabel)}</b><small>${escapeHtml(juzLabel)}</small></div><span class="quran-mushaf-page-number">${pageNumber}</span></header><div class="quran-mushaf-arabic font-quran" lang="ar" dir="rtl">${arabic}</div><footer class="quran-mushaf-page-footer"><span>مصحف المدينة النبوية</span><span>${pageNumber}</span></footer><div class="quran-mushaf-translations" data-quran-mushaf-translations ${showTranslation ? '' : 'hidden'}>${translations}</div></article>`;
 }
 
 let quranSurahs = [];
@@ -2821,55 +2807,14 @@ async function loadQuranContent(container = document) {
   const status = container.querySelector('[data-quran-status]');
   if (!select || !output) return;
   try {
-    const mode = container.dataset.quranMode || 'mushaf';
-    if (status) status.textContent = mode === 'mushaf' ? 'Memuat satu halaman Mushaf Utsmani…' : 'Memuat ayat dan terjemahan…';
-    const pageValue = Number(container.querySelector('[data-quran-page]')?.value);
+    if (status) status.textContent = 'Memuat ayat dan terjemahan…';
     const ayahValue = Number(container.querySelector('[data-quran-ayah]')?.value || 1);
-    if (mode === 'mushaf' && (!Number.isInteger(pageValue) || pageValue < 1 || pageValue > 604)) {
-      throw new Error('Nomor halaman Mushaf harus antara 1 dan 604.');
-    }
-    let entries;
-    let displayName;
-    let pageNumber = pageValue;
-    let juzNumbers = [];
-    if (mode === 'mushaf' && pageValue >= 1 && pageValue <= 604) {
-      const response = await fetch(`https://api.quran.com/api/v4/verses/by_page/${pageValue}?language=id&words=false&fields=text_uthmani,juz_number,page_number`);
-      if (!response.ok) throw new Error(`Layanan Al-Qur'an merespons ${response.status}.`);
-      const result = await response.json();
-      if (!Array.isArray(result.verses)) throw new Error('Data halaman Al-Qur’an tidak tersedia.');
-      const references = result.verses.map((ayah) => {
-        const [surah, ayahNumber] = ayah.verse_key.split(':').map(Number);
-        return { surah, ayahNumber, juz: Number(ayah.juz_number) };
-      });
-      const surahsOnPage = [...new Set(references.map((reference) => reference.surah))];
-      const surahData = await Promise.all(surahsOnPage.map(loadEquranSurah));
-      entries = references.map(({ surah, ayahNumber }) => {
-        const data = surahData.find((item) => item.nomor === surah);
-        const ayah = data?.ayat.find((item) => item.nomorAyat === ayahNumber);
-        const uthmani = result.verses.find((item) => item.verse_key === `${surah}:${ayahNumber}`)?.text_uthmani;
-        if (!data || !ayah || !uthmani) throw new Error(`Data Mushaf Utsmani ayat ${surah}:${ayahNumber} tidak lengkap.`);
-        return { text: uthmani, latin: ayah.teksLatin, translation: ayah.teksIndonesia, numberInSurah: ayah.nomorAyat, juz: references.find((reference) => reference.surah === surah && reference.ayahNumber === ayahNumber)?.juz, surah: { number: data.nomor, name: data.namaLatin } };
-      });
-      juzNumbers = [...new Set(references.map((reference) => reference.juz).filter(Number.isInteger))].sort((a, b) => a - b);
-      if (!juzNumbers.length) throw new Error('Informasi juz untuk halaman ini tidak tersedia.');
-      displayName = `Halaman ${pageValue}`;
-      pageNumber = Number(result.verses[0]?.page_number) || pageValue;
-    } else {
-      const data = await loadEquranSurah(select.value);
-      entries = data.ayat.map((ayah) => ({ text: ayah.teksArab, latin: ayah.teksLatin, translation: ayah.teksIndonesia, numberInSurah: ayah.nomorAyat, surah: { number: data.nomor, name: data.namaLatin } }));
-      displayName = `${data.namaLatin} (${data.arti})`;
-    }
-    if (mode === 'mushaf') {
-      const showTranslation = container.querySelector('[data-quran-translation]')?.getAttribute('aria-expanded') === 'true';
-      output.innerHTML = renderQuranMushafPage(entries, pageNumber, juzNumbers, showTranslation);
-      output.classList.add('quran-mushaf-output');
-    } else {
-      output.innerHTML = entries.map(renderQuranVerse).join('');
-      output.classList.remove('quran-mushaf-output');
-    }
-    if (status) status.textContent = `${displayName} · ${entries.length} ayat`;
+    const data = await loadEquranSurah(select.value);
+    const entries = data.ayat.map((ayah) => ({ text: ayah.teksArab, latin: ayah.teksLatin, translation: ayah.teksIndonesia, numberInSurah: ayah.nomorAyat, surah: { number: data.nomor, name: data.namaLatin } }));
+    output.innerHTML = entries.map(renderQuranVerse).join('');
+    if (status) status.textContent = `${data.namaLatin} (${data.arti}) · ${entries.length} ayat`;
     const targetAyah = entries.findIndex((ayah) => Number(ayah.numberInSurah) === ayahValue);
-    if (mode !== 'mushaf' && targetAyah >= 0) output.children[targetAyah]?.scrollIntoView({ block: 'start' });
+    if (targetAyah >= 0) output.children[targetAyah]?.scrollIntoView({ block: 'start' });
   } catch (error) {
     console.error('[BoardingPro] Gagal memuat ayat Al-Qur’an:', error);
     if (status) status.textContent = `Ayat tidak dapat dimuat: ${error.message}`;
@@ -3209,7 +3154,7 @@ async function playCurrentThematicReference(qari = persistentQari) {
 }
 
 function openQuranAdabModal() {
-  openModal('Adab Membaca Al-Qur’an', '<section class="quran-adab-prompt"><div class="quran-adab-icon" aria-hidden="true">۞</div><h3>Anjuran sebelum membaca</h3><p>Dianjurkan berwudhu sebelum membaca Al-Qur’an sebagai bentuk penghormatan terhadap kalam Allah. Silakan lanjutkan ketika sudah siap.</p><div class="actions-inline"><button type="button" class="btn btn-primary" data-quran-continue>Mari Lanjutkan Membaca</button></div></section>');
+  openModal('Adab Membaca Al-Qur’an', '<section class="quran-adab-prompt"><div class="quran-adab-icon" aria-hidden="true"><i class="fa-solid fa-droplet"></i></div><h3>Anjuran sebelum membaca</h3><p>Dianjurkan berwudhu sebelum membaca Al-Qur’an sebagai bentuk penghormatan terhadap kalam Allah. Silakan lanjutkan ketika sudah siap.</p><div class="actions-inline"><button type="button" class="btn btn-primary" data-quran-continue>Mari Lanjutkan Membaca</button></div></section>');
   $('#modal-root [data-quran-continue]')?.addEventListener('click', openQuranModal);
 }
 
@@ -3237,46 +3182,10 @@ function openQiblaModal() {
 
 function bindQuranPanel(container) {
   if (!container) return;
-  const pageSelect = container.querySelector('[data-quran-page]');
   const surahSelect = container.querySelector('[data-quran-surah]');
   const ayahSelect = container.querySelector('[data-quran-ayah]');
-  const renderSelectedQuranContent = (source) => {
-    if (source !== pageSelect && pageSelect) pageSelect.value = '';
-    loadQuranContent(container);
-  };
-  surahSelect?.addEventListener('change', () => renderSelectedQuranContent(surahSelect));
-  ayahSelect?.addEventListener('change', () => renderSelectedQuranContent(ayahSelect));
-  pageSelect?.addEventListener('change', () => renderSelectedQuranContent(pageSelect));
-  container.querySelectorAll('[data-quran-mode-button]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const mode = button.dataset.quranModeButton;
-      container.dataset.quranMode = mode;
-      container.querySelectorAll('[data-quran-mode-button]').forEach((item) => item.setAttribute('aria-selected', String(item === button)));
-      container.querySelectorAll('[data-quran-control]').forEach((control) => { control.hidden = control.dataset.quranControl !== 'page' && mode === 'mushaf' || control.dataset.quranControl === 'page' && mode !== 'mushaf'; });
-      const translationButton = container.querySelector('[data-quran-translation]');
-      if (translationButton) translationButton.hidden = mode !== 'mushaf';
-      loadQuranContent(container);
-    });
-  });
-  container.querySelector('[data-quran-translation]')?.addEventListener('click', (event) => {
-    const button = event.currentTarget;
-    const expanded = button.getAttribute('aria-expanded') !== 'true';
-    button.setAttribute('aria-expanded', String(expanded));
-    button.innerHTML = `<i class="fa-solid fa-language" aria-hidden="true"></i> ${expanded ? 'Sembunyikan Terjemahan' : 'Terjemahan'}`;
-    const translations = container.querySelector('[data-quran-mushaf-translations]');
-    if (translations) translations.hidden = !expanded;
-  });
-  container.querySelectorAll('[data-quran-page-step]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const pageInput = container.querySelector('[data-quran-page]');
-      if (!pageInput) return;
-      const currentPage = Number(pageInput.value) || 1;
-      const nextPage = Math.max(1, Math.min(604, currentPage + Number(button.dataset.quranPageStep)));
-      if (nextPage === currentPage) return;
-      pageInput.value = String(nextPage);
-      loadQuranContent(container);
-    });
-  });
+  surahSelect?.addEventListener('change', () => loadQuranContent(container));
+  ayahSelect?.addEventListener('change', () => loadQuranContent(container));
   container.querySelector('[data-quran-theme]')?.addEventListener('change', async (event) => {
     try {
       await showThematicVerses(event.currentTarget.value, container.querySelector('[data-quran-theme-verses]'), container.querySelector('[data-quran-theme-status]'));
@@ -3584,7 +3493,7 @@ function launchPoster() {
 
 function commonDashboard(roleTitle, description, extra = '') {
   const role = roles[effectiveRole()] || roles.mahad || roles.yayasan;
-  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<section class="dashboard-study-cards" aria-label="Akses Al-Qur’an dan Murottal"><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-book-quran"></i></span><div><h2>Al-Qur’an Digital</h2><p>Baca dalam Mushaf Utsmani atau mode standar dengan terjemahan.</p></div><button class="btn btn-primary" type="button" data-action="open-quran">Buka</button></article><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-headphones"></i></span><div><h2>Murottal 30 Juz</h2><p>Dengarkan tilawah lengkap dan playlist ayat tematik.</p></div><button class="btn btn-primary" type="button" data-action="open-murottal">Buka</button></article></section><div class="dashboard-prayer-shortcut"><button class="btn btn-ghost" type="button" data-action="open-prayer">Jadwal Sholat & Adzan</button></div>${learningWidgetsMarkup()}${extra}`;
+  return `${welcome(roleTitle, `Ahlan Wa Sahlan, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  ${description}`, '')}<section class="dashboard-study-cards" aria-label="Akses Al-Qur’an dan Murottal"><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-book-quran"></i></span><div><h2>Al-Qur’an Digital</h2><p>Baca ayat dalam teks Arab, latin, dan terjemahan.</p></div><button class="btn btn-primary" type="button" data-action="open-quran">Buka</button></article><article class="dashboard-study-card"><span class="dashboard-study-icon" aria-hidden="true"><i class="fa-solid fa-headphones"></i></span><div><h2>Murottal 30 Juz</h2><p>Dengarkan tilawah lengkap dan playlist ayat tematik.</p></div><button class="btn btn-primary" type="button" data-action="open-murottal">Buka</button></article></section><div class="dashboard-prayer-shortcut"><button class="btn btn-ghost" type="button" data-action="open-prayer">Jadwal Sholat & Adzan</button></div>${learningWidgetsMarkup()}${extra}`;
 }
 
 function adminDashboard() {
