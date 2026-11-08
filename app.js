@@ -987,12 +987,18 @@ function semesterFilterForm(id = 'semester-filter-form') {
   const defaults = semesterDefaults();
   return `<form id="${id}" class="form-grid semester-filter"><label>Semester<select name="semester"><option value="1" ${defaults.semester === '1' ? 'selected' : ''}>Ganjil</option><option value="2" ${defaults.semester === '2' ? 'selected' : ''}>Genap</option></select></label><label>Tahun Ajaran<select name="academicYear">${academicYearOptions()}</select></label><button class="btn btn-primary" type="submit">Terapkan Filter</button></form>`;
 }
+function findCurrentStudent() {
+  const account = currentAccount();
+  const username = String(account?.username || '').trim();
+  const normalizedUsername = username.replace(/^(?:ortu|wali)[_-]?/i, '');
+  const student = (account?.studentId && state.students.find((item) => String(item.id) === String(account.studentId)))
+    || (account?.nis && state.students.find((item) => String(item.nis || '').trim() === String(account.nis)))
+    || (normalizedUsername && state.students.find((item) => String(item.nis || '').trim() === normalizedUsername));
+  return student || null;
+}
 const currentStudent = () => {
   const account = currentAccount();
-  const student = state.students.find((item) => item.id === account?.studentId)
-    || state.students.find((student) => String(student.nis) === String(account?.username || '').trim())
-    || state.students.find((student) => student.id === state.studentId)
-    || state.students[0];
+  const student = findCurrentStudent();
   return student || {
     id: account?.studentId || `STUDENT-${account?.username || 'CURRENT'}`,
     name: account?.name || account?.nama || 'Santri',
@@ -1042,11 +1048,94 @@ const canManageFinance = () => ['mahad', 'admin'].includes(effectiveRole());
 const canManageSecurity = () => ['security', 'mahad', 'admin'].includes(effectiveRole());
 const canManageDormitory = () => ['mahad', 'admin', 'pembina', 'musyrif'].includes(effectiveRole()) || (['guru', 'pembina', 'musyrif'].includes(effectiveRole()) && (currentAccount()?.isMusyrif === true || accountHasAssignedRole(currentAccount(), 'musyrif') || accountHasAssignedRole(currentAccount(), 'pembina')));
 const isActiveStudent = (student) => student && student.status !== 'Alumni' && student.status !== 'Alumni Program' && [10, 11, 12].includes(Number(student.grade)) || ['PPTAK', 'KWNQ'].includes(student?.program) && student.status !== 'Alumni' && student.status !== 'Alumni Program';
+const normalizedScopeValue = (value) => String(value ?? '').trim().toLocaleLowerCase('id');
+function studentsForCurrentRole() {
+  const role = effectiveRole();
+  if (['parent', 'student'].includes(role)) {
+    const student = findCurrentStudent();
+    return student ? [student] : [];
+  }
+  if (!['pembina', 'musyrif'].includes(role)) return state.students;
+
+  const account = currentAccount();
+  const accountName = normalizedScopeValue(account?.name || account?.nama);
+  const accountId = String(account?.id || '');
+  const assignedHalaqoh = String(account?.halaqohId || account?.pengampu || '');
+  const assignedHalaqohIds = new Set(
+    state.halaqoh
+      .filter((halaqoh) => String(halaqoh.id || '') === assignedHalaqoh || normalizedScopeValue(halaqoh.teacher) === accountName)
+      .map((halaqoh) => String(halaqoh.id))
+  );
+  if (assignedHalaqoh) assignedHalaqohIds.add(assignedHalaqoh);
+
+  return state.students.filter((student) => {
+    const studentHalaqoh = String(student.halaqohId || student.pengampu || '');
+    const studentPengampu = normalizedScopeValue(student.pengampu);
+    return (studentHalaqoh && assignedHalaqohIds.has(studentHalaqoh))
+      || (accountName && studentPengampu === accountName)
+      || (accountId && String(student.pengampu || '') === accountId);
+  });
+}
+function routineSchedulesForCurrentRole() {
+  const validSchedules = (state.schedules || []).filter((schedule) =>
+    schedule && typeof schedule === 'object'
+    && String(schedule.day || '').trim()
+    && String(schedule.time || '').trim()
+    && String(schedule.title || '').trim()
+  );
+  const uniqueSchedules = [...new Map(validSchedules.map((schedule, index) => {
+    const key = String(schedule.id || [
+      schedule.day, schedule.time, schedule.title, schedule.room, schedule.teacher, schedule.className
+    ].join('|') || index);
+    return [key, schedule];
+  })).values()];
+  const role = effectiveRole();
+  if (!['parent', 'student', 'pembina', 'musyrif'].includes(role)) return uniqueSchedules;
+
+  const scopedStudents = studentsForCurrentRole();
+  const studentIds = new Set(scopedStudents.map((student) => String(student.id)));
+  const classNames = new Set(scopedStudents.map((student) => normalizedScopeValue(student.className)).filter(Boolean));
+  const halaqohIds = new Set(scopedStudents.flatMap((student) => [student.halaqohId, student.pengampu]).filter(Boolean).map(String));
+  const account = currentAccount();
+  const accountName = normalizedScopeValue(account?.name || account?.nama);
+  const assignedHalaqoh = String(account?.halaqohId || account?.pengampu || '');
+
+  return uniqueSchedules.filter((schedule) => {
+    const scheduleStudentIds = [
+      schedule.studentId,
+      ...(Array.isArray(schedule.studentIds) ? schedule.studentIds : [])
+    ].filter(Boolean).map(String);
+    const scheduleClass = normalizedScopeValue(schedule.className);
+    const scheduleHalaqoh = String(schedule.halaqohId || schedule.pengampu || '');
+    const hasStudentScope = scheduleStudentIds.length > 0;
+    const hasClassScope = Boolean(scheduleClass);
+    const hasHalaqohScope = Boolean(scheduleHalaqoh);
+    if (!hasStudentScope && !hasClassScope && !hasHalaqohScope) {
+      return role !== 'parent' && role !== 'student'
+        ? !schedule.teacher || normalizedScopeValue(schedule.teacher) === accountName
+        : true;
+    }
+    if (hasStudentScope && scheduleStudentIds.some((id) => studentIds.has(id))) return true;
+    if (hasClassScope && classNames.has(scheduleClass)) return true;
+    if (hasHalaqohScope && (halaqohIds.has(scheduleHalaqoh) || scheduleHalaqoh === assignedHalaqoh)) return true;
+    return false;
+  });
+}
+function financeStudentScope() {
+  return ['parent', 'student', 'pembina', 'musyrif'].includes(effectiveRole())
+    ? studentsForCurrentRole().map((student) => String(student.id))
+    : null;
+}
+function matchesStudentScope(record, studentScope) {
+  if (studentScope === null || studentScope === undefined) return true;
+  if (Array.isArray(studentScope)) return studentScope.includes(String(record.studentId));
+  return String(record.studentId) === String(studentScope);
+}
 state.billingNotifications = (state.billingNotifications || []).filter((bill) => isActiveStudent(state.students.find((student) => student.id === bill.studentId)));
 const financeGroupKeys = ['Reguler SMK  -  Kelas 10', 'Reguler SMK  -  Kelas 11', 'Reguler SMK  -  Kelas 12', 'Program PPTAK (1 Tahun)  -  Non-Jenjang', 'Program KWNQ (3 Bulan)  -  Non-Jenjang'];
 function groupedActiveStudentRecords(records, renderItem, emptyMessage = 'Belum ada data tagihan') {
   const groups = Object.fromEntries(financeGroupKeys.map((key) => [key, []]));
-  records.forEach((record) => {
+  records.filter((record) => matchesStudentScope(record, financeStudentScope())).forEach((record) => {
     const student = studentById(record.studentId);
     if (!isActiveStudent(student)) return;
     const program = student.program === 'PPTAK' ? 'Program PPTAK (1 Tahun)' : student.program === 'KWNQ' ? 'Program KWNQ (3 Bulan)' : 'Reguler SMK';
@@ -1240,38 +1329,36 @@ async function initializeFirebase() {
   firebaseState.ready = true;
   let markRemoteReady;
   firebaseState.remoteReadyPromise = new Promise((resolve) => { markRemoteReady = resolve; });
-  const stateRef = firebaseState.database.ref('boardingpro/state');
-  stateRef.on('value', (snapshot) => {
-    const remote = snapshot.val();
-    if (remote && typeof remote === 'object') {
+  const pendingRemoteNodes = new Set([...stateCollectionKeys, 'config']);
+  const markRemoteNodeLoaded = (key) => {
+    pendingRemoteNodes.delete(key);
+    if (!pendingRemoteNodes.size && !firebaseState.remoteLoaded) {
       firebaseState.remoteLoaded = true;
-      applySynchronizedState({ data: remote });
-    } else if (remote === null) {
-      firebaseState.remoteLoaded = true;
-      stateCollectionKeys.forEach((key) => { state[key] = []; });
-      normalizeStateCollections();
+      markRemoteReady();
     }
-    if (firebaseState.remoteLoaded) markRemoteReady();
-    render();
-  }, (error) => {
-    firebaseState.remoteLoaded = true;
-    markRemoteReady();
-    console.error('[BoardingPro] Sinkronisasi state realtime gagal:', error);
-  });
+  };
   stateCollectionKeys.forEach((key) => {
     firebaseState.database.ref(`boardingpro/state/${key}`).on('value', (snapshot) => {
       const remote = snapshot.val();
       state[key] = collectionFromRemote(remote);
       normalizeStateCollections();
       render();
-    }, (error) => console.error(`[BoardingPro] Sinkronisasi koleksi ${key} gagal:`, error));
+      markRemoteNodeLoaded(key);
+    }, (error) => {
+      markRemoteNodeLoaded(key);
+      console.error(`[BoardingPro] Sinkronisasi koleksi ${key} gagal:`, error);
+    });
   });
   firebaseState.database.ref('boardingpro/state/config').on('value', (snapshot) => {
     const remote = snapshot.val();
     if (remote && typeof remote === 'object') state.config = remote;
     normalizeStateCollections();
     render();
-  }, (error) => console.error('[BoardingPro] Sinkronisasi konfigurasi gagal:', error));
+    markRemoteNodeLoaded('config');
+  }, (error) => {
+    markRemoteNodeLoaded('config');
+    console.error('[BoardingPro] Sinkronisasi konfigurasi gagal:', error);
+  });
 }
 
 async function syncFirebaseFinance({ throwOnError = false } = {}) {
@@ -3588,8 +3675,8 @@ function metricValueIsActive(value) {
     : normalized.replace(',', '.'));
   return Number.isFinite(numericValue) && numericValue !== 0;
 }
-function dashboardAttendanceRate() {
-  const records = state.attendance.filter((item) => item.status);
+function dashboardAttendanceRate(studentScope = null) {
+  const records = state.attendance.filter((item) => item.status && matchesStudentScope(item, studentScope));
   if (!records.length) return 0;
   return Math.round(records.filter((item) => item.status === 'Hadir').length / records.length * 1000) / 10;
 }
@@ -3724,7 +3811,7 @@ function kaldikView() {
   const events = [...(state.events || [])]
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   const eventCards = events.map((event) => `<article class="kaldik-event-card"><time datetime="${escapeHtml(event.date || '')}">${formatDate(event.date)}${event.startTime || event.endTime || event.time ? `<small>${escapeHtml([event.startTime, event.endTime].filter(Boolean).join('–') || event.time)}</small>` : ''}</time><div><h3>${escapeHtml(event.title || 'Agenda sekolah')}</h3><p>${escapeHtml(event.audience || 'Kegiatan sekolah')} · ${escapeHtml(event.location || 'Lokasi belum ditentukan')}</p>${event.description ? `<p class="kaldik-event-description">${escapeHtml(event.description)}</p>` : ''}</div><div class="kaldik-event-actions"><span class="badge">${escapeHtml(event.status || 'Terjadwal')}</span>${canEdit ? `<button type="button" class="btn btn-small btn-ghost" data-edit-calendar-event="${escapeHtml(String(event.id))}">Edit</button><button type="button" class="btn btn-small btn-danger" data-delete-calendar-event="${escapeHtml(String(event.id))}">Hapus</button>` : ''}</div></article>`).join('');
-  const weeklySchedules = [...(state.schedules || [])]
+  const weeklySchedules = routineSchedulesForCurrentRole()
     .sort((a, b) => String(a.day || '').localeCompare(String(b.day || '')))
     .map((item) => `<article class="kaldik-schedule-card"><div class="kaldik-schedule-card-head"><b>${escapeHtml(item.day || 'Jadwal rutin')}</b>${canEdit ? `<span><button type="button" class="btn btn-small btn-ghost" data-edit-calendar-schedule="${escapeHtml(String(item.id))}">Edit</button><button type="button" class="btn btn-small btn-danger" data-delete-calendar-schedule="${escapeHtml(String(item.id))}">Hapus</button></span>` : ''}</div><time>${escapeHtml(item.time || 'Waktu belum ditentukan')}</time><h3>${escapeHtml(item.title || 'Kegiatan')}</h3><p>${escapeHtml(item.room || 'Lokasi belum ditentukan')}${item.teacher ? ` · ${escapeHtml(item.teacher)}` : ''}</p>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}</article>`).join('');
   const actions = canEdit ? `<div class="actions-inline"><button type="button" class="btn btn-primary" data-action="add-event">${icon('plus')} Tambah Agenda</button><button type="button" class="btn btn-ghost" data-action="add-schedule">${icon('plus')} Tambah Jadwal Rutin</button></div>` : '';
@@ -3751,18 +3838,24 @@ function executiveDashboard() {
 function unifiedDashboard() {
   const role = roles[state.role] || roles.yayasan;
   const student = currentStudent();
-  const verified = state.payments.filter((payment) => payment.status === 'Verified').reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const pending = state.payments.filter((payment) => payment.status === 'Pending').length;
+  const studentScope = financeStudentScope();
+  const scopedPayments = state.payments.filter((payment) => matchesStudentScope(payment, studentScope));
+  const scopedStudents = studentScope === null ? state.students : state.students.filter((student) => studentScope.includes(String(student.id)));
+  const verified = scopedPayments.filter((payment) => ['verified', 'approved', 'terverifikasi', 'lunas'].includes(normalizedScopeValue(payment.status))).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const pending = scopedPayments.filter((payment) => ['pending', 'pending_verification'].includes(normalizedScopeValue(payment.status))).length;
   const feed = state.dailyFeed.slice(0, 4);
   const announcements = state.announcements.slice(0, 4);
-  const balance = state.pocketBalances.find((item) => item.studentId === student.id)?.balance || 0;
-  const transactions = state.pocketTransactions.filter((item) => item.studentId === student.id).slice(0, 4);
+  const studentId = findCurrentStudent()?.id;
+  const balance = studentId
+    ? state.pocketBalances.find((item) => String(item.studentId) === String(studentId))?.balance || 0
+    : state.pocketBalances.filter((item) => matchesStudentScope(item, studentScope)).reduce((sum, item) => sum + Number(item.balance || 0), 0);
+  const transactions = state.pocketTransactions.filter((item) => matchesStudentScope(item, studentScope)).slice(0, 4);
   const stats = canViewFinance()
-    ? `${statCard('Total Santri', state.students.length, '', 'users', 'blue')}${statCard('Kehadiran Rata-rata', dashboardPercent(dashboardAttendanceRate()), '', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}`
-    : `${statCard('Total Santri', state.students.length, 'Data aktif', 'users', 'blue')}${statCard('Kehadiran Rata-rata', dashboardPercent(dashboardAttendanceRate()), '', 'calendar-check', 'green')}${statCard('Setoran Tahfizh', state.tahfizh.length, 'Rekaman terbaru', 'book-open-check', 'purple')}${statCard('Agenda Hari Ini', state.schedules.length, 'Kegiatan terjadwal', 'calendar-days', 'orange')}`;
+    ? `${statCard('Total Santri', scopedStudents.length, '', 'users', 'blue')}${statCard('Kehadiran Rata-rata', dashboardPercent(dashboardAttendanceRate(studentScope)), '', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}`
+    : `${statCard('Total Santri', scopedStudents.length, 'Data aktif', 'users', 'blue')}${statCard('Kehadiran Rata-rata', dashboardPercent(dashboardAttendanceRate(studentScope)), '', 'calendar-check', 'green')}${statCard('Setoran Tahfizh', state.tahfizh.filter((item) => scopedStudents.some((scoped) => String(scoped.id) === String(item.studentId))).length, 'Rekaman terbaru', 'book-open-check', 'purple')}${statCard('Jadwal Kegiatan Rutin', routineSchedulesForCurrentRole().length, 'Sesuai akses akun', 'calendar-days', 'orange')}`;
   const announcementRows = announcements.map((item) => `<div class="activity"><span class="activity-icon green">${icon('megaphone')}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div><time>${formatDate(item.date)}</time></div>`).join('');
-  const pocketSection = canViewFinance() ? section('Uang Saku Santri', 'Saldo dan mutasi sesuai hak akses role', `<div class="finance-grid"><div class="finance-tile"><span>Saldo ${escapeHtml(student.name)}</span><b>${money(balance)}</b></div><div class="finance-tile"><span>Top up bulan ini</span><b>${money(transactions.filter((item) => item.type === 'Top Up').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div><div class="finance-tile"><span>Transaksi terbaru</span><b>${transactions.length}</b></div></div>${table(['Tanggal','Jenis','Nominal','Catatan'], transactions.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${item.type}</td><td>${money(item.amount)}</td><td>${escapeHtml(item.note)}</td></tr>`).join(''), 'Belum ada mutasi uang saku')}`) : '';
-  const financeSection = canViewFinance() ? section('Keuangan & Invoice', 'SPP, non-SPP, beasiswa, laundry, dan dokumen pembayaran', `${billingTable(4)}<div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-view="finance">Buka pusat keuangan</button></div>`) : '';
+  const pocketSection = canViewFinance() ? section('Uang Saku Santri', 'Saldo dan mutasi sesuai hak akses role', `<div class="finance-grid"><div class="finance-tile"><span>${studentId ? `Saldo ${escapeHtml(student.name)}` : 'Total saldo dalam cakupan akses'}</span><b>${money(balance)}</b></div><div class="finance-tile"><span>Top up tercatat</span><b>${money(transactions.filter((item) => item.type === 'Top Up').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div><div class="finance-tile"><span>Transaksi terbaru</span><b>${transactions.length}</b></div></div>${table(['Tanggal','Jenis','Nominal','Catatan'], transactions.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${item.type}</td><td>${money(item.amount)}</td><td>${escapeHtml(item.note)}</td></tr>`).join(''), 'Belum ada mutasi uang saku')}`) : '';
+  const financeSection = canViewFinance() ? section('Keuangan & Invoice', 'SPP, non-SPP, beasiswa, laundry, dan dokumen pembayaran', `${billingTable(4, studentScope)}<div class="actions-inline"><button type="button" class="btn btn-ghost btn-small" data-view="finance">Buka pusat keuangan</button></div>`) : '';
   return `${welcome(`BOARDINGPRO STKIS  -  ${role.label.toUpperCase()}`, `Assalamu'alaikum, ${role.demoName.split(' ')[0]} `, `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  Satu ruang kendali untuk menjaga amanah.`, canManageAnnouncements() ? `<button class="btn btn-primary" data-action="add-announcement">${icon('plus')} Pengumuman</button>` : '')}
     <div class="stats-grid">${stats}</div>
     <div class="grid-2">${section('Pengumuman & Feed Harian', "Kabar terbaru ma'had dan perkembangan santri", `<div class="activity-list">${announcementRows || '<div class="empty">Belum ada pengumuman.</div>'}${feed.map((item) => `<div class="activity"><span class="activity-icon green">${icon(item.type === 'tahfizh' ? 'book-open-check' : 'bell')}</span><div><b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.detail)}</p></div><time>${formatDate(item.date)}</time></div>`).join('')}</div>`, `<button class="btn btn-ghost btn-small" data-view="announcements">Lihat semua</button>`)}
@@ -4008,22 +4101,51 @@ function finishTeacherLesson() {
   showToast(`Check-out tercatat: ${active.hours.toFixed(2)} jam mengajar.`, 'success');
 }
 function pembinaView() {
+  const studentIds = new Set(studentsForCurrentRole().map((student) => String(student.id)));
+  const attendanceRecords = state.dormAttendance.filter((record) => studentIds.has(String(record.studentId)) && record.date === today);
+  const attendanceCount = attendanceRecords.length;
+  const attendanceRate = attendanceCount
+    ? `${Math.round((attendanceRecords.filter((record) => ['hadir', 'present'].includes(normalizedScopeValue(record.status))).length / attendanceCount) * 100)}%`
+    : '-';
+  const pendingTahfizh = state.tahfizh.filter((record) => studentIds.has(String(record.studentId)) && ['menunggu', 'pending'].includes(normalizedScopeValue(record.status))).length;
+  const pointsToday = state.points.filter((record) => studentIds.has(String(record.studentId)) && record.date === today)
+    .reduce((sum, record) => sum + Number(record.value || 0), 0);
   return `${welcome('PENGAWASAN ASRAMA & TAHFIZH', 'Dashboard Pembina', 'Pantau kedisiplinan, presensi jamaah, dan hafalan santri binaan.', canManageDormitory() ? `<button class="btn btn-primary" data-action="add-point">${icon('plus')} Input Poin</button><button class="btn btn-primary" data-action="add-tahfizh-attendance">${icon('plus')} Absensi Tahfizh</button>` : '')}
-    <div class="stats-grid">${statCard('Presensi Jamaah', '93,6%', '', 'mosque', 'green')}${statCard('Setoran Menunggu', state.tahfizh.filter((item) => item.status === 'Menunggu').length, 'Perlu verifikasi', 'book-open-check', 'orange')}${statCard('Poin Hari Ini', '+25', '', 'award', 'purple')}</div>
+    <div class="stats-grid">${statCard('Presensi Jamaah Hari Ini', attendanceRate, `${attendanceCount} catatan halaqoh`, 'mosque', 'green')}${statCard('Setoran Menunggu', pendingTahfizh, 'Halaqoh Anda', 'book-open-check', 'orange')}${statCard('Poin Hari Ini', `${pointsToday > 0 ? '+' : ''}${pointsToday}`, 'Santri binaan', 'award', 'purple')}</div>
     <div class="grid-2">${section('Setoran Terbaru', 'Verifikasi capaian hafalan', tahfizhTable())}${section('Izin Menunggu', 'Persetujuan pengajuan outing', permitTable(true))}</div>`;
 }
 function parentView() {
   const child = currentStudent();
-  const summary = state.monthlySummaries.find((item) => item.studentId === child.id && item.month === 'September 2026') || { attendance: child.attendance, tahfizh: child.tahfizh, points: child.points, paid: 0, outstanding: 0 };
+  const monthKey = today.slice(0, 7);
+  const monthLabel = new Date(`${today}T00:00:00`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const monthlyAttendance = state.attendance.filter((item) => String(item.studentId) === String(child.id) && String(item.date || '').startsWith(monthKey));
+  const monthlyTahfizh = state.tahfizh.filter((item) => String(item.studentId) === String(child.id) && String(item.date || '').startsWith(monthKey));
+  const monthlyPoints = state.points.filter((item) => String(item.studentId) === String(child.id) && String(item.date || '').startsWith(monthKey));
+  const monthlyPayments = state.payments.filter((item) => String(item.studentId) === String(child.id)
+    && (String(item.submittedAt || item.date || '').startsWith(monthKey) || normalizedScopeValue(item.period) === normalizedScopeValue(monthLabel))
+    && ['verified', 'approved', 'terverifikasi', 'lunas'].includes(normalizedScopeValue(item.status)));
+  const monthlyBills = state.financeBills.filter((item) => String(item.studentId) === String(child.id)
+    && String(item.dueDate || item.date || '').startsWith(monthKey)
+    && !['paid', 'lunas', 'verified'].includes(normalizedScopeValue(item.status)));
+  const monthlySummary = state.monthlySummaries.find((item) => String(item.studentId) === String(child.id) && normalizedScopeValue(item.month) === normalizedScopeValue(monthLabel));
+  const attendancePresent = monthlyAttendance.filter((item) => ['hadir', 'present'].includes(normalizedScopeValue(item.status))).length;
+  const summary = monthlySummary || {
+    month: monthLabel,
+    attendance: monthlyAttendance.length ? Math.round((attendancePresent / monthlyAttendance.length) * 100) : child.attendance,
+    tahfizh: monthlyTahfizh.length ? monthlyTahfizh.reduce((sum, item) => sum + Number(item.juz || 0), 0) : child.tahfizh,
+    points: monthlyPoints.length ? monthlyPoints.reduce((sum, item) => sum + Number(item.value || 0), 0) : child.points,
+    paid: monthlyPayments.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+    outstanding: monthlyBills.reduce((sum, item) => sum + billNet(item), 0)
+  };
   const feed = state.dailyFeed.filter((item) => item.date === today && (!item.studentId || item.studentId === child.id)).slice(0, 5);
   const balance = state.pocketBalances.find((item) => item.studentId === child.id)?.balance || 0;
   const transactions = state.pocketTransactions.filter((item) => item.studentId === child.id && item.date === today).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   const compactSummary = `<div class="grid grid-cols-3 gap-3">${[['Kehadiran', `${summary.attendance}%`], ['Hafalan Baru', `${summary.tahfizh} Juz`], ['Poin', `${summary.points > 0 ? '+' : ''}${summary.points}`]].map(([label, value]) => `<div class="p-3 rounded-lg border border-emerald-100 bg-white shadow-sm"><span class="text-xs text-slate-500">${label}</span><b class="block text-base font-bold text-emerald-900">${value}</b></div>`).join('')}</div><div class="flex flex-wrap gap-2 mt-3 text-xs"><span class="badge badge-success">Sudah dibayar ${money(summary.paid)}</span><span class="badge badge-warning">Sisa tagihan ${money(summary.outstanding)}</span></div>`;
   const pocketTable = `<div style="max-height:350px;overflow-y:auto;overflow-x:auto"><table class="w-full table-auto text-xs" style="white-space:nowrap"><thead><tr><th class="py-2 px-2">Waktu</th><th class="py-2 px-2">Jenis</th><th class="py-2 px-2">Nominal</th><th class="py-2 px-2">Catatan</th></tr></thead><tbody>${transactions.map((item) => `<tr><td class="py-2 px-2">${formatDate(item.date)}</td><td class="py-2 px-2">${item.type}</td><td class="py-2 px-2">${money(item.amount)}</td><td class="py-2 px-2">${escapeHtml(item.note)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Belum ada transaksi hari ini</td></tr>'}</tbody></table></div>`;
   return `<div class="child-hero"><div class="avatar xl">${initials(child.name)}</div><div><span class="eyebrow">PORTAL ORANG TUA / WALI</span><h1>${child.name}</h1><p>${child.className}  -  ${child.room}  -  ${child.program}  -  NIS ${child.nis}</p></div><span class="badge badge-success">Santri Aktif</span></div>
-    <div class="stats-grid">${statCard('Progress Tahfizh', `${child.tahfizh} Juz`, '', 'book-open-check', 'green')}${statCard('Poin Kedisiplinan', `+${child.points}`, '', 'award', 'purple')}${statCard('Kehadiran', `${child.attendance}%`, 'Sangat baik', 'calendar-check', 'blue')}${statCard('Status SPP', child.spp, 'September 2026', 'wallet-cards', 'orange')}</div>
+    <div class="stats-grid">${statCard('Progress Tahfizh', `${child.tahfizh} Juz`, '', 'book-open-check', 'green')}${statCard('Poin Kedisiplinan', `+${child.points}`, '', 'award', 'purple')}${statCard('Kehadiran', `${child.attendance}%`, 'Sangat baik', 'calendar-check', 'blue')}${statCard('Status SPP', child.spp, monthLabel, 'wallet-cards', 'orange')}</div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section(`Pengumuman  -  ${formatDate(today)}`, 'Informasi kegiatan dan perkembangan anak', `<div class="h-full flex flex-col justify-between p-5">${feed.length ? `<div class="activity-list">${feed.map((item) => `<div class="activity"><span class="activity-icon green">${icon(item.type === 'tahfizh' ? 'book-open-check' : 'bell')}</span><div><b>${item.title}</b><p>${item.detail}</p></div><time>${formatDate(item.date)}</time></div>`).join('')}</div>` : '<div class="empty">Belum ada pengumuman hari ini.</div>'}</div>`)}${section('Uang Saku Hari Ini', 'Saldo dan mutasi transaksi anak', `<div class="h-full flex flex-col justify-between p-5"style="max-height: 250px; overflow-y: auto; overflow-x: auto; white-space: nowrap;"><div class="finance-tile"><span>Saldo saat ini</span><b>${money(balance)}</b></div>${pocketTable}</div>`)}</div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section('Ringkasan Bulanan', summary.month || 'September 2026', compactSummary)}${section('Setoran Hafalan Terakhir', 'Riwayat capaian tahfizh', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${tahfizhTable(child.id)}</div><h3 style="margin-top:16px">Presensi Jam Tahfizh</h3><div style="max-height:350px;overflow-y:auto;overflow-x:auto">${attendanceTable('tahfizh')}</div>`)}</div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section('Ringkasan Bulanan', summary.month || monthLabel, compactSummary)}${section('Setoran Hafalan Terakhir', 'Riwayat capaian tahfizh', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${tahfizhTable(child.id)}</div><h3 style="margin-top:16px">Presensi Jam Tahfizh</h3><div style="max-height:350px;overflow-y:auto;overflow-x:auto">${attendanceTable('tahfizh')}</div>`)}</div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">${section('Riwayat Poin', 'Perkembangan karakter', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${pointsTable(child.id)}</div>`)}${compactSection('Tagihan & Kuitansi', 'Rincian pembayaran santri', `<div style="max-height:350px;overflow-y:auto;overflow-x:auto">${renderWaliInvoices(child.nis)}</div>`)}</div>${renderPaymentDestinationDetails()}`;
 }
 function studentView() {
@@ -4043,7 +4165,7 @@ function gateView() {
 
 function permitTable(actions = false) {
   const canApprove = currentRoleIsAdmin() || ['pembina', 'musyrif', 'kepsek'].includes(effectiveRole()) || (effectiveRole() === 'guru' && currentAccount()?.isMusyrif === true);
-  const visiblePermits = ['parent', 'student'].includes(effectiveRole()) ? state.permits.filter((permit) => permit.studentId === currentStudent().id) : state.permits;
+  const visiblePermits = state.permits.filter((permit) => matchesStudentScope(permit, financeStudentScope()));
   const rows = visiblePermits.slice(0, 8).map((permit) => {
     const approved = ['approved', 'terverifikasi'].includes(String(permit.status).toLowerCase());
     const letter = approved ? `<button type="button" class="btn btn-small btn-ghost" data-permit-letter="${permit.id}">Lihat Surat</button>` : '';
@@ -4063,7 +4185,7 @@ function groupedDetails(title, groups, renderItems, personal = false) {
   return `<div class="accordion-groups">${Object.entries(groups).map(([group, items]) => `<details class="accordion-group" ${personal ? 'open' : ''}><summary><span>${escapeHtml(group)}</span><small>${items.length} santri</small></summary><div class="accordion-content">${renderItems(items)}</div></details>`).join('')}</div>`;
 }
 function groupedStudentRecords(records, renderItem) {
-  const visible = ['parent', 'student'].includes(effectiveRole()) ? records.filter((item) => item.studentId === currentStudent().id) : records;
+  const visible = records.filter((item) => matchesStudentScope(item, financeStudentScope()));
   const groups = {};
   visible.filter((record) => isActiveStudent(studentById(record.studentId))).forEach((record) => {
     const student = studentById(record.studentId);
@@ -4079,7 +4201,7 @@ function studentRecordActions(type, id) {
 }
 function pointsTable(id) {
   const canEdit = canManageStudentRecords();
-  const data = state.points.filter((point) => (!id || point.studentId === id) && state.students.some((student) => String(student.id) === String(point.studentId))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const data = state.points.filter((point) => (!id || String(point.studentId) === String(id)) && matchesStudentScope(point, financeStudentScope()) && state.students.some((student) => String(student.id) === String(point.studentId))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   const rows = data.map((point) => `<tr><td>${escapeHtml(studentById(point.studentId).name)}</td><td>${escapeHtml(point.note || '')}</td><td>${point.kind === 'prestasi' ? '<span class="text-green">Prestasi</span>' : '<span class="text-red">Pelanggaran</span>'}</td><td><b>${Number(point.value) > 0 ? '+' : ''}${escapeHtml(point.value)}</b></td><td>${formatDate(point.date)}</td>${canEdit ? studentRecordActions('point', point.id) : ''}</tr>`).join('');
   return table(['Santri', 'Catatan', 'Jenis', 'Poin', 'Tanggal', ...(canEdit ? ['Aksi'] : [])], rows);
 }
@@ -4088,7 +4210,7 @@ function tahfizhTable(id) {
   const isPersonalRole = ['student', 'parent'].includes(effectiveRole());
   const canEdit = canManageStudentRecords();
   const halaqohId = activeHalaqohId();
-  const data = state.tahfizh.filter((item) => state.students.some((student) => String(student.id) === String(item.studentId)) && (isPersonalRole ? item.studentId === scopedStudentId : (!id || item.studentId === id) && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const data = state.tahfizh.filter((item) => state.students.some((student) => String(student.id) === String(item.studentId)) && matchesStudentScope(item, financeStudentScope()) && (isPersonalRole ? String(item.studentId) === String(scopedStudentId) : (!id || String(item.studentId) === String(id)) && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   if (id || isPersonalRole || canEdit) return table(['Santri', 'Juz / Surah', 'Ayat', 'Jenis', 'Status', ...(canEdit ? ['Aksi'] : [])], data.map((item) => `<tr><td>${escapeHtml(studentById(item.studentId).name)}</td><td><b>Juz ${escapeHtml(item.juz)}</b> - ${escapeHtml(item.surah)}</td><td>${escapeHtml(item.ayat || '-')}</td><td>${escapeHtml(item.type || '-')}</td><td>${statusBadge(item.status)}</td>${canEdit ? studentRecordActions('tahfizh', item.id) : ''}</tr>`).join(''));
   return groupedStudentRecords(data, (item) => `<div class="accordion-record"><b>${escapeHtml(studentById(item.studentId).name)}</b><span>Juz ${escapeHtml(item.juz)} - ${escapeHtml(item.surah)} - ${escapeHtml(item.ayat || '-')}</span>${statusBadge(item.status)}</div>`);
 }
@@ -4160,17 +4282,17 @@ function attendanceTable(type = 'kelas') {
   const academicFilter = ['guru', 'guru_tahfizh'].includes(effectiveRole())
     ? { subject: teacherSubjects().includes(state.teacherAcademicFilter?.subject) ? state.teacherAcademicFilter.subject : teacherSubjects()[0], className: state.teacherAcademicFilter?.className || '' }
     : {};
-  const data = state.attendance.filter((item) => item.type === type && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId) && (type !== 'kelas' || (!academicFilter.subject || item.subject === academicFilter.subject) && (!academicFilter.className || (item.className || studentById(item.studentId).className) === academicFilter.className))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-  if (['parent', 'student'].includes(effectiveRole())) return table(['Santri', 'Tanggal', 'Status', 'Pencatat'], data.filter((item) => item.studentId === currentStudent().id).map((item) => `<tr><td>${studentById(item.studentId).name}</td><td>${formatDate(item.date)}</td><td>${statusBadge(item.status)}</td><td>${item.by || 'Pembina'}</td></tr>`).join(''));
+  const data = state.attendance.filter((item) => item.type === type && matchesStudentScope(item, financeStudentScope()) && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId) && (type !== 'kelas' || (!academicFilter.subject || item.subject === academicFilter.subject) && (!academicFilter.className || (item.className || studentById(item.studentId).className) === academicFilter.className))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  if (['parent', 'student'].includes(effectiveRole())) return table(['Santri', 'Tanggal', 'Status', 'Pencatat'], data.map((item) => `<tr><td>${studentById(item.studentId).name}</td><td>${formatDate(item.date)}</td><td>${statusBadge(item.status)}</td><td>${item.by || 'Pembina'}</td></tr>`).join(''));
   return groupedStudentRecords(data, (item) => `<div class="accordion-record"><b>${escapeHtml(studentById(item.studentId).name)}</b><span>${formatDate(item.date)} - ${escapeHtml(item.status || '-')}</span><small>${escapeHtml(item.by || 'Pembina')}</small></div>`);
 }
 function pklTable() {
   return table(['Santri', 'Jam Masuk', 'Jam Pulang', 'Status Absensi', 'Deskripsi Kegiatan', 'Foto'], state.pklReports.map((report) => `<tr><td>${escapeHtml(studentById(report.studentId).name)}</td><td>${escapeHtml(report.checkIn || '-')}</td><td>${escapeHtml(report.checkOut || '-')}</td><td>${escapeHtml(report.status || '-')}</td><td>${escapeHtml(report.lastReport || report.description || '-')}</td><td>${report.photoUrl ? `<a href="${escapeHtml(report.photoUrl)}" target="_blank" rel="noopener">Lihat Foto</a>` : '-'}</td></tr>`).join(''), 'Belum ada laporan PKL');
 }
 function billingTable(limit, studentId) {
-  const bills = state.financeBills.filter((bill) => (!studentId || bill.studentId === studentId) && isActiveStudent(studentById(bill.studentId))).slice().sort((a, b) => new Date(b.dueDate || b.date || 0) - new Date(a.dueDate || a.date || 0)).slice(0, limit || state.financeBills.length);
+  const bills = state.financeBills.filter((bill) => matchesStudentScope(bill, studentId) && isActiveStudent(studentById(bill.studentId))).slice().sort((a, b) => new Date(b.dueDate || b.date || 0) - new Date(a.dueDate || a.date || 0)).slice(0, limit || state.financeBills.length);
   const renderBill = (bill) => `<div class="accordion-record"><b>${escapeHtml(studentById(bill.studentId).name)}</b><span>${escapeHtml(bill.label)}  -  ${money(billNet(bill))}</span><span>${statusBadge(bill.status)} <button type="button" class="btn btn-small btn-ghost" data-document="invoice" data-invoice="${escapeHtml(bill.id)}">Lihat</button></span></div>`;
-  if (studentId || ['parent', 'student'].includes(effectiveRole())) return `<div style="max-height:350px;overflow-y:auto;overflow-x:auto"><div class="accordion-content">${bills.map(renderBill).join('') || '<div class="empty">Belum ada tagihan</div>'}</div></div>`;
+  if ((studentId !== undefined && studentId !== null) || ['parent', 'student'].includes(effectiveRole())) return `<div style="max-height:350px;overflow-y:auto;overflow-x:auto"><div class="accordion-content">${bills.map(renderBill).join('') || '<div class="empty">Belum ada tagihan</div>'}</div></div>`;
   return groupedActiveStudentRecords(bills, renderBill);
 }
 function selfPasswordForm() {
@@ -4211,13 +4333,13 @@ function paymentVerificationPanel() {
   return `<section class="panel payment-verification-panel"><div class="panel-head"><div><h2>Pusat Verifikasi Bukti Transfer</h2><p>Terakhir diperbarui ${escapeHtml(formatLocalLongDate())}. Bukti dikelompokkan berdasarkan kelas dan nama santri.</p></div><span class="badge badge-warning">${pending.filter((item) => paymentVerificationStatus(item) !== 'Terverifikasi').length} menunggu</span></div><div class="grid-2"><div><h3 class="eyebrow">SPP / Non-SPP</h3>${renderGroup('SPP / Non-SPP')}</div><div><h3 class="eyebrow">UANG SAKU</h3>${renderGroup('Uang Saku')}</div></div></section>`;
 }
 function paymentTable(actions = false, studentId) {
-  const data = state.payments.filter((payment) => (!studentId || payment.studentId === studentId) && isActiveStudent(studentById(payment.studentId))).slice().sort((a, b) => new Date(b.submittedAt || b.date || 0) - new Date(a.submittedAt || a.date || 0));
+  const data = state.payments.filter((payment) => matchesStudentScope(payment, studentId) && isActiveStudent(studentById(payment.studentId))).slice().sort((a, b) => new Date(b.submittedAt || b.date || 0) - new Date(a.submittedAt || a.date || 0));
   const renderPayment = (payment) => `<div class="accordion-record finance-record"><b class="finance-record-student">${escapeHtml(studentById(payment.studentId).name)}</b><span class="finance-record-detail">${escapeHtml(categoryLabel(payment.category))} - ${escapeHtml(payment.period || '-')} - ${money(payment.amount)}</span><span class="finance-record-status">${statusBadge(payment.status)} ${actions && ['Pending', 'pending_verification'].includes(payment.status) ? `<button class="btn btn-small btn-primary" data-payment="${payment.id}" data-payment-status="Verified">Verifikasi</button>` : payment.invoiceId ? `<button class="btn btn-small btn-ghost" data-document="invoice" data-invoice="${payment.invoiceId}">Invoice</button>` : ''}</span></div>`;
   if (!studentId && !['parent', 'student'].includes(effectiveRole())) return groupedStudentRecords(data, renderPayment);
   return `<div class="finance-record-list" style="max-height:350px;overflow-y:auto">${data.map(renderPayment).join('') || '<div class="empty">Belum ada pembayaran</div>'}</div>`;
 }
 function invoiceTable(studentId) {
-  const invoices = state.invoices.filter((invoice) => (!studentId || invoice.studentId === studentId) && isActiveStudent(studentById(invoice.studentId))).slice().sort((a, b) => new Date(b.issuedAt || b.date || 0) - new Date(a.issuedAt || a.date || 0));
+  const invoices = state.invoices.filter((invoice) => matchesStudentScope(invoice, studentId) && isActiveStudent(studentById(invoice.studentId))).slice().sort((a, b) => new Date(b.issuedAt || b.date || 0) - new Date(a.issuedAt || a.date || 0));
   const renderInvoiceRecord = (invoice) => {
     const receipt = state.receipts.find((item) => item.invoiceId === invoice.id);
     return `<div class="accordion-record finance-record"><b class="finance-record-student">${escapeHtml(studentById(invoice.studentId).name)}</b><span class="finance-record-detail">${escapeHtml(invoice.number)} - ${formatDate(invoice.issuedAt || invoice.date)} - ${money(invoice.total)}</span><span class="finance-record-status">${statusBadge(invoice.status)} <button class="btn btn-small btn-ghost" data-document="invoice" data-invoice="${invoice.id}">Lihat</button>${receipt ? `<button class="btn btn-small btn-ghost" data-document="receipt" data-receipt="${receipt.id}">Kuitansi</button>` : ''}</span></div>`;
@@ -4274,17 +4396,19 @@ function invoiceDetails(invoice, receipt) {
   };
 }
 function financeView() {
-  const studentId = effectiveRole() === 'parent' || effectiveRole() === 'student' ? currentStudent().id : undefined;
-  const visibleBills = state.financeBills.filter((bill) => !studentId || bill.studentId === studentId);
+  const studentScope = financeStudentScope();
+  const visibleBills = state.financeBills.filter((bill) => matchesStudentScope(bill, studentScope));
+  const visibleScholarships = state.scholarships.filter((item) => item.active && matchesStudentScope(item, studentScope));
+  const visibleInvoices = state.invoices.filter((invoice) => matchesStudentScope(invoice, studentScope));
   const outstanding = visibleBills.filter((bill) => bill.status !== 'Paid').reduce((sum, bill) => sum + billNet(bill), 0);
   const resetAction = currentRoleIsAdmin() ? `<button type="button" class="btn btn-danger" data-action="reset-data">${icon('trash-2')} Reset Data Selektif (Modular)</button>` : '';
   return `${welcome('KEUANGAN YAYASAN', 'Billing, Beasiswa & Invoice', 'Komponen SPP dan non-SPP dikelola transparan dengan nominal fleksibel.', currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-billing">${icon('plus')} Tambah Komponen</button>` : '')}
     ${renderPaymentDestinationDetails({ adminPanel: currentRoleIsAdmin() })}
     ${currentRoleIsAdmin() ? section('Reset Data Selektif (Modular)', 'Pilih modul yang perlu dikosongkan. Profil lembaga, rekening bank, dan konfigurasi umum tidak akan dihapus.', `<div class="notice"><b>Reset selektif:</b> hanya node modul terpilih yang dihapus dari Firebase Realtime Database.</div>`, resetAction) : ''}
-    <div class="stats-grid">${statCard('Tagihan Aktif', state.financeBills.filter((bill) => bill.status !== 'Paid').length, 'Perlu ditindaklanjuti', 'receipt', 'orange')}${statCard('Piutang Bersih', money(outstanding), 'Setelah beasiswa & diskon', 'wallet-cards', 'purple')}${statCard('Beasiswa Aktif', state.scholarships.filter((item) => item.active).length, 'Program bantuan', 'heart-handshake', 'green')}${statCard('Invoice Terbit', state.invoices.length, 'Dapat dicetak', 'file-check-2', 'blue')}</div>
-    ${section('Daftar Tagihan', 'Rincian nominal yang harus dibayar', billingTable(undefined, studentId))}
-    ${section('Pembayaran & Invoice', 'Persetujuan otomatis menerbitkan invoice dan kuitansi', paymentTable(currentRoleIsAdmin(), studentId))}
-    ${section('Invoice Digital', 'Admin dan wali dapat melihat, mencetak, atau mengunduh', invoiceTable(studentId))}`;
+    <div class="stats-grid">${statCard('Tagihan Aktif', visibleBills.filter((bill) => bill.status !== 'Paid').length, 'Perlu ditindaklanjuti', 'receipt', 'orange')}${statCard('Piutang Bersih', money(outstanding), 'Setelah beasiswa & diskon', 'wallet-cards', 'purple')}${statCard('Beasiswa Aktif', visibleScholarships.length, 'Dalam cakupan akses', 'heart-handshake', 'green')}${statCard('Invoice Terbit', visibleInvoices.length, 'Dapat dicetak', 'file-check-2', 'blue')}</div>
+    ${section('Daftar Tagihan', 'Rincian nominal yang harus dibayar', billingTable(undefined, studentScope))}
+    ${section('Pembayaran & Invoice', 'Persetujuan otomatis menerbitkan invoice dan kuitansi', paymentTable(currentRoleIsAdmin(), studentScope))}
+    ${section('Invoice Digital', 'Admin dan wali dapat melihat, mencetak, atau mengunduh', invoiceTable(studentScope))}`;
 }
 function paymentAccount(account, fallback) {
   return { ...fallback, ...(account || {}) };
@@ -4306,7 +4430,8 @@ function gateEventsTable() {
   return table(['Waktu', 'Aksi', 'Santri', 'Petugas'], rows, 'Belum ada aktivitas realtime');
 }
 function activityTimeline() {
-  const items = state.schedules.length ? state.schedules : state.activities.map((item) => ({ time: item.time, title: item.title, type: 'Kegiatan' }));
+  const schedules = routineSchedulesForCurrentRole();
+  const items = schedules.length ? schedules : state.activities.map((item) => ({ time: item.time, title: item.title, type: 'Kegiatan' }));
   return items.length
     ? `<div class="timeline">${items.map((item) => `<div class="timeline-item"><div class="time">${escapeHtml(item.time || '')}</div><div class="timeline-dot">${icon(item.type === 'Tahfizh' ? 'book-open' : 'calendar-days', 16)}</div><div><b>${escapeHtml(item.title || 'Kegiatan')}</b><p>${escapeHtml(item.room || 'Agenda BoardingPro STKIS')}  -  ${escapeHtml(item.teacher || '')}</p></div></div>`).join('')}</div>`
     : '<div class="empty-state"><div class="empty-state-icon">' + icon('calendar-x', 28) + '</div><p>Belum ada jadwal atau aktivitas.</p></div>';
@@ -4579,17 +4704,22 @@ function majorsTable() {
 function pocketMoneyView() {
   const role = effectiveRole();
   const isParent = role === 'parent';
-  const managedStudents = isParent ? [currentStudent()] : state.students;
-  const student = currentStudent();
-  const balanceEntry = state.pocketBalances.find((item) => item.studentId === student.id);
-  const balance = balanceEntry ? Number(balanceEntry.balance || 0) : 0;
-  const transactions = state.pocketTransactions.filter((item) => isParent ? item.studentId === student.id : true).slice().reverse();
-  const topUpForm = isParent ? `<form id="pocket-topup-form" class="form-grid"><label>Nominal Top Up (Rp)<input name="amount" type="number" min="1000" step="1000" required></label><label>Metode Pembayaran<select name="method"><option>Transfer BSI</option><option>QRIS</option><option>Tunai</option></select></label><label class="full">Catatan<input name="note" placeholder="Contoh: uang saku pekan pertama"></label><button type="submit" class="btn btn-primary full">Ajukan Top Up</button></form>` : '';
-  const expenseForm = (currentRoleIsAdmin() || ['pembina', 'musyrif'].includes(role)) ? `<form id="pocket-expense-form" class="form-grid"><label>Santri<select name="studentId">${managedStudents.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}  -  ${escapeHtml(item.nis)}</option>`).join('')}</select></label><label>Nominal Pengeluaran (Rp)<input name="amount" type="number" min="1" step="1000" required></label><label class="full">Keperluan<input name="note" placeholder="Contoh: kantin, koperasi"></label><button type="submit" class="btn btn-primary full">Catat Pengeluaran</button></form>` : '';
+  const studentScope = financeStudentScope();
+  const scopedIds = studentScope === null ? null : new Set(studentScope);
+  const managedStudents = scopedIds ? state.students.filter((item) => scopedIds.has(String(item.id))) : state.students;
+  const student = isParent ? findCurrentStudent() : null;
+  const balance = student
+    ? Number(state.pocketBalances.find((item) => String(item.studentId) === String(student.id))?.balance || 0)
+    : state.pocketBalances.filter((item) => matchesStudentScope(item, studentScope)).reduce((sum, item) => sum + Number(item.balance || 0), 0);
+  const transactions = state.pocketTransactions.filter((item) => matchesStudentScope(item, studentScope)).slice().reverse();
+  const topUpForm = isParent && student ? `<form id="pocket-topup-form" class="form-grid"><label>Nominal Top Up (Rp)<input name="amount" type="number" min="1000" step="1000" required></label><label>Metode Pembayaran<select name="method"><option>Transfer BSI</option><option>QRIS</option><option>Tunai</option></select></label><label class="full">Catatan<input name="note" placeholder="Contoh: uang saku pekan pertama"></label><button type="submit" class="btn btn-primary full">Ajukan Top Up</button></form>` : '';
+  const canRecordExpense = (currentRoleIsAdmin() || ['pembina', 'musyrif'].includes(role)) && managedStudents.length > 0;
+  const expenseForm = canRecordExpense ? `<form id="pocket-expense-form" class="form-grid"><label>Santri<select name="studentId">${managedStudents.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}  -  ${escapeHtml(item.nis)}</option>`).join('')}</select></label><label>Nominal Pengeluaran (Rp)<input name="amount" type="number" min="1" step="1000" required></label><label class="full">Keperluan<input name="note" placeholder="Contoh: kantin, koperasi"></label><button type="submit" class="btn btn-primary full">Catat Pengeluaran</button></form>` : '';
   const pending = state.pocketTransactions.filter((item) => item.type === 'Top Up' && item.status === 'Pending');
   const approval = currentRoleIsAdmin() ? table(['Santri', 'Nominal', 'Tanggal', 'Catatan', 'Aksi'], pending.map((item) => `<tr><td>${escapeHtml(studentById(item.studentId).name)}</td><td>${money(item.amount)}</td><td>${formatDate(item.date)}</td><td>${escapeHtml(item.note || '-')}</td><td><button type="button" class="btn btn-small btn-primary" data-pocket-approve="${item.id}">Verifikasi</button></td></tr>`).join(''), 'Tidak ada top up pending') : '';
   const roomSummary = role === 'pembina' || role === 'musyrif' ? pocketRoomSummary(managedStudents) : '';
-  return `${welcome('UANG SAKU SANTRI', 'Saldo dan transaksi', 'Top up wali diverifikasi admin, pengeluaran langsung mengurangi saldo.', '')}<div class="finance-grid"><div class="finance-tile"><span>Saldo ${escapeHtml(student.name)}</span><b>${money(balance)}</b></div><div class="finance-tile"><span>Total top up</span><b>${money(transactions.filter((item) => item.type === 'Top Up' && item.status !== 'Pending').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div><div class="finance-tile"><span>Total pengeluaran</span><b>${money(transactions.filter((item) => item.type === 'Pengeluaran').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div></div><div class="grid-2">${isParent ? section('Ajukan Top Up', 'Status awal menunggu verifikasi admin', topUpForm) : ''}${expenseForm ? section('Catat Pengeluaran', 'Hanya admin atau pembina', expenseForm) : ''}</div>${approval ? section('Verifikasi Top Up', 'Persetujuan admin', approval) : ''}${roomSummary}${section('Riwayat Uang Saku', 'Mutasi saldo terbaru', table(['Tanggal', 'Jenis', 'Nominal', 'Status', 'Catatan'], transactions.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${escapeHtml(item.type)}</td><td>${money(item.amount)}</td><td>${item.status ? statusBadge(item.status) : statusBadge('Verified')}</td><td>${escapeHtml(item.note || '-')}</td></tr>`).join(''), 'Belum ada transaksi'))}`;
+  const balanceLabel = student ? `Saldo ${escapeHtml(student.name)}` : currentRoleIsAdmin() ? 'Total saldo seluruh santri' : 'Total saldo santri binaan';
+  return `${welcome('UANG SAKU SANTRI', 'Saldo dan transaksi', 'Top up wali diverifikasi admin, pengeluaran langsung mengurangi saldo.', '')}<div class="finance-grid"><div class="finance-tile"><span>${balanceLabel}</span><b>${money(balance)}</b></div><div class="finance-tile"><span>Total top up</span><b>${money(transactions.filter((item) => item.type === 'Top Up' && item.status !== 'Pending').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div><div class="finance-tile"><span>Total pengeluaran</span><b>${money(transactions.filter((item) => item.type === 'Pengeluaran').reduce((sum, item) => sum + Number(item.amount || 0), 0))}</b></div></div><div class="grid-2">${isParent ? section('Ajukan Top Up', 'Status awal menunggu verifikasi admin', topUpForm) : ''}${expenseForm ? section('Catat Pengeluaran', 'Hanya admin atau pembina', expenseForm) : ''}</div>${approval ? section('Verifikasi Top Up', 'Persetujuan admin', approval) : ''}${roomSummary}${section('Riwayat Uang Saku', 'Mutasi saldo terbaru', table(['Tanggal', 'Santri', 'Jenis', 'Nominal', 'Status', 'Catatan'], transactions.map((item) => `<tr><td>${formatDate(item.date)}</td><td>${escapeHtml(studentById(item.studentId).name)}</td><td>${escapeHtml(item.type)}</td><td>${money(item.amount)}</td><td>${item.status ? statusBadge(item.status) : statusBadge('Verified')}</td><td>${escapeHtml(item.note || '-')}</td></tr>`).join(''), 'Belum ada transaksi'))}`;
 }
 function teachersTable() {
   return table(['Nama Staff', 'Posisi', 'Mapel / Unit', 'Kontak (Opsional)', 'Status', 'Aksi'], state.teachers.map((teacher) => `<tr><td><b>${escapeHtml(teacher.name)}</b></td><td>${escapeHtml(teacher.position || teacher.role || '-')}</td><td>${escapeHtml(teacher.subject || '-')}</td><td>${escapeHtml(teacher.phone || '-')}</td><td>${statusBadge(teacher.status || 'Aktif')}</td><td><button class="icon-btn" data-edit-teacher="${teacher.id}">${icon('pencil', 15)}</button></td></tr>`).join(''), 'Belum ada data staff/karyawan');
@@ -5429,9 +5559,42 @@ function bindActions() {
     payment.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(payment); const student = currentStudent(); const itemId = `PAY-${Date.now()}`; const submittedAt = new Date().toISOString(); const parent = currentAccount(); const item = { id: itemId, studentId: student.id, category: form.get('category'), period: form.get('period'), amount: Number(form.get('amount')), method: form.get('method'), status: 'pending_verification', submittedAt, proof: form.get('proof'), receiptImage: form.get('receiptImage')?.name || null, receiptFileName: form.get('receiptImage')?.name || null, receiptImageData: payment.dataset.receiptData || null, scanStatus: payment.dataset.receiptData ? 'Pemindaian berhasil' : 'Belum dipindai', scannedAt: payment.dataset.receiptData ? new Date().toISOString() : null, applicantName: parent?.name || parent?.nama || 'Orang Tua / Wali', applicantQrPayload: { documentId: itemId, documentType: 'invoice', role: 'parent' } }; state.payments.unshift(item); const notice = { id: `notif-payment-${item.id}`, title: `Pembayaran baru A.N ${student.name}`, description: 'Memerlukan konfirmasi verifikasi.', category: 'Keuangan', timestamp: 'Baru', targetView: 'payments', createdAt: new Date().toISOString(), read: false }; ['maahad', 'admin'].forEach((role) => { if (roleNotifications[role]) roleNotifications[role].unshift(clone(notice)); }); persistNotificationState(); persist(); alert('Konfirmasi pembayaran berhasil dikirim dan masuk ke antrean verifikasi.'); render(); });
   }
   const topup = $('#pocket-topup-form');
-  if (topup) topup.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(topup); state.pocketTransactions.push({ id: `TRX-${Date.now()}`, studentId: currentStudent().id, date: today, type: 'Top Up', amount: Number(form.get('amount')), note: form.get('note') || `Top up ${form.get('method')}`, method: form.get('method'), status: 'Pending' }); persist(); alert('Pengajuan top up berhasil dikirim dan menunggu verifikasi admin.'); render(); });
+  if (topup) topup.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const student = findCurrentStudent();
+    if (effectiveRole() !== 'parent' || !student) {
+      showToast('Akun wali belum terhubung ke data santri.', 'error');
+      return;
+    }
+    const form = new FormData(topup);
+    state.pocketTransactions.push({ id: `TRX-${Date.now()}`, studentId: student.id, date: today, type: 'Top Up', amount: Number(form.get('amount')), note: form.get('note') || `Top up ${form.get('method')}`, method: form.get('method'), status: 'Pending' });
+    persist();
+    alert('Pengajuan top up berhasil dikirim dan menunggu verifikasi admin.');
+    render();
+  });
   const expense = $('#pocket-expense-form');
-  if (expense) expense.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(expense); const amount = Number(form.get('amount')); const balance = state.pocketBalances.find((item) => item.studentId === form.get('studentId')); if (!balance || Number(balance.balance || 0) < amount) { alert('Saldo uang saku tidak mencukupi.'); return; } balance.balance -= amount; state.pocketTransactions.push({ id: `TRX-${Date.now()}`, studentId: form.get('studentId'), date: today, type: 'Pengeluaran', amount, note: form.get('note'), status: 'Verified', by: roles[state.role].label }); persist(); alert('Pengeluaran dicatat dan saldo diperbarui.'); render(); });
+  if (expense) expense.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = new FormData(expense);
+    const studentId = String(form.get('studentId') || '');
+    const canManageStudentPocket = currentRoleIsAdmin()
+      || (['pembina', 'musyrif'].includes(effectiveRole()) && studentsForCurrentRole().some((student) => String(student.id) === studentId));
+    if (!canManageStudentPocket) {
+      showToast('Akses uang saku santri tersebut ditolak.', 'error');
+      return;
+    }
+    const amount = Number(form.get('amount'));
+    const balance = state.pocketBalances.find((item) => String(item.studentId) === studentId);
+    if (!balance || Number(balance.balance || 0) < amount) {
+      alert('Saldo uang saku tidak mencukupi.');
+      return;
+    }
+    balance.balance -= amount;
+    state.pocketTransactions.push({ id: `TRX-${Date.now()}`, studentId, date: today, type: 'Pengeluaran', amount, note: form.get('note'), status: 'Verified', by: roles[effectiveRole()]?.label || roles.mahad.label });
+    persist();
+    alert('Pengeluaran dicatat dan saldo diperbarui.');
+    render();
+  });
   const teacherAttendance = $('#teacher-attendance-form');
   if (teacherAttendance) teacherAttendance.addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(teacherAttendance); state.teacherAttendance.unshift({ id: `TA-${Date.now()}`, teacher: state.displayName || roles.guru.demoName, date: today, status: form.get('status'), checkIn: form.get('checkIn') || null, checkOut: form.get('checkOut') || null }); persist(); alert('Presensi pribadi tersimpan.'); render(); });
   const adminPassword = $('#admin-password-form');
