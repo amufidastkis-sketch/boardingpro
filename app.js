@@ -227,10 +227,19 @@ function normalizeIdList(ids) {
   return ids instanceof Set ? [...ids] : [];
 }
 
+function studentIdForAccount(account) {
+  if (!account || !['student', 'santri'].includes(canonicalRole(String(account.role || '').toLowerCase()))) return '';
+  if (account.studentId) return String(account.studentId);
+  const username = String(account.username || '').trim().toLowerCase();
+  return String(state.students.find((student) =>
+    String(student.id) === String(account.id) || String(student.nis || '').trim().toLowerCase() === username
+  )?.id || '');
+}
+
 function applyStudentCascade(studentIds) {
   const ids = new Set(normalizeIdList(studentIds).map(String));
+  if (!ids.size) return 0;
   const students = state.students.filter((student) => ids.has(String(student.id)));
-  if (!students.length) return 0;
   const nisValues = new Set(students.map((student) => String(student.nis || '').trim().toLowerCase()).filter(Boolean));
   const parentRoles = new Set(['parent', 'wali']);
   stateCollectionKeys.forEach((key) => {
@@ -270,7 +279,6 @@ async function deleteStudentsCascade(studentIds) {
   if (!currentRoleIsAdmin()) throw new Error('Hanya Admin atau Ma\'had yang dapat menghapus data santri.');
   const ids = new Set(normalizeIdList(studentIds).map(String));
   if (!ids.size) return 0;
-  if (!state.students.some((student) => ids.has(String(student.id)))) return 0;
   const previous = Object.fromEntries([...stateCollectionKeys, 'users', 'currentUser', 'studentId'].map((key) => [key, Array.isArray(state[key]) || (state[key] && typeof state[key] === 'object') ? clone(state[key]) : state[key]]));
   try {
     const count = applyStudentCascade(ids);
@@ -298,9 +306,7 @@ async function deleteAccountsBulk(accountIds) {
     return !(account.role === 'mahad' && !isMasterAdminSession());
   });
   if (!selectedAccounts.length) return { accounts: 0, students: 0 };
-  const studentIds = selectedAccounts
-    .filter((account) => ['student', 'santri'].includes(canonicalRole(String(account.role || '').toLowerCase())) && account.studentId)
-    .map((account) => String(account.studentId));
+  const studentIds = selectedAccounts.map(studentIdForAccount).filter(Boolean);
   const previous = Object.fromEntries([...stateCollectionKeys, 'users', 'currentUser', 'studentId'].map((key) => [key, Array.isArray(state[key]) || (state[key] && typeof state[key] === 'object') ? clone(state[key]) : state[key]]));
   try {
     const studentCount = applyStudentCascade(studentIds);
@@ -338,6 +344,35 @@ function accountDeletionErrorMessage(error) {
   ];
   const message = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim())?.trim();
   return message || 'Gagal menghapus akun, silakan coba lagi.';
+}
+
+async function deleteStudentRecord(collectionKey, recordId) {
+  if (!canManageStudentRecords()) return;
+  const collections = { points: 'Poin Kedisiplinan', grades: 'Nilai Pelajaran', tahfizh: 'Setoran Tahfizh' };
+  if (!Object.prototype.hasOwnProperty.call(collections, collectionKey)) throw new Error('Jenis data tidak dikenali.');
+  const record = state[collectionKey].find((item) => String(item.id) === String(recordId));
+  if (!record) return;
+  openConfirmModal(`Hapus ${collections[collectionKey]}`, `Hapus data ${collections[collectionKey]} untuk ${studentById(record.studentId).name}? Tindakan ini tidak dapat dibatalkan.`, async () => {
+    if (!canManageStudentRecords()) return;
+    const previousRecords = state[collectionKey];
+    const student = collectionKey === 'points' ? state.students.find((item) => String(item.id) === String(record.studentId)) : null;
+    const previousPoints = student ? Number(student.points || 0) : null;
+    state[collectionKey] = state[collectionKey].filter((item) => item !== record);
+    if (student) student.points = previousPoints - Number(record.value || 0);
+    try {
+      const saved = await persist();
+      if (saved === false) throw new Error('Firebase tidak mengonfirmasi penghapusan data.');
+      render();
+      showToast(`${collections[collectionKey]} berhasil dihapus.`, 'success');
+    } catch (error) {
+      state[collectionKey] = previousRecords;
+      if (student) student.points = previousPoints;
+      normalizeStateCollections();
+      window.appData.state = state;
+      console.error(`[BoardingPro] Gagal menghapus ${collections[collectionKey]}:`, error);
+      showToast(accountDeletionErrorMessage(error), 'error');
+    }
+  });
 }
 
 normalizeStateCollections();
@@ -998,6 +1033,7 @@ const effectiveRole = () => {
   return canonicalRole(state.activeRoleView || currentUser?.role || state.role);
 };
 const currentRoleIsAdmin = () => ['mahad', 'admin'].includes(effectiveRole());
+const canManageStudentRecords = () => ['pembina', 'musyrif', 'kepsek', 'mahad', 'admin'].includes(effectiveRole());
 const checkPermission = () => currentRoleIsAdmin();
 const hasTahfizhAccess = () => currentRoleIsAdmin() || ['pembina', 'musyrif'].includes(effectiveRole()) || (effectiveRole() === 'guru' && (currentAccount()?.isTahfizhTeacher === true || accountHasAssignedRole(currentAccount(), 'tahfizh')));
 const canManageAnnouncements = () => ['mahad', 'kepsek'].includes(effectiveRole());
@@ -4037,17 +4073,23 @@ function groupedStudentRecords(records, renderItem) {
   });
   return groupedActiveStudentRecords(visible, renderItem, 'Belum ada rekap nilai untuk kelas ini.');
 }
+function studentRecordActions(type, id) {
+  if (!canManageStudentRecords()) return '';
+  return `<td class="actions-inline"><button type="button" class="btn btn-small btn-ghost" data-edit-${type}="${escapeHtml(id)}">Edit</button><button type="button" class="btn btn-small btn-danger" data-delete-${type}="${escapeHtml(id)}">Hapus</button></td>`;
+}
 function pointsTable(id) {
-  const data = state.points.filter((point) => !id || point.studentId === id).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-  return table(['Santri', 'Catatan', 'Jenis', 'Poin', 'Tanggal'], data.map((point) => `<tr><td>${studentById(point.studentId).name}</td><td>${point.note}</td><td>${point.kind === 'prestasi' ? '<span class="text-green">Prestasi</span>' : '<span class="text-red">Pelanggaran</span>'}</td><td><b>${point.value > 0 ? '+' : ''}${point.value}</b></td><td>${formatDate(point.date)}</td></tr>`).join(''));
+  const canEdit = canManageStudentRecords();
+  const data = state.points.filter((point) => (!id || point.studentId === id) && state.students.some((student) => String(student.id) === String(point.studentId))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  const rows = data.map((point) => `<tr><td>${escapeHtml(studentById(point.studentId).name)}</td><td>${escapeHtml(point.note || '')}</td><td>${point.kind === 'prestasi' ? '<span class="text-green">Prestasi</span>' : '<span class="text-red">Pelanggaran</span>'}</td><td><b>${Number(point.value) > 0 ? '+' : ''}${escapeHtml(point.value)}</b></td><td>${formatDate(point.date)}</td>${canEdit ? studentRecordActions('point', point.id) : ''}</tr>`).join('');
+  return table(['Santri', 'Catatan', 'Jenis', 'Poin', 'Tanggal', ...(canEdit ? ['Aksi'] : [])], rows);
 }
 function tahfizhTable(id) {
   const scopedStudentId = id || state.currentStudentId || state.studentId || currentStudent()?.id;
   const isPersonalRole = ['student', 'parent'].includes(effectiveRole());
+  const canEdit = canManageStudentRecords();
   const halaqohId = activeHalaqohId();
-  const data = state.tahfizh.filter((item) => (isPersonalRole ? item.studentId === scopedStudentId : (!id || item.studentId === id) && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-  const actionHeader = hasTahfizhAccess() && !id ? 'Aksi' : '';
-  if (id || isPersonalRole) return table(['Santri', 'Juz / Surah', 'Ayat', 'Jenis', 'Status', ...(actionHeader ? [actionHeader] : [])], data.map((item) => `<tr><td>${escapeHtml(studentById(item.studentId).name)}</td><td><b>Juz ${item.juz}</b> - ${escapeHtml(item.surah)}</td><td>${escapeHtml(item.ayat || '-')}</td><td>${escapeHtml(item.type || '-')}</td><td>${statusBadge(item.status)}</td>${actionHeader ? `<td><button type="button" class="icon-btn" data-edit-tahfizh="${item.id}" title="Edit setoran">${icon('pencil', 15)}</button></td>` : ''}</tr>`).join(''));
+  const data = state.tahfizh.filter((item) => state.students.some((student) => String(student.id) === String(item.studentId)) && (isPersonalRole ? item.studentId === scopedStudentId : (!id || item.studentId === id) && (!halaqohId || item.halaqohId === halaqohId || studentById(item.studentId).halaqohId === halaqohId))).slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  if (id || isPersonalRole || canEdit) return table(['Santri', 'Juz / Surah', 'Ayat', 'Jenis', 'Status', ...(canEdit ? ['Aksi'] : [])], data.map((item) => `<tr><td>${escapeHtml(studentById(item.studentId).name)}</td><td><b>Juz ${escapeHtml(item.juz)}</b> - ${escapeHtml(item.surah)}</td><td>${escapeHtml(item.ayat || '-')}</td><td>${escapeHtml(item.type || '-')}</td><td>${statusBadge(item.status)}</td>${canEdit ? studentRecordActions('tahfizh', item.id) : ''}</tr>`).join(''));
   return groupedStudentRecords(data, (item) => `<div class="accordion-record"><b>${escapeHtml(studentById(item.studentId).name)}</b><span>Juz ${escapeHtml(item.juz)} - ${escapeHtml(item.surah)} - ${escapeHtml(item.ayat || '-')}</span>${statusBadge(item.status)}</div>`);
 }
 function tahfizhMonthlySummary() {
@@ -4058,12 +4100,13 @@ function tahfizhMonthlySummary() {
   return `<div class="stats-grid">${statCard('Bulan Berjalan', new Date(`${today}T00:00:00`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }), 'Rekap aktif', 'calendar', 'green')}${statCard('Total Juz', totalJuz, 'Akumulasi setoran', 'book-open', 'blue')}${statCard('Total Halaman', totalPages, 'Jika tercatat', 'file-text', 'orange')}</div>`;
 }
 function gradeTable(studentId) {
+  const canEdit = canManageStudentRecords();
   const selectedSubject = ['guru', 'guru_tahfizh'].includes(effectiveRole())
     ? (teacherSubjects().includes(state.teacherAcademicFilter?.subject) ? state.teacherAcademicFilter.subject : teacherSubjects()[0])
     : state.teacherAcademicFilter?.subject;
   const selectedClass = state.teacherAcademicFilter?.className;
-  const records = state.grades.filter((grade) => (!studentId || grade.studentId === studentId) && (!selectedSubject || grade.subject === selectedSubject) && (!selectedClass || (grade.className || studentById(grade.studentId).className) === selectedClass));
-  if (studentId || ['parent', 'student'].includes(effectiveRole())) return table(['Santri', 'Mata Pelajaran', 'Nilai', 'Catatan'], records.map((grade) => `<tr><td>${escapeHtml(studentById(grade.studentId).name)}</td><td>${escapeHtml(grade.subject || '-')}</td><td><span class="score">${grade.score}</span></td><td>${escapeHtml(grade.note || '-')}</td></tr>`).join(''), 'Belum ada nilai');
+  const records = state.grades.filter((grade) => state.students.some((student) => String(student.id) === String(grade.studentId)) && (!studentId || grade.studentId === studentId) && (!selectedSubject || grade.subject === selectedSubject) && (!selectedClass || (grade.className || studentById(grade.studentId).className) === selectedClass));
+  if (studentId || ['parent', 'student'].includes(effectiveRole()) || canEdit) return table(['Santri', 'Mata Pelajaran', 'Nilai', 'Catatan', ...(canEdit ? ['Aksi'] : [])], records.map((grade) => `<tr><td>${escapeHtml(studentById(grade.studentId).name)}</td><td>${escapeHtml(grade.subject || '-')}</td><td><span class="score">${escapeHtml(grade.score)}</span></td><td>${escapeHtml(grade.note || '-')}</td>${canEdit ? studentRecordActions('grade', grade.id) : ''}</tr>`).join(''), 'Belum ada nilai');
   return groupedStudentRecords(records, (grade) => `<div class="accordion-record"><b>${escapeHtml(studentById(grade.studentId).name)}</b><span>${escapeHtml(grade.subject || '-')} - Nilai ${escapeHtml(grade.score)}</span><small>${escapeHtml(grade.note || '-')}</small></div>`);
 }
 function teacherSubjects() {
@@ -5087,7 +5130,7 @@ function bindActions() {
     if (!currentRoleIsAdmin() || !canManageUserAccounts()) return;
     const selected = [...document.querySelectorAll('[data-select-account]:checked')].map((input) => input.dataset.selectAccount);
     if (!selected.length) return;
-    const linkedStudents = state.internalAccounts.filter((account) => selected.includes(String(account.id)) && ['student', 'santri'].includes(canonicalRole(String(account.role || '').toLowerCase())) && account.studentId).length;
+    const linkedStudents = state.internalAccounts.filter((account) => selected.includes(String(account.id)) && studentIdForAccount(account)).length;
     const detail = linkedStudents ? ` ${linkedStudents} akun santri terpilih akan menghapus santri, akun wali, dan seluruh riwayat terkait.` : '';
     openConfirmModal('Hapus Akun Terpilih', `Hapus ${selected.length} akun terpilih?${detail} Akun khusus yang dilindungi tidak dapat dihapus. Tindakan ini tidak dapat dibatalkan.`, async () => {
       try {
@@ -5113,8 +5156,9 @@ function bindActions() {
       const role = canonicalRole(String(account.role || '').toLowerCase());
       const previousAccounts = state.internalAccounts;
       try {
-        if (['student', 'santri'].includes(role) && account.studentId) {
-          await deleteStudentsCascade([account.studentId]);
+        const linkedStudentId = studentIdForAccount(account);
+        if (['student', 'santri'].includes(role) && linkedStudentId) {
+          await deleteStudentsCascade([linkedStudentId]);
         } else {
           state.internalAccounts = state.internalAccounts.filter((item) => item.id !== account.id);
           state.users = state.internalAccounts;
@@ -5165,7 +5209,20 @@ function bindActions() {
       }
     });
   }));
-  document.querySelectorAll('[data-action="add-point"]').forEach((button) => button.addEventListener('click', openPointModal));
+  document.querySelectorAll('[data-action="add-point"]').forEach((button) => button.addEventListener('click', () => openPointModal()));
+  document.querySelectorAll('[data-edit-point]').forEach((button) => button.addEventListener('click', () => {
+    if (!canManageStudentRecords()) return;
+    const record = state.points.find((item) => String(item.id) === button.dataset.editPoint);
+    if (record) openPointModal(record);
+  }));
+  document.querySelectorAll('[data-edit-grade]').forEach((button) => button.addEventListener('click', () => {
+    if (!canManageStudentRecords()) return;
+    const record = state.grades.find((item) => String(item.id) === button.dataset.editGrade);
+    if (record) openGradeModal(record);
+  }));
+  document.querySelectorAll('[data-delete-point]').forEach((button) => button.addEventListener('click', () => deleteStudentRecord('points', button.dataset.deletePoint)));
+  document.querySelectorAll('[data-delete-grade]').forEach((button) => button.addEventListener('click', () => deleteStudentRecord('grades', button.dataset.deleteGrade)));
+  document.querySelectorAll('[data-delete-tahfizh]').forEach((button) => button.addEventListener('click', () => deleteStudentRecord('tahfizh', button.dataset.deleteTahfizh)));
   document.querySelectorAll('[data-action="add-grade"]').forEach((button) => button.addEventListener('click', openGradeModal));
   const teacherAcademicFilterForm = $('#teacher-academic-filter');
   if (teacherAcademicFilterForm) teacherAcademicFilterForm.addEventListener('submit', (event) => {
@@ -5187,7 +5244,11 @@ function bindActions() {
   document.querySelectorAll('[data-action="add-tahfizh-attendance"]').forEach((button) => button.addEventListener('click', () => {
     if (hasTahfizhAccess()) openTahfizhAttendanceModal();
   }));
-  document.querySelectorAll('[data-edit-tahfizh]').forEach((button) => button.addEventListener('click', () => openTahfizhModal(state.tahfizh.find((item) => item.id === button.dataset.editTahfizh))));
+  document.querySelectorAll('[data-edit-tahfizh]').forEach((button) => button.addEventListener('click', () => {
+    if (!canManageStudentRecords()) return;
+    const record = state.tahfizh.find((item) => String(item.id) === button.dataset.editTahfizh);
+    if (record) openTahfizhModal(record);
+  }));
   document.querySelectorAll('[data-action="add-announcement"]').forEach((button) => button.addEventListener('click', () => { if (canManageAnnouncements()) openAnnouncementModal(); }));
   document.querySelectorAll('[data-edit-announcement]').forEach((button) => button.addEventListener('click', () => { if (canManageAnnouncements()) openAnnouncementModal(state.announcements.find((item) => item.id === button.dataset.editAnnouncement)); }));
   document.querySelectorAll('[data-delete-announcement]').forEach((button) => button.addEventListener('click', () => {
@@ -5602,32 +5663,83 @@ function openBillingModal(bill) {
     }
   });
 }
-function openPointModal() {
-  if (!canManageDormitory()) return;
-  openModal('Input Poin Kedisiplinan', `<form id="point-modal-form" class="form-grid"><label>Santri<select name="studentId">${state.students.map((student) => `<option value="${student.id}">${student.name}</option>`).join('')}</select></label><label>Jenis<select name="kind"><option value="prestasi">Prestasi (+)</option><option value="pelanggaran">Pelanggaran (-)</option></select></label><label>Nilai<input name="value" type="number" value="5" min="1"></label><label class="full">Catatan<input name="note" required></label><button class="btn btn-primary full">Simpan Poin</button></form>`);
-  $('#point-modal-form').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.target); const value = Number(form.get('value')) * (form.get('kind') === 'pelanggaran' ? -1 : 1); state.points.unshift({ id: `PT-${Date.now()}`, studentId: form.get('studentId'), kind: form.get('kind'), note: form.get('note'), value, date: today }); const student = studentById(form.get('studentId')); student.points += value; persist(); closeModal(); render(); });
+function openPointModal(record = null) {
+  const editing = Boolean(record);
+  if (editing ? !canManageStudentRecords() : !canManageDormitory()) return;
+  const value = (key, fallback = '') => record?.[key] ?? fallback;
+  openModal(editing ? 'Edit Poin Kedisiplinan' : 'Input Poin Kedisiplinan', `<form id="point-modal-form" class="form-grid"><label>Santri<select name="studentId" required>${state.students.map((student) => `<option value="${escapeHtml(student.id)}" ${String(value('studentId')) === String(student.id) ? 'selected' : ''}>${escapeHtml(student.name)}</option>`).join('')}</select></label><label>Jenis<select name="kind"><option value="prestasi" ${value('kind', 'prestasi') === 'prestasi' ? 'selected' : ''}>Prestasi (+)</option><option value="pelanggaran" ${value('kind') === 'pelanggaran' ? 'selected' : ''}>Pelanggaran (-)</option></select></label><label>Nilai<input name="value" type="number" value="${escapeHtml(Math.abs(Number(value('value', 5))))}" min="1" required></label><label class="full">Catatan<input name="note" value="${escapeHtml(value('note'))}" required></label><button class="btn btn-primary full">${editing ? 'Simpan Perubahan' : 'Simpan Poin'}</button></form>`);
+  $('#point-modal-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (editing ? !canManageStudentRecords() : !canManageDormitory()) return;
+    const form = new FormData(event.target);
+    const student = state.students.find((item) => String(item.id) === String(form.get('studentId')));
+    if (!student) return;
+    const pointValue = Number(form.get('value')) * (form.get('kind') === 'pelanggaran' ? -1 : 1);
+    const oldStudent = editing ? state.students.find((item) => String(item.id) === String(record.studentId)) : null;
+    const oldValue = editing ? Number(record.value || 0) : 0;
+    const previousPoints = Number(student.points || 0);
+    const previousOldPoints = oldStudent ? Number(oldStudent.points || 0) : null;
+    const previousRecord = editing ? clone(record) : null;
+    const values = { studentId: student.id, kind: form.get('kind'), note: String(form.get('note') || '').trim(), value: pointValue };
+    const newRecord = editing ? null : { id: `PT-${Date.now()}`, ...values, date: today };
+    if (editing) Object.assign(record, values);
+    else state.points.unshift(newRecord);
+    if (oldStudent && oldStudent !== student) oldStudent.points = previousOldPoints - oldValue;
+    student.points = previousPoints + pointValue - (oldStudent === student ? oldValue : 0);
+    try {
+      const saved = await persist();
+      if (saved === false) throw new Error('Firebase tidak mengonfirmasi penyimpanan poin.');
+      closeModal();
+      render();
+    } catch (error) {
+      student.points = previousPoints;
+      if (oldStudent && oldStudent !== student) oldStudent.points = previousOldPoints;
+      if (editing) Object.assign(record, previousRecord);
+      else state.points = state.points.filter((item) => item !== newRecord);
+      console.error('[BoardingPro] Gagal menyimpan poin kedisiplinan:', error);
+      showToast(error?.message || 'Poin gagal disimpan.', 'error');
+    }
+  });
 }
-function openGradeModal() {
-  if (!['mahad', 'admin', 'kepsek', 'guru', 'guru_tahfizh'].includes(effectiveRole())) return;
+function openGradeModal(record = null) {
+  const editing = Boolean(record);
+  if (editing ? !canManageStudentRecords() : !['mahad', 'admin', 'kepsek', 'guru', 'guru_tahfizh'].includes(effectiveRole())) return;
   const subjects = ['guru', 'guru_tahfizh'].includes(effectiveRole()) ? teacherSubjects() : [...new Set(state.grades.map((item) => item.subject).filter(Boolean)), 'Umum'];
   const filter = state.teacherAcademicFilter || {};
   const classes = teacherClassNames();
-  const className = classes.includes(filter.className) ? filter.className : classes[0] || '';
-  openModal('Input Nilai Pelajaran', `<form id="grade-modal-form" class="form-grid"><label>Kelas<select name="className" required>${teacherClassSelectOptions(className) || '<option value="">Belum ada kelas</option>'}</select></label><label>Mata Pelajaran<select name="subject" required>${subjects.map((subject) => `<option value="${escapeHtml(subject)}" ${filter.subject === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Santri<select name="studentId" required>${teacherStudentSelectOptions(className)}</select></label><label>Nilai<input name="score" type="number" min="0" max="100" required></label><label class="full">Catatan<input name="note"></label><button class="btn btn-primary full">Simpan Nilai</button></form>`);
+  const className = editing ? record.className || studentById(record.studentId).className : classes.includes(filter.className) ? filter.className : classes[0] || '';
+  const subjectOptions = [...new Set([...subjects, ...(record?.subject ? [record.subject] : [])])];
+  openModal(editing ? 'Edit Nilai Pelajaran' : 'Input Nilai Pelajaran', `<form id="grade-modal-form" class="form-grid"><label>Kelas<select name="className" required>${teacherClassSelectOptions(className) || '<option value="">Belum ada kelas</option>'}</select></label><label>Mata Pelajaran<select name="subject" required>${subjectOptions.map((subject) => `<option value="${escapeHtml(subject)}" ${String(record?.subject || filter.subject || '') === subject ? 'selected' : ''}>${escapeHtml(subject)}</option>`).join('')}</select></label><label>Santri<select name="studentId" required>${teacherStudentSelectOptions(className, record?.studentId || '')}</select></label><label>Nilai<input name="score" type="number" min="0" max="100" value="${escapeHtml(record?.score ?? '')}" required></label><label class="full">Catatan<input name="note" value="${escapeHtml(record?.note || '')}"></label><button class="btn btn-primary full">${editing ? 'Simpan Perubahan' : 'Simpan Nilai'}</button></form>`);
   const formElement = $('#grade-modal-form');
   const classSelect = formElement.querySelector('[name="className"]');
   const studentSelect = formElement.querySelector('[name="studentId"]');
   classSelect.addEventListener('change', () => {
     studentSelect.innerHTML = teacherStudentSelectOptions(classSelect.value);
   });
-  formElement.addEventListener('submit', (event) => {
+  formElement.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (editing ? !canManageStudentRecords() : !['mahad', 'admin', 'kepsek', 'guru', 'guru_tahfizh'].includes(effectiveRole())) return;
     const form = new FormData(formElement);
     const student = studentById(form.get('studentId'));
     const subject = String(form.get('subject') || '');
     if (!student.id || student.className !== form.get('className') || !subjects.includes(subject)) return;
-    state.grades.unshift({ id: `GR-${Date.now()}`, studentId: form.get('studentId'), className: form.get('className'), subject, score: Number(form.get('score')), note: form.get('note'), teacher: currentAccount()?.name || currentAccount()?.nama || '' });
-    persist(); closeModal(); render();
+    const values = { studentId: form.get('studentId'), className: form.get('className'), subject, score: Number(form.get('score')), note: String(form.get('note') || '').trim() };
+    const previousRecord = editing ? clone(record) : null;
+    const newRecord = editing ? null : { id: `GR-${Date.now()}`, ...values, teacher: currentAccount()?.name || currentAccount()?.nama || '' };
+    if (editing) Object.assign(record, values);
+    else state.grades.unshift(newRecord);
+    try {
+      const saved = await persist();
+      if (saved === false) throw new Error('Firebase tidak mengonfirmasi penyimpanan nilai.');
+      closeModal();
+      render();
+    } catch (error) {
+      if (editing) Object.assign(record, previousRecord);
+      else state.grades = state.grades.filter((item) => item !== newRecord);
+      window.appData.state = state;
+      console.error('[BoardingPro] Gagal menyimpan nilai pelajaran:', error);
+      showToast(error?.message || 'Nilai gagal disimpan.', 'error');
+    }
   });
 }
 function openTeacherStudentAttendanceModal() {
@@ -5679,11 +5791,11 @@ function isTahfizhReview(studentId, juz, surah, ayat, currentRecord) {
 }
 
 function openTahfizhModal(record) {
-  if (!hasTahfizhAccess()) return;
   const editing = Boolean(record);
+  if (editing ? !canManageStudentRecords() : !hasTahfizhAccess()) return;
   const value = (key, fallback = '') => record && record[key] !== undefined ? record[key] : fallback;
-  const scopedStudents = currentRoleIsAdmin() ? state.students : halaqohStudents();
-  openModal(editing ? 'Edit Setoran Tahfizh' : 'Input Setoran Tahfizh', `<form id="tahfizh-modal-form" class="form-grid"><label>Santri<select name="studentId">${scopedStudents.map((student) => `<option value="${student.id}" ${value('studentId') === student.id ? 'selected' : ''}>${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`).join('')}</select></label><label>Halaqoh<input value="${escapeHtml(halaqohLabel())}" disabled></label><label>Sesi<select name="session"><option value="Pagi">Sesi 1: Pagi (Ba'da Subuh)</option><option value="Sore" ${value('session') === 'Sore' ? 'selected' : ''}>Sesi 2: Sore (Ba'da Ashar)</option><option value="Malam" ${value('session') === 'Malam' ? 'selected' : ''}>Sesi 3: Malam</option></select></label><label>Kategori Setoran<input name="type" data-tahfizh-type value="${escapeHtml(value('type', 'Ziyadah'))}" readonly aria-live="polite"><small data-tahfizh-hint>Kategori ditentukan otomatis dari riwayat setoran santri.</small></label><label>Predikat<select name="predikat"><option>Mutqin</option><option>Ziyadah</option></select></label><label>Juz<input name="juz" type="number" min="1" max="30" value="${escapeHtml(value('juz'))}" required></label><label>Surah<input name="surah" value="${escapeHtml(value('surah'))}" required></label><label class="full">Ayat / Rentang Ayat<input name="ayat" value="${escapeHtml(value('ayat'))}" placeholder="Contoh: 1-5" required></label><button type="submit" class="btn btn-primary full">${editing ? 'Simpan Perubahan' : 'Simpan Setoran'}</button></form>`);
+  const scopedStudents = currentRoleIsAdmin() || (editing && effectiveRole() === 'kepsek') ? state.students : halaqohStudents();
+  openModal(editing ? 'Edit Setoran Tahfizh' : 'Input Setoran Tahfizh', `<form id="tahfizh-modal-form" class="form-grid"><label>Santri<select name="studentId">${scopedStudents.map((student) => `<option value="${student.id}" ${String(value('studentId')) === String(student.id) ? 'selected' : ''}>${escapeHtml(student.name)} - ${escapeHtml(student.className || '-')}</option>`).join('')}</select></label><label>Halaqoh<input value="${escapeHtml(halaqohLabel())}" disabled></label><label>Sesi<select name="session"><option value="Pagi">Sesi 1: Pagi (Ba'da Subuh)</option><option value="Sore" ${value('session') === 'Sore' ? 'selected' : ''}>Sesi 2: Sore (Ba'da Ashar)</option><option value="Malam" ${value('session') === 'Malam' ? 'selected' : ''}>Sesi 3: Malam</option></select></label><label>Kategori Setoran<input name="type" data-tahfizh-type value="${escapeHtml(value('type', 'Ziyadah'))}" readonly aria-live="polite"><small data-tahfizh-hint>Kategori ditentukan otomatis dari riwayat setoran santri.</small></label><label>Predikat<select name="predikat"><option>Mutqin</option><option>Ziyadah</option></select></label><label>Juz<input name="juz" type="number" min="1" max="30" value="${escapeHtml(value('juz'))}" required></label><label>Surah<input name="surah" value="${escapeHtml(value('surah'))}" required></label><label class="full">Ayat / Rentang Ayat<input name="ayat" value="${escapeHtml(value('ayat'))}" placeholder="Contoh: 1-5" required></label><button type="submit" class="btn btn-primary full">${editing ? 'Simpan Perubahan' : 'Simpan Setoran'}</button></form>`);
   const formElement = $('#tahfizh-modal-form');
   const updateAutomaticType = () => {
     const form = new FormData(formElement);
@@ -5699,18 +5811,29 @@ function openTahfizhModal(record) {
     element.addEventListener('change', updateAutomaticType);
   });
   updateAutomaticType();
-  formElement.addEventListener('submit', (event) => {
+  formElement.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!(currentRoleIsAdmin() || hasTahfizhAccess())) return;
+    if (editing ? !canManageStudentRecords() : !hasTahfizhAccess()) return;
     const form = new FormData(event.target);
     const student = studentById(form.get('studentId'));
     const type = isTahfizhReview(form.get('studentId'), form.get('juz'), form.get('surah'), form.get('ayat'), record) ? "Muroja'ah" : 'Ziyadah';
     const values = { studentId: form.get('studentId'), halaqohId: activeHalaqohId() || student.halaqohId || '', session: form.get('session'), juz: Number(form.get('juz')), surah: String(form.get('surah') || '').trim(), ayat: String(form.get('ayat') || '').trim(), type, predikat: form.get('predikat') };
+    const previousRecord = editing ? clone(record) : null;
+    const newRecord = editing ? null : { id: `TH-${Date.now()}`, ...values, status: 'Menunggu', date: today };
     if (editing) Object.assign(record, values);
-    else state.tahfizh.unshift({ id: `TH-${Date.now()}`, ...values, status: 'Menunggu', date: today });
-    persist();
-    closeModal();
-    render();
+    else state.tahfizh.unshift(newRecord);
+    try {
+      const saved = await persist();
+      if (saved === false) throw new Error('Firebase tidak mengonfirmasi penyimpanan setoran.');
+      closeModal();
+      render();
+    } catch (error) {
+      if (editing) Object.assign(record, previousRecord);
+      else state.tahfizh = state.tahfizh.filter((item) => item !== newRecord);
+      window.appData.state = state;
+      console.error('[BoardingPro] Gagal menyimpan setoran Tahfizh:', error);
+      showToast(error?.message || 'Setoran Tahfizh gagal disimpan.', 'error');
+    }
   });
 }
 function openTahfizhAttendanceModal() {
