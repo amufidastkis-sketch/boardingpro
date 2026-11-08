@@ -1084,9 +1084,12 @@ function routineSchedulesForCurrentRole() {
     && String(schedule.title || '').trim()
   );
   const uniqueSchedules = [...new Map(validSchedules.map((schedule, index) => {
-    const key = String(schedule.id || [
-      schedule.day, schedule.time, schedule.title, schedule.room, schedule.teacher, schedule.className
-    ].join('|') || index);
+    const key = [
+      schedule.day, schedule.time, schedule.title, schedule.room, schedule.teacher, schedule.className,
+      schedule.subject, schedule.halaqohId, schedule.pengampu, schedule.type,
+      ...(Array.isArray(schedule.studentIds) ? schedule.studentIds.map(String).sort() : []),
+      schedule.studentId || ''
+    ].map(normalizedScopeValue).join('|') || String(schedule.id || index);
     return [key, schedule];
   })).values()];
   const role = effectiveRole();
@@ -1131,6 +1134,26 @@ function matchesStudentScope(record, studentScope) {
   if (Array.isArray(studentScope)) return studentScope.includes(String(record.studentId));
   return String(record.studentId) === String(studentScope);
 }
+const verifiedPaymentStatuses = new Set(['verified', 'approved', 'terverifikasi', 'lunas', 'paid']);
+const pendingPaymentStatuses = new Set(['pending', 'pending_verification', 'pending verification', 'menunggu', 'menunggu_verifikasi', 'menunggu verifikasi']);
+const paymentStatusKey = (payment) => normalizedScopeValue(payment?.status);
+const isVerifiedPayment = (payment) => verifiedPaymentStatuses.has(paymentStatusKey(payment));
+const isPendingPayment = (payment) => pendingPaymentStatuses.has(paymentStatusKey(payment));
+const paymentAmount = (payment) => {
+  const amount = Number(payment?.amount);
+  return Number.isFinite(amount) ? amount : 0;
+};
+function paymentsForScope(studentScope = null) {
+  return state.payments.filter((payment) => matchesStudentScope(payment, studentScope));
+}
+function verifiedPaymentTotal(studentScope = null, predicate = () => true) {
+  return paymentsForScope(studentScope)
+    .filter((payment) => isVerifiedPayment(payment) && predicate(payment))
+    .reduce((sum, payment) => sum + paymentAmount(payment), 0);
+}
+function pendingPaymentCount(studentScope = null) {
+  return paymentsForScope(studentScope).filter(isPendingPayment).length;
+}
 state.billingNotifications = (state.billingNotifications || []).filter((bill) => isActiveStudent(state.students.find((student) => student.id === bill.studentId)));
 const financeGroupKeys = ['Reguler SMK  -  Kelas 10', 'Reguler SMK  -  Kelas 11', 'Reguler SMK  -  Kelas 12', 'Program PPTAK (1 Tahun)  -  Non-Jenjang', 'Program KWNQ (3 Bulan)  -  Non-Jenjang'];
 function groupedActiveStudentRecords(records, renderItem, emptyMessage = 'Belum ada data tagihan') {
@@ -1157,6 +1180,42 @@ const billNet = (bill) => {
   const adjustment = billAdjustments(bill);
   return Math.max(0, Number(bill.amount || 0) - adjustment.scholarship - adjustment.discount);
 };
+function outstandingBalance(bills) {
+  return [...billBalances(bills).values()].reduce((sum, amount) => sum + amount, 0);
+}
+function billBalances(bills) {
+  const balances = new Map(bills.map((bill) => [
+    String(bill.id),
+    verifiedPaymentStatuses.has(normalizedScopeValue(bill.status)) ? 0 : billNet(bill)
+  ]));
+  const payments = state.payments.filter(isVerifiedPayment).slice().sort((left, right) => {
+    const hasExplicitLink = (payment) => payment.billId
+      || state.invoices.some((invoice) => String(invoice.id) === String(payment.invoiceId || '') && invoice.billId);
+    return Number(Boolean(hasExplicitLink(right))) - Number(Boolean(hasExplicitLink(left)));
+  });
+  payments.forEach((payment) => {
+    let remaining = paymentAmount(payment);
+    if (remaining <= 0) return;
+    const linkedInvoice = state.invoices.find((invoice) => String(invoice.id) === String(payment.invoiceId || ''));
+    const linkedBillId = payment.billId || linkedInvoice?.billId;
+    const matchingBills = bills.filter((bill) =>
+      String(bill.studentId) === String(payment.studentId)
+      && balances.get(String(bill.id)) > 0
+      && (linkedBillId
+        ? String(bill.id) === String(linkedBillId)
+        : Boolean(bill.category && payment.category && bill.period && payment.period)
+          && normalizedScopeValue(bill.category) === normalizedScopeValue(payment.category)
+          && normalizedScopeValue(bill.period) === normalizedScopeValue(payment.period))
+    );
+    matchingBills.forEach((bill) => {
+      const id = String(bill.id);
+      const applied = Math.min(balances.get(id), remaining);
+      balances.set(id, balances.get(id) - applied);
+      remaining -= applied;
+    });
+  });
+  return balances;
+}
 const categoryLabel = (id) => {
   const categories = [financeCategories.spp, financeCategories.foundation, ...financeCategories.maahadNonSpp, financeCategories.pocketMoney, financeCategories.custom];
   return (categories.find((category) => category.id === id) || { label: id || 'Lainnya' }).label;
@@ -3839,10 +3898,10 @@ function unifiedDashboard() {
   const role = roles[state.role] || roles.yayasan;
   const student = currentStudent();
   const studentScope = financeStudentScope();
-  const scopedPayments = state.payments.filter((payment) => matchesStudentScope(payment, studentScope));
+  const scopedPayments = paymentsForScope(studentScope);
   const scopedStudents = studentScope === null ? state.students : state.students.filter((student) => studentScope.includes(String(student.id)));
-  const verified = scopedPayments.filter((payment) => ['verified', 'approved', 'terverifikasi', 'lunas'].includes(normalizedScopeValue(payment.status))).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const pending = scopedPayments.filter((payment) => ['pending', 'pending_verification'].includes(normalizedScopeValue(payment.status))).length;
+  const verified = verifiedPaymentTotal(studentScope);
+  const pending = pendingPaymentCount(studentScope);
   const feed = state.dailyFeed.slice(0, 4);
   const announcements = state.announcements.slice(0, 4);
   const studentId = findCurrentStudent()?.id;
@@ -3866,11 +3925,14 @@ function unifiedDashboard() {
 }
 
 function yayasanDashboard() {
-  const verified = state.payments.filter((payment) => payment.status === 'Verified').reduce((sum, payment) => sum + payment.amount, 0);
-  const pending = state.payments.filter((payment) => payment.status === 'Pending').length;
+  const verified = verifiedPaymentTotal();
+  const pending = pendingPaymentCount();
+  const spp = verifiedPaymentTotal(null, (payment) => String(payment.category || '').toUpperCase() === 'SPP');
+  const pocketMoney = verifiedPaymentTotal(null, (payment) => String(payment.category || '').toUpperCase() === 'POCKET_MONEY');
+  const nonSpp = verified - spp - pocketMoney;
   return `${welcome('EXECUTIVE OVERVIEW', "Assalamu'alaikum, Pengelola ", `<span class="live-dashboard-date" data-live-dashboard-date>${formatDashboardDate()}</span>  -  Ringkasan kinerja dan kesehatan keuangan BoardingPro STKIS.`, `<button class="btn btn-primary" data-action="export">${icon('download')} Export Laporan</button>`)}
     <div class="stats-grid">${statCard('Total Santri', state.students.length, '', 'users', 'blue')}${statCard('Kehadiran Rata-rata', dashboardPercent(dashboardAttendanceRate()), '', 'calendar-check', 'green')}${statCard('Penerimaan Terverifikasi', money(verified), '', 'wallet-cards', 'purple')}${statCard('Perlu Verifikasi', pending, 'Pembayaran masuk', 'badge-alert', 'orange')}</div>
-    <div class="finance-grid"><div class="finance-tile"><span>SPP bulanan</span><b>${money(verified * .72)}</b>${metricNote(verified, 'Alokasi penerimaan')}</div><div class="finance-tile"><span>Dana Yayasan</span><b>${money(verified * .12)}</b>${metricNote(verified, 'Operasional & beasiswa')}</div><div class="finance-tile"><span>Non-SPP & uang saku</span><b>${money(verified * .16)}</b>${metricNote(verified, 'Asrama, makan, saku')}</div></div>
+    <div class="finance-grid"><div class="finance-tile"><span>Penerimaan SPP</span><b>${money(spp)}</b></div><div class="finance-tile"><span>Penerimaan Non-SPP</span><b>${money(nonSpp)}</b></div><div class="finance-tile"><span>Penerimaan Uang Saku</span><b>${money(pocketMoney)}</b></div></div>
     <div class="grid-2">${section('Rekapitulasi Penerimaan Kas per Program', 'Laporan kas masuk dan penerimaan terverifikasi', financeProgramTable())}${section('Aktivitas Terbaru', 'Pembaruan data secara real-time', activityList())}</div>
     ${section('Monitoring Yayasan - Tahfizh', 'Program, kelas, dan santri dengan target dan capaian', yayasanAccordion())}`;
 }
@@ -3892,15 +3954,19 @@ function yayasanAccordion() {
 function financeProgramTable() {
   return table(['Program', 'Santri', 'SPP', 'Non-SPP', 'Total'], programs.map((program) => {
     const members = state.students.filter((student) => student.program === program.id);
-    const total = state.payments.filter((payment) => payment.status === 'Verified' && members.some((student) => student.id === payment.studentId)).reduce((sum, payment) => sum + payment.amount, 0);
-    return `<tr><td><b>${program.name}</b><small>${program.description}</small></td><td>${members.length}</td><td>${money(total * .72)}</td><td>${money(total * .28)}</td><td><b>${money(total)}</b></td></tr>`;
+    const memberIds = new Set(members.map((student) => String(student.id)));
+    const scope = [...memberIds];
+    const spp = verifiedPaymentTotal(scope, (payment) => String(payment.category || '').toUpperCase() === 'SPP');
+    const total = verifiedPaymentTotal(scope);
+    const nonSpp = total - spp;
+    return `<tr><td><b>${program.name}</b><small>${program.description}</small></td><td>${members.length}</td><td>${money(spp)}</td><td>${money(nonSpp)}</td><td><b>${money(total)}</b></td></tr>`;
   }).join(''));
 }
 function activityList() {
   return `<div class="activity-list">${state.points.slice(0, 4).map((point) => `<div class="activity"><span class="activity-icon ${point.kind === 'prestasi' ? 'green' : 'red'}">${icon(point.kind === 'prestasi' ? 'award' : 'alert-triangle')}</span><div><b>${studentById(point.studentId).name}</b><p>${point.note}</p></div><time>${formatDate(point.date)}</time></div>`).join('')}</div>`;
 }
 function managementView() {
-  const pendingPayments = state.payments.filter((payment) => payment.status === 'Pending').length;
+  const pendingPayments = pendingPaymentCount();
   return `${welcome('PUSAT KENDALI PENGASUHAN', 'Selamat datang, Admin', "Kelola santri, tagihan, dan laporan ma'had.", currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-student">${icon('plus')} Tambah Santri</button>` : '')}
     <div class="stats-grid">${statCard('Total Santri', state.students.length, '+3 bulan ini', 'users')}${statCard('Pembayaran Menunggu', pendingPayments, 'Perlu verifikasi', 'clock-3', 'orange')}${statCard('Notifikasi Tagihan', state.billingNotifications.filter((bill) => !bill.read).length, 'Belum dibaca', 'bell', 'purple')}</div>
     <div class="grid-2">${section('Perizinan Terbaru', 'Tinjau pengajuan yang masuk hari ini', permitTable(true))}${section('Notifikasi Billing', 'Tindak lanjut wali santri', billingTable(3))}</div>${section('Keamanan Akun', 'Perbarui kredensial akun Anda.', selfPasswordForm())}`;
@@ -4123,19 +4189,19 @@ function parentView() {
   const monthlyPoints = state.points.filter((item) => String(item.studentId) === String(child.id) && String(item.date || '').startsWith(monthKey));
   const monthlyPayments = state.payments.filter((item) => String(item.studentId) === String(child.id)
     && (String(item.submittedAt || item.date || '').startsWith(monthKey) || normalizedScopeValue(item.period) === normalizedScopeValue(monthLabel))
-    && ['verified', 'approved', 'terverifikasi', 'lunas'].includes(normalizedScopeValue(item.status)));
+    && isVerifiedPayment(item));
   const monthlyBills = state.financeBills.filter((item) => String(item.studentId) === String(child.id)
-    && String(item.dueDate || item.date || '').startsWith(monthKey)
-    && !['paid', 'lunas', 'verified'].includes(normalizedScopeValue(item.status)));
+    && String(item.dueDate || item.date || '').startsWith(monthKey));
   const monthlySummary = state.monthlySummaries.find((item) => String(item.studentId) === String(child.id) && normalizedScopeValue(item.month) === normalizedScopeValue(monthLabel));
   const attendancePresent = monthlyAttendance.filter((item) => ['hadir', 'present'].includes(normalizedScopeValue(item.status))).length;
-  const summary = monthlySummary || {
+  const summary = {
+    ...(monthlySummary || {}),
     month: monthLabel,
-    attendance: monthlyAttendance.length ? Math.round((attendancePresent / monthlyAttendance.length) * 100) : child.attendance,
-    tahfizh: monthlyTahfizh.length ? monthlyTahfizh.reduce((sum, item) => sum + Number(item.juz || 0), 0) : child.tahfizh,
-    points: monthlyPoints.length ? monthlyPoints.reduce((sum, item) => sum + Number(item.value || 0), 0) : child.points,
-    paid: monthlyPayments.reduce((sum, item) => sum + Number(item.amount || 0), 0),
-    outstanding: monthlyBills.reduce((sum, item) => sum + billNet(item), 0)
+    attendance: monthlySummary?.attendance ?? (monthlyAttendance.length ? Math.round((attendancePresent / monthlyAttendance.length) * 100) : child.attendance),
+    tahfizh: monthlySummary?.tahfizh ?? (monthlyTahfizh.length ? monthlyTahfizh.reduce((sum, item) => sum + Number(item.juz || 0), 0) : child.tahfizh),
+    points: monthlySummary?.points ?? (monthlyPoints.length ? monthlyPoints.reduce((sum, item) => sum + Number(item.value || 0), 0) : child.points),
+    paid: monthlyPayments.reduce((sum, item) => sum + paymentAmount(item), 0),
+    outstanding: outstandingBalance(monthlyBills)
   };
   const feed = state.dailyFeed.filter((item) => item.date === today && (!item.studentId || item.studentId === child.id)).slice(0, 5);
   const balance = state.pocketBalances.find((item) => item.studentId === child.id)?.balance || 0;
@@ -4290,8 +4356,14 @@ function pklTable() {
   return table(['Santri', 'Jam Masuk', 'Jam Pulang', 'Status Absensi', 'Deskripsi Kegiatan', 'Foto'], state.pklReports.map((report) => `<tr><td>${escapeHtml(studentById(report.studentId).name)}</td><td>${escapeHtml(report.checkIn || '-')}</td><td>${escapeHtml(report.checkOut || '-')}</td><td>${escapeHtml(report.status || '-')}</td><td>${escapeHtml(report.lastReport || report.description || '-')}</td><td>${report.photoUrl ? `<a href="${escapeHtml(report.photoUrl)}" target="_blank" rel="noopener">Lihat Foto</a>` : '-'}</td></tr>`).join(''), 'Belum ada laporan PKL');
 }
 function billingTable(limit, studentId) {
-  const bills = state.financeBills.filter((bill) => matchesStudentScope(bill, studentId) && isActiveStudent(studentById(bill.studentId))).slice().sort((a, b) => new Date(b.dueDate || b.date || 0) - new Date(a.dueDate || a.date || 0)).slice(0, limit || state.financeBills.length);
-  const renderBill = (bill) => `<div class="accordion-record"><b>${escapeHtml(studentById(bill.studentId).name)}</b><span>${escapeHtml(bill.label)}  -  ${money(billNet(bill))}</span><span>${statusBadge(bill.status)} <button type="button" class="btn btn-small btn-ghost" data-document="invoice" data-invoice="${escapeHtml(bill.id)}">Lihat</button></span></div>`;
+  const allBills = state.financeBills.filter((bill) => matchesStudentScope(bill, studentId) && isActiveStudent(studentById(bill.studentId)));
+  const balances = billBalances(allBills);
+  const bills = allBills.slice().sort((a, b) => new Date(b.dueDate || b.date || 0) - new Date(a.dueDate || a.date || 0)).slice(0, limit || allBills.length);
+  const renderBill = (bill) => {
+    const amountDue = balances.get(String(bill.id)) || 0;
+    const status = amountDue === 0 ? 'Lunas' : bill.status;
+    return `<div class="accordion-record"><b>${escapeHtml(studentById(bill.studentId).name)}</b><span>${escapeHtml(bill.label)}  -  ${money(amountDue)}</span><span>${statusBadge(status)} <button type="button" class="btn btn-small btn-ghost" data-document="invoice" data-invoice="${escapeHtml(bill.id)}">Lihat</button></span></div>`;
+  };
   if ((studentId !== undefined && studentId !== null) || ['parent', 'student'].includes(effectiveRole())) return `<div style="max-height:350px;overflow-y:auto;overflow-x:auto"><div class="accordion-content">${bills.map(renderBill).join('') || '<div class="empty">Belum ada tagihan</div>'}</div></div>`;
   return groupedActiveStudentRecords(bills, renderBill);
 }
@@ -4306,7 +4378,7 @@ function paymentProofGroup(payment) {
   return String(payment.category || '').toUpperCase() === 'POCKET_MONEY' ? 'Uang Saku' : 'SPP / Non-SPP';
 }
 function paymentVerificationStatus(payment) {
-  return ['verified', 'approved', 'terverifikasi'].includes(String(payment.status || '').toLowerCase()) ? 'Terverifikasi' : 'Menunggu Verifikasi';
+  return isVerifiedPayment(payment) ? 'Terverifikasi' : 'Menunggu Verifikasi';
 }
 function paymentProofPreview(payment) {
   if (!payment.receiptImageData) return '<div class="empty">Tidak ada gambar bukti tersimpan.</div>';
@@ -4314,7 +4386,7 @@ function paymentProofPreview(payment) {
 }
 function paymentVerificationPanel() {
   const pending = state.payments
-    .filter((payment) => isActiveStudent(studentById(payment.studentId)))
+    .filter((payment) => isActiveStudent(studentById(payment.studentId)) && isPendingPayment(payment))
     .slice()
     .sort((a, b) => new Date(b.submittedAt || b.date || 0) - new Date(a.submittedAt || a.date || 0));
   const renderGroup = (group) => {
@@ -4330,11 +4402,11 @@ function paymentVerificationPanel() {
     }).join('')}</tbody></table></div></div></details>`).join('');
     return content || '<div class="empty">Belum ada bukti transfer pada kategori ini.</div>';
   };
-  return `<section class="panel payment-verification-panel"><div class="panel-head"><div><h2>Pusat Verifikasi Bukti Transfer</h2><p>Terakhir diperbarui ${escapeHtml(formatLocalLongDate())}. Bukti dikelompokkan berdasarkan kelas dan nama santri.</p></div><span class="badge badge-warning">${pending.filter((item) => paymentVerificationStatus(item) !== 'Terverifikasi').length} menunggu</span></div><div class="grid-2"><div><h3 class="eyebrow">SPP / Non-SPP</h3>${renderGroup('SPP / Non-SPP')}</div><div><h3 class="eyebrow">UANG SAKU</h3>${renderGroup('Uang Saku')}</div></div></section>`;
+  return `<section class="panel payment-verification-panel"><div class="panel-head"><div><h2>Pusat Verifikasi Bukti Transfer</h2><p>Terakhir diperbarui ${escapeHtml(formatLocalLongDate())}. Bukti dikelompokkan berdasarkan kelas dan nama santri.</p></div><span class="badge badge-warning">${pending.filter(isPendingPayment).length} menunggu</span></div><div class="grid-2"><div><h3 class="eyebrow">SPP / Non-SPP</h3>${renderGroup('SPP / Non-SPP')}</div><div><h3 class="eyebrow">UANG SAKU</h3>${renderGroup('Uang Saku')}</div></div></section>`;
 }
 function paymentTable(actions = false, studentId) {
   const data = state.payments.filter((payment) => matchesStudentScope(payment, studentId) && isActiveStudent(studentById(payment.studentId))).slice().sort((a, b) => new Date(b.submittedAt || b.date || 0) - new Date(a.submittedAt || a.date || 0));
-  const renderPayment = (payment) => `<div class="accordion-record finance-record"><b class="finance-record-student">${escapeHtml(studentById(payment.studentId).name)}</b><span class="finance-record-detail">${escapeHtml(categoryLabel(payment.category))} - ${escapeHtml(payment.period || '-')} - ${money(payment.amount)}</span><span class="finance-record-status">${statusBadge(payment.status)} ${actions && ['Pending', 'pending_verification'].includes(payment.status) ? `<button class="btn btn-small btn-primary" data-payment="${payment.id}" data-payment-status="Verified">Verifikasi</button>` : payment.invoiceId ? `<button class="btn btn-small btn-ghost" data-document="invoice" data-invoice="${payment.invoiceId}">Invoice</button>` : ''}</span></div>`;
+  const renderPayment = (payment) => `<div class="accordion-record finance-record"><b class="finance-record-student">${escapeHtml(studentById(payment.studentId).name)}</b><span class="finance-record-detail">${escapeHtml(categoryLabel(payment.category))} - ${escapeHtml(payment.period || '-')} - ${money(paymentAmount(payment))}</span><span class="finance-record-status">${statusBadge(payment.status)} ${actions && isPendingPayment(payment) ? `<button class="btn btn-small btn-primary" data-payment="${payment.id}" data-payment-status="Verified">Verifikasi</button>` : payment.invoiceId ? `<button class="btn btn-small btn-ghost" data-document="invoice" data-invoice="${payment.invoiceId}">Invoice</button>` : ''}</span></div>`;
   if (!studentId && !['parent', 'student'].includes(effectiveRole())) return groupedStudentRecords(data, renderPayment);
   return `<div class="finance-record-list" style="max-height:350px;overflow-y:auto">${data.map(renderPayment).join('') || '<div class="empty">Belum ada pembayaran</div>'}</div>`;
 }
@@ -4400,12 +4472,13 @@ function financeView() {
   const visibleBills = state.financeBills.filter((bill) => matchesStudentScope(bill, studentScope));
   const visibleScholarships = state.scholarships.filter((item) => item.active && matchesStudentScope(item, studentScope));
   const visibleInvoices = state.invoices.filter((invoice) => matchesStudentScope(invoice, studentScope));
-  const outstanding = visibleBills.filter((bill) => bill.status !== 'Paid').reduce((sum, bill) => sum + billNet(bill), 0);
+  const visibleBillBalances = billBalances(visibleBills);
+  const outstanding = outstandingBalance(visibleBills);
   const resetAction = currentRoleIsAdmin() ? `<button type="button" class="btn btn-danger" data-action="reset-data">${icon('trash-2')} Reset Data Selektif (Modular)</button>` : '';
   return `${welcome('KEUANGAN YAYASAN', 'Billing, Beasiswa & Invoice', 'Komponen SPP dan non-SPP dikelola transparan dengan nominal fleksibel.', currentRoleIsAdmin() ? `<button class="btn btn-primary" data-action="add-billing">${icon('plus')} Tambah Komponen</button>` : '')}
     ${renderPaymentDestinationDetails({ adminPanel: currentRoleIsAdmin() })}
     ${currentRoleIsAdmin() ? section('Reset Data Selektif (Modular)', 'Pilih modul yang perlu dikosongkan. Profil lembaga, rekening bank, dan konfigurasi umum tidak akan dihapus.', `<div class="notice"><b>Reset selektif:</b> hanya node modul terpilih yang dihapus dari Firebase Realtime Database.</div>`, resetAction) : ''}
-    <div class="stats-grid">${statCard('Tagihan Aktif', visibleBills.filter((bill) => bill.status !== 'Paid').length, 'Perlu ditindaklanjuti', 'receipt', 'orange')}${statCard('Piutang Bersih', money(outstanding), 'Setelah beasiswa & diskon', 'wallet-cards', 'purple')}${statCard('Beasiswa Aktif', visibleScholarships.length, 'Dalam cakupan akses', 'heart-handshake', 'green')}${statCard('Invoice Terbit', visibleInvoices.length, 'Dapat dicetak', 'file-check-2', 'blue')}</div>
+    <div class="stats-grid">${statCard('Tagihan Aktif', visibleBills.filter((bill) => (visibleBillBalances.get(String(bill.id)) || 0) > 0).length, 'Perlu ditindaklanjuti', 'receipt', 'orange')}${statCard('Piutang Bersih', money(outstanding), 'Setelah transaksi terverifikasi', 'wallet-cards', 'purple')}${statCard('Beasiswa Aktif', visibleScholarships.length, 'Dalam cakupan akses', 'heart-handshake', 'green')}${statCard('Invoice Terbit', visibleInvoices.length, 'Dapat dicetak', 'file-check-2', 'blue')}</div>
     ${section('Daftar Tagihan', 'Rincian nominal yang harus dibayar', billingTable(undefined, studentScope))}
     ${section('Pembayaran & Invoice', 'Persetujuan otomatis menerbitkan invoice dan kuitansi', paymentTable(currentRoleIsAdmin(), studentScope))}
     ${section('Invoice Digital', 'Admin dan wali dapat melihat, mencetak, atau mengunduh', invoiceTable(studentScope))}`;
